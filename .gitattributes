@@ -1,0 +1,7 @@
+* text=auto
+*.cs diff=csharp
+*.png binary
+*.jpg binary
+*.bytes binary
+*.ttf binary
+*.otf binary

@@ -1,0 +1,455 @@
+/* qTwin platform style (qtwin.io): near-black, white type, Geologica, thin 1 px lines, floating panels over the 3D scene.
+   Brand accent = qTwin red (logo / site), status colours = green / amber / red. No shadows, no gradients, no neon. */
+.twin-root {
+    --bg: #0a0a0a; --panel: rgba(16, 16, 16, 0.94); --panel-solid: #101010; --panel2: #1b1b1b; --panel3: #242424;
+    --line: #2a2a2a; --line2: #3a3a3a;
+    --text: #fdfcfc; --text2: #c3c3c3; --muted: #878787;
+    --brand: #e0261b; --brand2: #ff3b2f;
+    --ok: #34c759; --warn: #f5a623; --bad: #ff3b2f; --info: #7aa7ff; --sel: #d946ef;
+    --gate: #2e63b0; --golden: #d9a621; --growing: #f27336; --green: #339e5c;
+    position: absolute; left: 0; top: 0; right: 0; bottom: 0;
+    flex-direction: column; color: var(--text); font-size: 13px;
+    -unity-font-definition: url("Fonts/Geologica-Regular.ttf");
+}
+.twin-root Label { margin: 0; padding: 0; white-space: normal; }
+.fw-light { -unity-font-definition: url("Fonts/Geologica-Light.ttf"); }
+.fw-medium { -unity-font-definition: url("Fonts/Geologica-Medium.ttf"); }
+.fw-semi { -unity-font-definition: url("Fonts/Geologica-SemiBold.ttf"); }
+.muted { color: var(--muted); }
+.small { font-size: 11px; }
+.row { flex-direction: row; align-items: center; }
+.grow { flex-grow: 1; }
+
+/* ---------- top bar (docked, like the qTwin platform) ---------- */
+.header { height: 52px; flex-shrink: 0; flex-direction: row; align-items: center; background-color: var(--bg);
+    border-bottom-width: 1px; border-bottom-color: var(--line); padding: 0 14px 0 12px; }
+.logo { width: 33px; height: 29px; -unity-background-scale-mode: scale-to-fit; margin-right: 10px; }
+.title { font-size: 16px; -unity-font-definition: url("Fonts/Geologica-Medium.ttf"); letter-spacing: -0.2px; }
+.place { flex-direction: row; align-items: center; margin-left: 14px; margin-right: 16px; padding: 4px 10px; border-radius: 14px;
+    background-color: var(--panel2); border-width: 1px; border-color: var(--line); }
+.place .pin { width: 6px; height: 6px; border-radius: 3px; background-color: var(--brand); margin-right: 7px; }
+.place Label { font-size: 11px; color: var(--text2); }
+.vsep { width: 1px; height: 52px; background-color: var(--line); }
+.tabs { flex-direction: row; align-items: stretch; height: 52px; }
+.tab { margin: 0; padding: 0 13px; height: 52px; background-color: rgba(0, 0, 0, 0); background-image: none; border-width: 0; border-bottom-width: 2px;
+    border-bottom-color: rgba(0, 0, 0, 0); border-radius: 0; color: var(--muted); font-size: 13px; -unity-text-align: middle-center; }
+.tab:hover { color: var(--text); }
+.tab.active { color: var(--text); border-bottom-color: var(--brand); }
+.scenario-btn { flex-direction: row; align-items: center; height: 32px; padding: 0 12px; border-width: 1px; border-color: var(--line2); border-radius: 6px;
+    background-color: var(--panel2); margin: 0 12px 0 0; }
+.scenario-btn:hover { border-color: var(--text2); }
+.scenario-btn .k { font-size: 11px; color: var(--muted); margin-right: 6px; }
+.scenario-btn .v { font-size: 12px; }
+.scenario-btn .chev { margin-left: 8px; }
+.year-big { font-size: 26px; -unity-font-definition: url("Fonts/Geologica-Light.ttf"); letter-spacing: -0.8px; min-width: 62px; -unity-text-align: middle-right; }
+
+/* ---------- buttons (square-ish like qtwin.io: primary = white fill, secondary = outline) ---------- */
+.btn { margin: 0; padding: 6px 12px; background-color: var(--panel2); background-image: none; border-width: 1px; border-color: var(--line2);
+    border-radius: 6px; color: var(--text); font-size: 13px; -unity-text-align: middle-center; }
+.btn:hover { border-color: var(--text2); }
+.btn:active { background-color: var(--panel3); }
+.btn.primary { background-color: var(--text); color: #0a0a0a; border-color: var(--text); -unity-font-definition: url("Fonts/Geologica-Medium.ttf"); }
+.btn.primary:hover { background-color: #e6e6e6; }
+.btn.active { border-color: var(--text); }
+.btn.small { padding: 3px 8px; font-size: 11px; }
+.btn.ghost { background-color: rgba(0, 0, 0, 0); border-color: rgba(0, 0, 0, 0); color: var(--text2); }
+.btn.ghost:hover { background-color: var(--panel2); color: var(--text); }
+
+/* ---------- scenario popup ---------- */
+.popup { position: absolute; top: 56px; background-color: var(--panel-solid); border-width: 1px; border-color: var(--line2); border-radius: 10px; padding: 6px; width: 340px; }
+.popup-item { padding: 9px 10px 9px 12px; border-radius: 6px; border-left-width: 2px; border-left-color: rgba(0, 0, 0, 0); }
+.popup-item:hover { background-color: var(--panel2); }
+.popup-item.active { background-color: var(--panel2); border-left-color: var(--brand); }
+.popup-item .name { -unity-font-definition: url("Fonts/Geologica-Medium.ttf"); }
+.popup-item .desc { color: var(--muted); font-size: 11px; margin-top: 3px; }
+
+/* ---------- middle: 3D is full-bleed, panels float over it ---------- */
+.middle { flex-grow: 1; }
+.scene { position: absolute; left: 0; top: 0; right: 0; bottom: 0; }
+.right { position: absolute; top: 12px; right: 12px; bottom: 12px; width: 368px; }
+.right .unity-scroll-view__content-container { padding: 0 0 4px 0; }
+.right .unity-scroller--vertical { width: 6px; border-width: 0; background-color: rgba(0, 0, 0, 0); margin-left: 4px; }
+.right .unity-scroller--vertical .unity-base-slider__dragger { background-color: var(--line2); border-radius: 3px; width: 4px; border-width: 0; left: 1px; }
+.right .unity-scroller--vertical .unity-base-slider__tracker { background-color: rgba(0, 0, 0, 0); border-width: 0; }
+.right .unity-scroller__low-button, .right .unity-scroller__high-button { display: none; }
+
+/* a block = one floating card of the right column (as in the platform: "Генерация станции", "Энергоблоки", ...) */
+.block { background-color: var(--panel); border-width: 1px; border-color: var(--line); border-radius: 10px; padding: 12px 14px 14px 14px; margin-bottom: 8px; }
+.block-head { flex-direction: row; align-items: center; margin-bottom: 10px; }
+.block-title { font-size: 13px; -unity-font-definition: url("Fonts/Geologica-Medium.ttf"); flex-grow: 1; }
+.block-sub { font-size: 11px; color: var(--muted); }
+.eyebrow { flex-direction: row; align-items: center; margin-bottom: 8px; }
+.eyebrow .pin { width: 6px; height: 6px; border-radius: 3px; background-color: var(--brand); margin-right: 7px; }
+.eyebrow Label { font-size: 10px; color: var(--text2); letter-spacing: 1.2px; -unity-font-definition: url("Fonts/Geologica-Medium.ttf"); }
+
+.summary { font-size: 17px; -unity-font-definition: url("Fonts/Geologica-Light.ttf"); letter-spacing: -0.2px; }
+.note { color: var(--muted); font-size: 11px; }
+
+.kpi-grid { flex-direction: column; margin: 0 -3px; }
+.kpi-row { flex-direction: row; }
+.kpi { flex-basis: 0; flex-grow: 1; flex-shrink: 1; min-width: 0; margin: 3px; padding: 9px 11px 10px 11px; background-color: var(--panel2); border-radius: 6px; }
+.kpi .l { color: var(--muted); font-size: 11px; }
+.kpi .v { font-size: 24px; -unity-font-definition: url("Fonts/Geologica-Light.ttf"); letter-spacing: -0.6px; margin-top: 3px; }
+.kpi .v.accent { color: var(--text); }
+.kpi.ok .v { color: var(--ok); }
+.kpi.warn .v { color: var(--warn); }
+.kpi.bad .v { color: var(--bad); }
+
+.chart { height: 150px; margin: 2px 0 8px 0; }
+.legend { flex-direction: row; flex-wrap: wrap; }
+.legend-item { flex-direction: row; align-items: center; margin-right: 12px; margin-bottom: 4px; }
+.block .legend-item { width: 50%; margin-right: 0; }
+.legend-item Label { white-space: nowrap; }
+.dot { width: 8px; height: 8px; border-radius: 2px; margin-right: 6px; }
+.dot.round { border-radius: 4px; }
+
+.table-head { flex-direction: row; padding: 0 8px 6px 8px; border-bottom-width: 1px; border-bottom-color: var(--line); }
+.table-head Label { color: var(--muted); font-size: 11px; }
+.trow { flex-direction: row; align-items: center; padding: 7px 8px; border-radius: 6px; margin-top: 2px; }
+.trow.clickable:hover { background-color: var(--panel3); }
+.trow.active { background-color: var(--panel2); }
+.c-name { width: 110px; flex-direction: row; align-items: center; }
+.c-num { flex-grow: 1; -unity-text-align: middle-right; }
+.table-head .c-num { -unity-text-align: middle-right; }
+.c-target { color: var(--muted); }
+
+.district-head { flex-direction: row; align-items: center; margin-bottom: 8px; }
+.district-head .big { font-size: 22px; -unity-font-definition: url("Fonts/Geologica-Light.ttf"); letter-spacing: -0.5px; }
+.fact { flex-direction: row; justify-content: space-between; padding: 6px 0; border-bottom-width: 1px; border-bottom-color: var(--line); }
+.fact .k { color: var(--muted); }
+.fact .v { -unity-text-align: middle-right; max-width: 230px; }
+
+/* ---------- bottom timeline (floating bar, like the platform toolbar) ---------- */
+.bottom { position: absolute; left: 12px; right: 392px; bottom: 12px; height: 56px; flex-direction: row; align-items: center;
+    background-color: var(--panel); border-width: 1px; border-color: var(--line); border-radius: 10px; padding: 0 16px 0 10px; }
+.play { width: 86px; height: 34px; padding: 0; }
+.slider { flex-grow: 1; height: 34px; margin: 0 14px; justify-content: center; }
+.slider .track { height: 2px; border-radius: 1px; background-color: var(--line2); }
+.slider .fill { position: absolute; left: 0; height: 2px; border-radius: 1px; background-color: var(--brand); top: 16px; }
+.slider .handle { position: absolute; width: 14px; height: 14px; border-radius: 7px; background-color: var(--text); top: 10px; border-width: 0; }
+.slider .tick { position: absolute; width: 1px; height: 6px; top: 14px; background-color: var(--muted); }
+.slider .tick-label { position: absolute; top: -4px; font-size: 10px; color: var(--muted); width: 40px; -unity-text-align: upper-center; }
+.bound { color: var(--muted); font-size: 12px; }
+
+/* ---------- overlays in the 3D area ---------- */
+.card { position: absolute; left: 12px; top: 12px; width: 320px; background-color: var(--panel);
+    border-width: 1px; border-color: var(--line); border-radius: 10px; padding: 12px 14px; }
+.card .head { flex-direction: row; align-items: center; margin-bottom: 4px; }
+.card .head .t { font-size: 15px; -unity-font-definition: url("Fonts/Geologica-Medium.ttf"); flex-grow: 1; }
+.card .id { color: var(--muted); font-size: 11px; margin-bottom: 8px; }
+.overlay-bl { position: absolute; left: 12px; bottom: 80px; flex-direction: column; align-items: flex-start; }
+.badge { flex-direction: row; align-items: center; background-color: var(--panel); border-width: 1px; border-color: var(--line);
+    border-radius: 14px; padding: 4px 10px; }
+.badge .pin { width: 6px; height: 6px; border-radius: 3px; background-color: var(--warn); margin-right: 7px; }
+.badge Label { color: var(--text2); font-size: 11px; }
+.legend-3d { flex-direction: row; background-color: var(--panel); border-width: 1px; border-color: var(--line); border-radius: 14px; padding: 4px 10px 0 10px; margin-bottom: 6px; }
+.hint { margin-bottom: 6px; background-color: var(--panel); border-width: 1px; border-color: var(--line); border-radius: 8px; padding: 6px 10px;
+    color: var(--text2); font-size: 11px; max-width: 520px; transition-property: opacity; transition-duration: 0.6s; }
+.hint.hidden { opacity: 0; }
+.wip { padding: 0; }
+.wip .t { font-size: 15px; -unity-font-definition: url("Fonts/Geologica-Medium.ttf"); margin-bottom: 6px; }
+.status { padding: 2px 8px; border-radius: 4px; font-size: 11px; background-color: var(--panel2); }
+.status.ok { color: var(--ok); }
+.status.warn { color: var(--warn); }
+.status.bad { color: var(--bad); }
+.status.muted { color: var(--muted); }
+
+/* ---------- chips (layer toggles) ---------- */
+.chips { flex-direction: row; flex-wrap: wrap; margin-bottom: 8px; }
+.chip { margin: 0 6px 6px 0; padding: 4px 10px; border-radius: 14px; border-width: 1px; border-color: var(--line2); background-color: rgba(0, 0, 0, 0);
+    color: var(--muted); font-size: 12px; background-image: none; }
+.chip:hover { color: var(--text); border-color: var(--text2); }
+.chip.active { color: #0a0a0a; background-color: var(--text); border-color: var(--text); }
+.net-row { flex-direction: row; align-items: center; padding: 5px 0; border-bottom-width: 1px; border-bottom-color: var(--line); }
+.net-row .n { flex-grow: 1; }
+.net-row .v { -unity-text-align: middle-right; min-width: 70px; }
+.net-row .w { -unity-text-align: middle-right; min-width: 80px; color: var(--warn); }
+.swatch { width: 14px; height: 4px; border-radius: 2px; margin-right: 8px; }
+
+/* ---------- progress bars (plan vs fact) ---------- */
+.stage-row { padding: 6px 0; border-bottom-width: 1px; border-bottom-color: var(--line); }
+.stage-row .top { flex-direction: row; }
+.stage-row .n { flex-grow: 1; font-size: 12px; }
+.stage-row .v { font-size: 12px; -unity-text-align: middle-right; }
+.bar { height: 6px; border-radius: 3px; background-color: var(--panel3); margin-top: 5px; }
+.bar .p { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 3px; background-color: var(--line2); }
+.bar .f { position: absolute; left: 0; top: 1px; bottom: 1px; border-radius: 2px; background-color: var(--text); }
+.bar .f.behind { background-color: var(--bad); }
+.bim-date { font-size: 22px; -unity-font-definition: url("Fonts/Geologica-Light.ttf"); }
+.date-row { flex-direction: row; align-items: center; margin: 4px 0 8px 0; }
+.date-row .slider { margin: 0 0 0 12px; }
+.btn.wide { margin-top: 10px; padding: 9px 12px; }
+
+/* ---------- map pins ---------- */
+.pins { position: absolute; left: 0; top: 0; right: 0; bottom: 0; overflow: hidden; }
+.pin-wrap { position: absolute; flex-direction: row; align-items: center; }
+.map-pin { border-width: 2px; border-color: rgba(10, 10, 10, 0.85); }
+.map-pin.warn { border-color: var(--warn); border-width: 3px; }
+.map-pin.bad { border-color: var(--bad); border-width: 3px; }
+.map-pin.planned { border-color: rgba(253, 252, 252, 0.45); border-width: 1px; }
+.pin-wrap.selected .map-pin { border-color: var(--text); border-width: 3px; }
+.pin-label { margin-left: 6px; padding: 2px 7px; border-radius: 4px; font-size: 11px; background-color: var(--panel); border-width: 1px; border-color: var(--line); white-space: nowrap; }
+.stage-row.clickable:hover { background-color: var(--panel3); }
+.stage-row.active { background-color: var(--panel2); }
+.fact.clickable:hover { background-color: var(--panel3); }
+
+/* ---- M4 situational center */
+.feed-row { flex-direction: row; align-items: flex-start; padding: 6px 4px; border-bottom-width: 1px; border-bottom-color: var(--line); border-radius: 4px; }
+.feed-row.clickable:hover { background-color: var(--panel3); }
+.feed-time { width: 40px; flex-shrink: 0; color: var(--muted); font-size: 11px; margin-top: 1px; }
+.feed-text { flex-shrink: 1; flex-grow: 1; font-size: 12px; color: var(--text2); }
+.feed-text.bad { color: var(--text); -unity-font-definition: url("Fonts/Geologica-Medium.ttf"); }
+.cmp-cols { flex-direction: row; margin: 0 -4px; }
+.cmp-col { flex-basis: 0; flex-grow: 1; flex-shrink: 1; min-width: 0; margin: 0 4px; padding: 9px 10px 10px 10px; background-color: var(--panel2); border-radius: 6px; }
+.cmp-col .cap { font-size: 10px; letter-spacing: 1px; -unity-font-definition: url("Fonts/Geologica-Medium.ttf"); margin-bottom: 4px; }
+.cmp-col .t { font-size: 12px; -unity-font-definition: url("Fonts/Geologica-Medium.ttf"); }
+.cmp-row { flex-direction: row; align-items: center; padding: 6px 0; border-bottom-width: 1px; border-bottom-color: var(--line); }
+.cmp-row.head { padding-top: 0; }
+.cmp-row.head Label { color: var(--muted); font-size: 11px; }
+.cmp-row .k { flex-grow: 1; flex-shrink: 1; font-size: 12px; color: var(--text2); }
+.cmp-row .y, .cmp-row .n { width: 92px; flex-shrink: 0; -unity-text-align: middle-right; font-size: 13px; }
+.cmp-row .y.good { color: var(--ok); }
+.cmp-row .n.worse { color: var(--bad); }
+.src-row { padding: 7px 0; border-bottom-width: 1px; border-bottom-color: var(--line); }
+.src-row .n { flex-grow: 1; font-size: 12px; }
+.src-row .c { color: var(--muted); font-size: 11px; }
+.src-row .smp { margin-left: 14px; margin-top: 2px; font-size: 11px; color: var(--text2); -unity-font-definition: url("Fonts/Geologica-Light.ttf"); }
+
+/* ---- M5 AI layer: soft violet accent, no "terminator" look */
+.ai-card { border-color: rgba(167, 139, 250, 0.32); }
+.ai-card.latest { border-color: rgba(167, 139, 250, 0.7); background-color: rgba(24, 20, 36, 0.95); }
+.ai-dot { width: 8px; height: 8px; border-radius: 4px; background-color: #a78bfa; margin-right: 7px; }
+.ai-who { font-size: 11px; color: #c4b5fd; -unity-font-definition: url("Fonts/Geologica-Medium.ttf"); flex-grow: 1; letter-spacing: 0.6px; }
+.ai-conf { font-size: 10px; color: #ddd6fe; background-color: rgba(167, 139, 250, 0.18); border-radius: 4px; padding: 2px 7px; }
+.ai-text { font-size: 13px; color: var(--text); }
+.ai-tool { font-size: 11px; color: #b8b0d8; margin-left: 2px; }
+.ai-chip { font-size: 11px; }
+.ai-chip:hover { border-color: #a78bfa; }
+.ai-input { margin: 0; flex-shrink: 1; min-width: 0; }
+.ai-input .unity-base-text-field__input, .ai-input .unity-text-field__input { background-color: var(--panel2); border-width: 1px; border-color: rgba(167, 139, 250, 0.45); border-radius: 6px; color: var(--text); padding: 6px 8px; font-size: 12px; min-height: 28px; }
+.ai-input:focus .unity-base-text-field__input { border-color: #a78bfa; }
+.ai-opt { padding: 9px 10px; border-radius: 6px; background-color: var(--panel2); margin-bottom: 6px; border-width: 1px; border-color: rgba(0, 0, 0, 0); }
+.ai-opt.rec { border-color: rgba(167, 139, 250, 0.7); background-color: rgba(167, 139, 250, 0.08); }
+.ai-opt .t { font-size: 12px; -unity-font-definition: url("Fonts/Geologica-Medium.ttf"); }
+.ai-big { font-size: 20px; -unity-font-definition: url("Fonts/Geologica-Light.ttf"); letter-spacing: -0.4px; }
+.ai-num { width: 18px; height: 18px; border-radius: 9px; background-color: rgba(167, 139, 250, 0.2); color: #ddd6fe; font-size: 10px; -unity-text-align: middle-center; margin-right: 8px; }
+.tbar { height: 22px; background-color: var(--panel2); border-radius: 4px; overflow: hidden; }
+.tseg { position: absolute; top: 0; bottom: 0; border-radius: 3px; justify-content: center; }
+.tlab { font-size: 10px; color: #0a0a0a; margin-left: 5px; white-space: nowrap; -unity-font-definition: url("Fonts/Geologica-Medium.ttf"); }
+.ai-input .unity-base-text-field__input--placeholder { color: var(--muted); }
+
+/* ---- presentation tour */
+.tour-btn { margin-left: 8px; height: 34px; padding: 0 12px; }
+.tour { position: absolute; top: 12px; left: 50%; translate: -60% 0; width: 560px; background-color: var(--panel); border-width: 1px; border-color: var(--line2);
+        border-radius: 10px; padding: 12px 16px 10px 16px; }
+.tour-step { font-size: 10px; letter-spacing: 1.2px; color: var(--brand); -unity-font-definition: url("Fonts/Geologica-Medium.ttf"); margin-bottom: 4px; }
+.tour-title { font-size: 22px; -unity-font-definition: url("Fonts/Geologica-Light.ttf"); letter-spacing: -0.5px; margin-bottom: 4px; }
+.tour-text { font-size: 13px; color: var(--text2); }
+.tour-track { height: 2px; background-color: var(--line2); margin-top: 10px; border-radius: 1px; }
+.tour-bar { height: 2px; background-color: var(--brand); width: 0; border-radius: 1px; }
+
+/* =====================================================================================================
+   v2 shell — qTwin platform layout: top bar · icon rail · two floating columns · bottom dock
+   ===================================================================================================== */
+.twin-root { --panel: rgba(17, 17, 17, 0.93); --panel2: #1a1a1a; --panel3: #232323; --line: #262626; --line2: #343434; --text2: #c9c9c9; --muted: #8f8f8f; }
+.icon { -unity-background-scale-mode: scale-to-fit; -unity-background-image-tint-color: #d6d6d6; flex-shrink: 0; }
+
+.header { height: 60px; padding: 0 16px 0 14px; background-color: #0b0b0b; border-bottom-color: #1e1e1e; }
+.logo { width: 38px; height: 34px; margin-right: 0; }
+.hsep { width: 1px; height: 60px; background-color: #1e1e1e; margin: 0 16px; }
+.place2 { flex-direction: row; align-items: center; }
+.place2 .icon { -unity-background-image-tint-color: #f0c35a; margin-right: 10px; }
+.pcol { flex-direction: column; }
+.pcol .p1 { font-size: 13px; color: var(--text); -unity-font-definition: url("Fonts/Geologica-Medium.ttf"); }
+.pcol .p2 { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.site-pill { position: absolute; left: 50%; translate: -50% 0; top: 13px; height: 34px; flex-direction: row; align-items: center; padding: 0 14px 0 12px;
+    border-radius: 17px; background-color: #1c1c1c; border-width: 1px; border-color: #2c2c2c; }
+.site-pill:hover { border-color: #4a4a4a; }
+.site-pill .icon { margin-right: 8px; -unity-background-image-tint-color: #ffffff; }
+.site-pill .v { font-size: 13px; -unity-font-definition: url("Fonts/Geologica-Medium.ttf"); }
+.site-pill .chev { margin-left: 8px; }
+.scenario-btn { height: 34px; border-radius: 17px; padding: 0 12px; background-color: #161616; border-color: #2c2c2c; }
+.scenario-btn .icon { margin-right: 7px; -unity-background-image-tint-color: #9d9d9d; }
+.year-big { font-size: 26px; margin-left: 14px; }
+.hicon { width: 36px; height: 36px; border-radius: 8px; align-items: center; justify-content: center; margin-left: 2px; }
+.hicon:hover { background-color: #1d1d1d; }
+.hbadge { position: absolute; top: 4px; right: 3px; min-width: 15px; height: 15px; border-radius: 8px; background-color: var(--bad); color: #ffffff;
+    font-size: 9px; -unity-text-align: middle-center; padding: 0 3px; -unity-font-definition: url("Fonts/Geologica-SemiBold.ttf"); }
+.user { flex-direction: row; align-items: center; margin-left: 12px; }
+.avatar { width: 34px; height: 34px; border-radius: 17px; background-color: #2a2d36; color: #e6e9f2; font-size: 12px; -unity-text-align: middle-center;
+    -unity-font-definition: url("Fonts/Geologica-SemiBold.ttf"); margin-right: 10px; }
+
+/* icon rail */
+.rail { position: absolute; left: 0; top: 0; bottom: 0; width: 56px; background-color: #0b0b0b; border-right-width: 1px; border-right-color: #1e1e1e;
+    flex-direction: column; align-items: stretch; padding: 10px 8px; }
+.rail.open { width: 214px; }
+.rail-btn { height: 40px; border-radius: 9px; flex-direction: row; align-items: center; padding: 0 10px; margin-bottom: 4px; }
+.rail-btn .icon { -unity-background-image-tint-color: #8a8a8a; }
+.rail-btn:hover { background-color: #191919; }
+.rail-btn:hover .icon { -unity-background-image-tint-color: #ffffff; }
+.rail-btn.active { background-color: #222222; }
+.rail-btn.active .icon { -unity-background-image-tint-color: #ffffff; }
+.rail-btn.toggle .icon { -unity-background-image-tint-color: #6d6d6d; }
+.rail-label { display: none; margin-left: 12px; font-size: 13px; color: var(--text2); white-space: nowrap; }
+.rail.open .rail-label { display: flex; }
+.rail-btn.active .rail-label { color: var(--text); }
+.rail-tip { display: none; position: absolute; left: 50px; top: 8px; padding: 4px 10px; border-radius: 6px; background-color: #222222; border-width: 1px; border-color: #333333;
+    font-size: 12px; white-space: nowrap; color: var(--text); }
+.rail-btn:hover .rail-tip { display: flex; }
+.rail.open .rail-tip { display: none; }
+.rail-line { height: 1px; background-color: #1e1e1e; margin: 6px 4px 10px 4px; }
+
+/* two floating columns */
+.col { position: absolute; top: 12px; bottom: 12px; width: 372px; }
+.col-left { left: 68px; }
+.col-right { right: 12px; }
+.compact .col { width: 330px; }
+.col .unity-scroll-view__content-container { padding: 0 0 4px 0; }
+.col .unity-scroller--vertical { width: 6px; border-width: 0; background-color: rgba(0, 0, 0, 0); margin-left: 4px; }
+.col .unity-scroller--vertical .unity-base-slider__dragger { background-color: #333333; border-radius: 3px; width: 4px; border-width: 0; left: 1px; }
+.col .unity-scroller--vertical .unity-base-slider__tracker { background-color: rgba(0, 0, 0, 0); border-width: 0; }
+.col .unity-scroller__low-button, .col .unity-scroller__high-button { display: none; }
+
+.block { background-color: var(--panel); border-color: #262626; border-radius: 12px; padding: 14px 16px 16px 16px; margin-bottom: 10px; }
+.block-head { margin-bottom: 12px; }
+.block-title { font-size: 16px; -unity-font-definition: url("Fonts/Geologica-SemiBold.ttf"); letter-spacing: -0.2px; }
+.block-head .chev { margin-left: 8px; }
+.block.collapsed .block-head { margin-bottom: 0; }
+.kpi { background-color: #1b1b1b; border-radius: 8px; padding: 9px 12px 11px 12px; }
+.kpi .l { font-size: 12px; color: #9a9a9a; }
+.kpi .v { font-size: 25px; -unity-font-definition: url("Fonts/Geologica-Regular.ttf"); }
+
+/* bottom dock: timeline + view tools, centred between the columns */
+.dock { position: absolute; left: 452px; right: 396px; bottom: 12px; height: 54px; flex-direction: row; align-items: center; padding: 0 10px 0 8px;
+    background-color: rgba(17, 17, 17, 0.94); border-width: 1px; border-color: #2a2a2a; border-radius: 12px; }
+.compact .dock { left: 410px; right: 354px; }
+.dock-play { width: 38px; height: 38px; border-radius: 9px; margin: 0; padding: 0; background-color: #f2f2f2; border-width: 0; background-image: none;
+    align-items: center; justify-content: center; }
+.dock-play:hover { background-color: #ffffff; }
+.dock-play .icon { -unity-background-image-tint-color: #0a0a0a; }
+.dsep { width: 1px; height: 26px; background-color: #2a2a2a; margin: 0 8px 0 12px; }
+.dock-tool { width: 34px; height: 34px; border-radius: 8px; align-items: center; justify-content: center; }
+.dock-tool:hover { background-color: #222222; }
+.dock-tool .icon { -unity-background-image-tint-color: #a8a8a8; }
+.dock-tool:hover .icon { -unity-background-image-tint-color: #ffffff; }
+.over-dock { position: absolute; left: 452px; right: 396px; bottom: 74px; align-items: center; flex-direction: column; }
+.compact .over-dock { left: 410px; right: 354px; }
+.legend-3d { margin-bottom: 0; background-color: rgba(17, 17, 17, 0.88); border-color: #262626; }
+.hint { margin-bottom: 6px; }
+.demo-badge { position: absolute; top: 10px; left: 50%; translate: -50% 0; flex-direction: row; padding: 3px 10px; border-radius: 10px; background-color: rgba(17, 17, 17, 0.7); }
+.demo-badge Label { font-size: 10px; color: #8f8f8f; }
+.card { left: 452px; top: 12px; }
+.compact .card { left: 410px; }
+.popup { top: 64px; border-radius: 12px; background-color: #121212; border-color: #2e2e2e; }
+.tour { left: 50%; translate: -50% 0; top: 40px; }
+
+/* journal cards (as the "Оперативный журнал" of the qTwin platform) */
+.jcard { border-radius: 8px; padding: 10px 12px 10px 12px; margin-bottom: 8px; background-color: #1a1a1a; border-left-width: 3px; border-left-color: #3a3a3a; }
+.jcard.bad { background-color: rgba(255, 59, 47, 0.11); border-left-color: #ff3b2f; }
+.jcard.warn { background-color: rgba(245, 166, 35, 0.09); border-left-color: #f5a623; }
+.jcard.ok { background-color: rgba(52, 199, 89, 0.08); border-left-color: #34c759; }
+.jcard.info { background-color: rgba(122, 167, 255, 0.08); border-left-color: #7aa7ff; }
+.jcard .jh { flex-direction: row; align-items: center; margin-bottom: 6px; }
+.jcard .jh .icon { margin-right: 8px; }
+.jcard .src { flex-grow: 1; font-size: 13px; -unity-font-definition: url("Fonts/Geologica-SemiBold.ttf"); }
+.jbadge { font-size: 11px; padding: 2px 8px; border-radius: 6px; }
+.jbadge.bad { color: #ff5a4f; background-color: rgba(255, 59, 47, 0.16); }
+.jbadge.warn { color: #f5a623; background-color: rgba(245, 166, 35, 0.15); }
+.jbadge.ok { color: #34c759; background-color: rgba(52, 199, 89, 0.14); }
+.jbadge.info { color: #9cbcff; background-color: rgba(122, 167, 255, 0.14); }
+.jcard .jt { font-size: 13px; color: #dcdcdc; }
+.jcard .jf { flex-direction: row; align-items: center; margin-top: 8px; }
+.jcard .jtime { flex-grow: 1; font-size: 11px; color: #8f8f8f; -unity-text-align: middle-right; }
+.jbtn { flex-direction: row; align-items: center; padding: 3px 10px 3px 8px; border-radius: 12px; border-width: 1px; border-color: #3a3a3a; }
+.jbtn:hover { border-color: #8a8a8a; }
+.jbtn .icon { margin-right: 5px; }
+.jbtn Label { font-size: 11px; color: #e0e0e0; }
+.insight { padding: 10px 12px; margin-bottom: 8px; border-radius: 8px; background-color: #1a1a1a; border-left-width: 2px; border-left-color: #f5a623; }
+.insight Label { font-size: 13px; color: #e2e2e2; white-space: normal; }
+.insight-btn { flex-direction: column; align-items: stretch; border-top-width: 0; border-right-width: 0; border-bottom-width: 0; margin-left: 0; margin-right: 0; -unity-text-align: upper-left; }
+.insight-btn:hover { background-color: #222222; }
+.insight .insight-go { font-size: 12px; color: #f5a623; margin-top: 4px; }
+.wide-btn { height: 38px; border-radius: 8px; border-width: 1px; border-color: #2e2e2e; background-color: #161616; flex-direction: row; align-items: center; justify-content: center; margin-top: 4px; }
+.wide-btn:hover { border-color: #5a5a5a; }
+.wide-btn Label { font-size: 14px; margin-right: 8px; }
+.wide-btn .icon { -unity-background-image-tint-color: #f0c35a; }
+/* segmented meter (load / readiness) */
+.meter { flex-direction: row; height: 34px; margin: 6px 0 4px 0; }
+.meter .seg { flex-grow: 1; margin-right: 2px; border-radius: 2px; }
+.meter-scale { flex-direction: row; justify-content: space-between; }
+.meter-scale Label { font-size: 11px; color: #8f8f8f; }
+.status-row { flex-direction: row; align-items: center; padding: 9px 10px; border-radius: 6px; margin-bottom: 2px; }
+.status-row:hover { background-color: #1d1d1d; }
+.status-row .n { flex-grow: 1; font-size: 13px; }
+.status-row .s { font-size: 12px; white-space: nowrap; flex-shrink: 0; margin-left: 8px; }
+.status-row .s.ok { color: #c9c9c9; }
+.status-row .s.warn { color: #f5a623; }
+.status-row .s.bad { color: #ff5a4f; }
+.status-row.hl { background-color: rgba(245, 166, 35, 0.07); }
+.rail-open .col-left { left: 226px; }
+.rail-open .dock, .rail-open .over-dock { left: 610px; }
+.rail-open .card { left: 610px; }
+.meter-title { font-size: 15px; -unity-font-definition: url("Fonts/Geologica-Medium.ttf"); }
+
+/* ---------------- landmarks: real projects of Alatau City (Investment projects tab, labels, passport) ---------------- */
+.status.info { color: var(--info); }
+.lm-pin-wrap { position: absolute; flex-direction: column; align-items: center; translate: -50% -100%; }
+.lm-pin { flex-direction: row; align-items: center; padding: 4px 9px 4px 7px; border-radius: 6px; background-color: rgba(14, 14, 14, 0.92);
+          border-width: 1px; border-color: #3a3a3a; }
+.lm-pin:hover { border-color: #fdfcfc; background-color: rgba(28, 28, 28, 0.96); }
+.lm-dot { width: 8px; height: 8px; border-radius: 4px; margin-right: 6px; }
+.lm-name { font-size: 12px; -unity-font-definition: url("Fonts/Geologica-Medium.ttf"); white-space: nowrap; }
+.lm-st { font-size: 10px; margin-left: 7px; padding: 1px 6px; border-radius: 3px; background-color: #1f1f1f; white-space: nowrap; }
+.lm-st.ok { color: var(--ok); } .lm-st.warn { color: var(--warn); } .lm-st.info { color: var(--info); } .lm-st.muted { color: var(--muted); }
+.lm-stem { width: 1px; height: 26px; background-color: rgba(253, 252, 252, 0.55); }
+.lm-foot { width: 5px; height: 5px; border-radius: 3px; background-color: #fdfcfc; margin-top: -2px; }
+.lm-pin-wrap.planned .lm-pin { background-color: rgba(14, 14, 14, 0.62); border-color: #2a2a2a; }
+.lm-pin-wrap.planned .lm-name { color: #a9a9a9; }
+.lm-pin-wrap.planned .lm-stem { background-color: rgba(253, 252, 252, 0.25); }
+.lm-pin-wrap.hover .lm-pin { border-color: #d946ef; }
+.lm-pin-wrap.selected .lm-pin { border-color: #d946ef; background-color: rgba(40, 14, 44, 0.95); }
+.lm-pin-wrap.selected .lm-stem { background-color: #d946ef; }
+.lm-pin-wrap.selected .lm-foot { background-color: #d946ef; }
+.lm-pin-wrap.station .lm-pin { padding: 2px 7px 2px 5px; border-radius: 10px; }
+.lm-pin-wrap.station .lm-name { font-size: 10px; }
+.lm-pin-wrap.station .lm-dot { width: 6px; height: 6px; }
+.lm-pin-wrap.station .lm-stem { height: 12px; }
+.card.lm-card { width: 372px; }
+.lm-chips { flex-direction: row; align-items: center; margin-bottom: 8px; }
+.lm-chip { flex-direction: row; align-items: center; padding: 2px 8px; border-radius: 4px; background-color: var(--panel2); margin-right: 6px; font-size: 11px; }
+.lm-purpose { color: var(--text2); margin-bottom: 10px; }
+.lm-tl { margin: 2px 0 10px 0; }
+.lm-tl Label { font-size: 11px; color: var(--muted); }
+.lm-tl Label.ok { color: var(--ok); } .lm-tl Label.warn { color: var(--warn); }
+.lm-bar { height: 6px; border-radius: 3px; background-color: var(--panel3); margin-top: 5px; overflow: hidden; }
+.lm-fill { height: 6px; border-radius: 3px; background-color: var(--warn); }
+.lm-fill.done { background-color: var(--ok); }
+.lm-note { font-size: 10px; color: var(--muted); margin-top: 6px; }
+.lm-btns { flex-direction: row; flex-wrap: wrap; margin-top: 10px; }
+.lm-btns .btn { margin-right: 6px; margin-bottom: 4px; }
+.lm-row.selected { background-color: rgba(217, 70, 239, 0.12); }
+.lm-pin-wrap.pin-hover .lm-pin { border-color: #fdfcfc; background-color: rgba(30, 30, 30, 0.97); }
+
+/* ---- presentation by zones (TwinTour): caption at the bottom right of the map column, above the dock; the passport stays on the left */
+.tour.tour2 { top: auto; left: auto; translate: 0 0; right: 12px; bottom: 12px; width: 372px; padding: 12px 14px 10px 14px; border-radius: 12px;
+    background-color: rgba(14, 14, 14, 0.96); border-color: #3a3a3a; }
+.compact .tour.tour2 { width: 330px; }
+.tour-zones { margin-top: 6px; flex-wrap: wrap; }
+.tour2 .tour-title { font-size: 19px; }
+.tour-on .over-dock { display: none; }
+.tour-top { flex-direction: row; align-items: center; margin-bottom: 8px; }
+.tour-zdot { width: 10px; height: 10px; border-radius: 5px; margin-right: 8px; }
+.tour-zone { font-size: 11px; letter-spacing: 1.2px; -unity-font-definition: url("Fonts/Geologica-Medium.ttf"); color: var(--text); }
+.tour-count { font-size: 11px; color: var(--muted); }
+.tour-segs { flex-direction: row; margin-bottom: 10px; }
+.tour-seg { flex-grow: 1; flex-basis: 0; margin-right: 4px; padding-top: 5px; border-top-width: 3px; border-top-color: #2c2c2c; }
+.tour-seg Label { font-size: 10px; color: #6e6e6e; -unity-text-align: middle-center; }
+.tour-seg.done { border-top-color: #6a6a6a; }
+.tour-seg.done Label { color: #9a9a9a; }
+.tour-seg.on { border-top-color: var(--brand); }
+.tour-seg.on Label { color: var(--text); -unity-font-definition: url("Fonts/Geologica-Medium.ttf"); }
+.tour2 .tour-text { font-size: 13px; color: var(--text2); margin-bottom: 4px; }
+.tour-bullets { margin-top: 4px; }
+.tour-bullet { flex-direction: row; align-items: flex-start; margin-top: 4px; }
+.tour-bdot { width: 6px; height: 6px; border-radius: 3px; margin-top: 6px; margin-right: 8px; flex-shrink: 0; }
+.tour-bullet Label { font-size: 12px; color: #d6d6d6; flex-shrink: 1; }

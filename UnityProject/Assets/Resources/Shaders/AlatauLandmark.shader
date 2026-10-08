@@ -1,0 +1,154 @@
+// Landmarks (Iconic Complex, plants, campus, LRT …): hand-built procedural models with a small set of surface materials.
+// Vertex data (LandmarkKit): COLOR = base colour, uv0 = facade metres (along, up), uv1.x = material id, uv1.y = its parameter.
+// Materials: 0 solid (plaster / concrete), 1 glass curtain wall (param = floor height), 2 profiled metal, 3 flat roof, 4 paving,
+//            5 light (emissive), 6 planting, 7 water, 8 horizontal fins over glass (param = fin spacing), 9 dark steel / rails.
+// Per object (MaterialPropertyBlock): _Reveal = metres above the object's base still visible (construction rises), _Build = 1 while
+// under construction (bare frame near the top, orange edge), _Ghost = screen-door "planned" look, _Hi = hover / selection rim.
+// Works in the plain maket look and in the film look (_AlatauFilm: sky reflections, night windows) like AlatauCity/Lit.
+Shader "AlatauCity/Landmark"
+{
+    Properties
+    {
+        _Reveal ("Reveal height (m)", Float) = 100000
+        _Build ("Under construction", Range(0, 1)) = 0
+        _Ghost ("Planned (ghost)", Range(0, 1)) = 0
+        _Hi ("Highlight", Range(0, 1)) = 0
+    }
+    SubShader
+    {
+        Tags { "RenderType" = "Opaque" "Queue" = "Geometry" }
+        // drawn a hair in front: the ground ribbons of the plan (roads, the LRT line, rivers) carry a depth offset of their own,
+        // and must not show through the plots, the viaduct or the platforms
+        Offset -1, -6
+        CGPROGRAM
+        #pragma surface surf Soft fullforwardshadows vertex:vert addshadow noambient
+        #pragma target 3.5
+        #include "Assets/Shaders/AlatauFilm.cginc"
+        float _Reveal, _Build, _Ghost, _Hi;
+        struct Input { float4 color : COLOR; float2 fac; float2 mat; float ly; float3 worldPos; float3 worldNormal; float4 screenPos; };
+        void vert(inout appdata_full v, out Input o)
+        {
+            UNITY_INITIALIZE_OUTPUT(Input, o); o.fac = v.texcoord.xy; o.mat = v.texcoord1.xy; o.ly = v.vertex.y;
+        }
+        half4 LightingSoft(SurfaceOutput s, half3 lightDir, half3 viewDir, half atten)
+        {
+            half nl = saturate(dot(s.Normal, lightDir));
+            half4 c; c.rgb = s.Albedo * _LightColor0.rgb * (nl * atten); c.a = s.Alpha;
+            half3 hv = normalize(lightDir + viewDir);
+            c.rgb += _LightColor0.rgb * (pow(saturate(dot(s.Normal, hv)), 140.0) * s.Specular * atten * 1.6);
+            return c;
+        }
+        void surf(Input IN, inout SurfaceOutput o)
+        {
+            // every derivative first, before any branch
+            float2 uv = IN.fac, fw = fwidth(uv);
+            float3 n = normalize(IN.worldNormal), view = normalize(_WorldSpaceCameraPos - IN.worldPos);
+            clip(_Reveal - IN.ly);
+            if (_Ghost > 0.01)
+            {
+                float2 sp = IN.screenPos.xy / max(IN.screenPos.w, 1e-4) * _ScreenParams.xy;
+                float ign = frac(52.9829189 * frac(dot(floor(sp), float2(0.06711056, 0.00583715))));
+                clip((1.0 - 0.72 * _Ghost) - ign);
+            }
+            int id = (int)round(IN.mat.x); float prm = max(IN.mat.y, 0.05);
+            float3 a = IN.color.rgb; float3 emit = 0; float spec = 0;
+            float film = step(0.5, _AlatauFilm);
+            float3 rdir = reflect(-view, n);
+            float fres = 0.04 + 0.96 * pow(1.0 - saturate(dot(n, view)), 5.0);
+            float3 plainSky = lerp(float3(0.42, 0.45, 0.50), float3(0.62, 0.68, 0.76), saturate(rdir.y * 2.0 + 0.3));
+            float3 sky = lerp(plainSky, AlatauSky(rdir), film);
+            float night = _AlatauNight * film;
+            float grain = ANoise(IN.worldPos.xz * 0.37 + IN.worldPos.y * 0.21);
+
+            if (id == 1 || id == 8)
+            {
+                // glass curtain wall: slab bands per floor, thin mullions; (8) white horizontal fins in front of the glass
+                float fh = id == 1 ? prm : prm;
+                float2 cell = float2(uv.x / 1.5, uv.y / fh), cw = fw / float2(1.5, fh);
+                float2 q = frac(cell); float2 idc = floor(cell);
+                float detail = saturate(1.4 - max(cw.x, cw.y) * 2.0);
+                float slab = id == 1 ? 1.0 - saturate((q.y - 0.16) / max(cw.y, 1e-4) + 0.5) : 0.0;
+                float fin = id == 8 ? 1.0 - saturate((q.y - 0.30) / max(cw.y, 1e-4) + 0.5) : 0.0;
+                float mull = 1.0 - saturate((min(q.x, 1.0 - q.x) - 0.035) / max(cw.x, 1e-4) + 0.5);
+                float h = AHash2(idc + 17.0);
+                float3 glass = a * (0.80 + 0.40 * h);
+                float mirror = 0.42 + 0.55 * fres;
+                float lit = step(1.0 - (0.12 + 0.55 * night), AHash2(idc * 1.7 + 3.1)) * night;
+                float3 lamp = lerp(float3(1.0, 0.80, 0.50), float3(1.0, 0.93, 0.78), h) * lit * 1.3;
+                float3 frameC = id == 8 ? float3(0.93, 0.93, 0.91) : a * 0.6 + float3(0.30, 0.31, 0.33);
+                float solidPart = saturate(max(max(slab, fin), mull * 0.85));
+                float3 nearA = lerp(glass, frameC, solidPart);
+                float3 nearE = (sky * mirror + lamp) * (1.0 - solidPart);
+                float share = id == 8 ? 0.62 : 0.80;
+                float3 farA = lerp(frameC, glass, share);
+                float3 farE = (sky * mirror * share) + float3(1.0, 0.85, 0.6) * night * 0.25 * share;
+                a = lerp(farA, nearA, detail); emit = lerp(farE, nearE, detail);
+                spec = (1.0 - solidPart * detail) * 0.9;
+            }
+            else if (id == 2)
+            {
+                // profiled metal: vertical ribs every 0.8 m
+                float rib = 1.0 - saturate((abs(frac(uv.x / 0.8) - 0.5) - 0.18) / max(fw.x / 0.8, 1e-4) + 0.5);
+                float det = saturate(1.3 - fw.x / 0.8 * 2.0);
+                a *= lerp(1.0, 0.86 + 0.14 * rib, det) * (0.97 + 0.06 * grain);
+                spec = 0.25; emit = sky * 0.05 * fres;
+            }
+            else if (id == 3)
+            {
+                a *= 0.93 + 0.10 * grain;
+            }
+            else if (id == 4)
+            {
+                // paving: 1.2 m slabs
+                float2 t = abs(frac(uv / 1.2) - 0.5); float2 tw = fw / 1.2;
+                float joint = 1.0 - saturate((0.47 - max(t.x, t.y)) / max(max(tw.x, tw.y), 1e-4) + 0.5);
+                a *= (1.0 - 0.10 * joint * saturate(1.3 - max(tw.x, tw.y) * 3.0)) * (0.95 + 0.08 * grain);
+            }
+            else if (id == 5)
+            {
+                emit = a * (0.9 + 0.8 * film * _AlatauNight); a *= 0.35;
+            }
+            else if (id == 6)
+            {
+                float g2 = ANoise(IN.worldPos.xz * 0.11 + 4.0);
+                a *= 0.78 + 0.30 * grain + 0.12 * g2;
+            }
+            else if (id == 7)
+            {
+                a = lerp(a, a * 0.6, grain * 0.3); emit = sky * (0.20 + 0.70 * fres); spec = 1.0;
+            }
+            else if (id == 9)
+            {
+                spec = 0.35; emit = sky * 0.08 * fres;
+            }
+            else
+            {
+                // solid: plaster / precast panels with faint joints every floor height (param) and 3 m
+                float2 t = float2(frac(uv.x / 3.0), frac(uv.y / prm));
+                float2 tw = fw / float2(3.0, prm);
+                float joint = (1.0 - saturate(min(t.y, 1.0 - t.y) / max(tw.y * 1.2, 0.02))) * 0.07 + (1.0 - saturate(min(t.x, 1.0 - t.x) / max(tw.x * 1.2, 0.01))) * 0.04;
+                a *= (1.0 - joint * saturate(1.3 - max(tw.x, tw.y) * 2.5)) * (0.96 + 0.07 * grain);
+            }
+
+            // under construction: bare concrete frame just below the working level, an orange safety edge at the top
+            if (_Build > 0.5 && id != 4 && id != 6 && id != 7)
+            {
+                float fromTop = _Reveal - IN.ly;
+                float bare = saturate(1.0 - fromTop / 26.0);
+                a = lerp(a, float3(0.62, 0.61, 0.59) * (0.95 + 0.08 * grain), bare); emit *= 1.0 - bare; spec *= 1.0 - bare;
+                float edge = saturate(1.0 - fromTop / 2.2);
+                a = lerp(a, float3(0.98, 0.52, 0.10), edge); emit += float3(0.98, 0.52, 0.10) * edge * 0.35;
+            }
+            if (_Ghost > 0.01) { a = lerp(a, float3(0.70, 0.78, 0.92), 0.55 * _Ghost); emit += float3(0.10, 0.16, 0.26) * _Ghost; spec = 0; }
+
+            // ambient: in the film look shaded by facing and height like the city (AlatauLit), else spherical harmonics
+            half3 amb = ShadeSH9(half4(n, 1.0));
+            if (film > 0.5) amb = lerp(_AlatauSkyGround.rgb * 0.62, lerp(_AlatauSkyHorizon.rgb, _AlatauSkyZenith.rgb, 0.5), n.y * 0.5 + 0.5) * 0.84 * lerp(0.75, 1.0, saturate(IN.ly / 12.0));
+            float rim = pow(1.0 - saturate(dot(n, view)), 4.0);
+            emit += _Hi * (rim * 0.7 + 0.03) * float3(0.85, 0.30, 0.95);
+            o.Albedo = a; o.Emission = emit + a * amb; o.Specular = spec; o.Alpha = 1;
+        }
+        ENDCG
+    }
+    FallBack "Diffuse"
+}
