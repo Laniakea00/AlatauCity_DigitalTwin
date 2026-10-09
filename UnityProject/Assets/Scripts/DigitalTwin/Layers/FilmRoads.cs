@@ -31,7 +31,7 @@ namespace AlatauCity.DigitalTwin
 
         void Build()
         {
-            built = true;
+            built = true; PublishZones();
             var sh = Shader.Find("AlatauCity/Road"); if (sh == null) { Debug.LogWarning("[Alatau] film roads: shader missing"); return; }
             var mat = new Material(sh) { name = "Film roads" };
             root = new GameObject("Film roads");
@@ -136,7 +136,7 @@ namespace AlatauCity.DigitalTwin
         }
 
         // ---------------------------------------------------------------- strokes: the road graph as long, smooth lines
-        class Stroke { public List<Vector2> P; public TwinData.RoadClass Cls; public Vector4 Years; public int A, B; public float Len; public bool Ramp, OneWay; }
+        class Stroke { public List<Vector2> P; public TwinData.RoadClass Cls; public Vector4 Years; public int A, B; public float Len; public bool Ramp, OneWay, Fixed; }
 
         /// <summary>Edges of one class and one opening year that meet at a node of degree 2 are one road: chained into a stroke, resampled
         /// every 8 m and smoothed (a few binomial passes, ends fixed), so the ribbon has no kinks from the vectorised plan and corners of
@@ -160,6 +160,9 @@ namespace AlatauCity.DigitalTwin
                 return v.sqrMagnitude > 1e-8f ? v.normalized : v;
             }
             var used = new bool[n]; var res = new List<Stroke>();
+            // interchanges (Tools/build_interchanges.py): the plan's scribbled ramps are dropped, clean standard ramps are added
+            var ic = LoadInterchanges();
+            if (ic != null && ic.edges != null) foreach (var k in ic.edges) if (k >= 0 && k < n) used[k] = true;
             // good continuation: at every node the road goes on along the edge of the same class and year that is most nearly straight
             // ahead (within 30°), so a motorway runs straight through an interchange and its ramps become separate strokes
             int Next(int cur, int node)
@@ -229,6 +232,15 @@ namespace AlatauCity.DigitalTwin
                 }
                 res.Add(st);
             }
+            if (ic != null && ic.paths != null)
+                foreach (var pth in ic.paths)
+                {
+                    if (pth.g == null || pth.g.Length < 4) continue;
+                    var pts = new List<Vector2>(); for (int i = 0; i + 1 < pth.g.Length; i += 2) pts.Add(new Vector2(pth.g[i], pth.g[i + 1]));
+                    var rs = Smooth(Resample(pts, 8f), 2); float Lr = 0; for (int i = 1; i < rs.Count; i++) Lr += (rs[i] - rs[i - 1]).magnitude;
+                    var yv = pth.y != null && pth.y.Length >= 4 ? new Vector4(pth.y[0], pth.y[1], pth.y[2], pth.y[3]) : new Vector4(2025, 2025, 2025, 2025);
+                    res.Add(new Stroke { Cls = TwinData.RoadClass.Highway, Years = yv, A = -1, B = -1, P = rs, Len = Lr, Ramp = true, Fixed = true });
+                }
             // a parallel twin 3–30 m away (same class, another stroke) along most of the length: one carriageway of a dual road
             const float C = 60f; var grid = new Dictionary<long, List<(int s, Vector2 m, Vector2 d)>>();
             long Key(Vector2 p) => ((long)Mathf.FloorToInt(p.x / C) << 32) ^ (uint)Mathf.FloorToInt(p.y / C);
@@ -244,6 +256,7 @@ namespace AlatauCity.DigitalTwin
             for (int k = 0; k < res.Count; k++)
             {
                 var st = res[k]; var p = st.P; int tw = 0, cnt = 0; float maxD = st.Cls == TwinData.RoadClass.Highway ? 30f : 22f;
+                if (st.Fixed) continue;
                 for (int i = 1; i < p.Count; i += 2)
                 {
                     Vector2 m = (p[i] + p[i - 1]) * 0.5f, d = (p[i] - p[i - 1]); if (d.sqrMagnitude < 1f) continue; d.Normalize(); cnt++;
@@ -271,6 +284,43 @@ namespace AlatauCity.DigitalTwin
             }
             return res;
         }
+        [System.Serializable] class IcPath { public int[] y; public float[] g; }
+        [System.Serializable] class IcData { public int[] edges; public IcPath[] paths; }
+        static IcData icCache;
+        static IcData LoadInterchanges()
+        {
+            if (icCache != null) return icCache;
+            var ta = Resources.Load<TextAsset>("Landmarks/interchanges"); if (ta == null) return null;
+            try { icCache = JsonUtility.FromJson<IcData>(ta.text); } catch (System.Exception e) { Debug.LogWarning("[Alatau] interchanges: " + e.Message); }
+            return icCache;
+        }
+        /// <summary>Interchange zones (x, z, radius): the ground inside is a mown verge, not city yards (AlatauGround reads _AlatauIcZones).</summary>
+        public static void PublishZones()
+        {
+            var ta = Resources.Load<TextAsset>("Landmarks/interchanges"); var v = new Vector4[32]; int n = 0;
+            if (ta != null)
+            {
+                // "zones":[[x,z,r,y],...] — JsonUtility cannot read nested arrays, so a tiny parse
+                int i0 = ta.text.IndexOf("\"zones\":[");
+                if (i0 >= 0)
+                {
+                    int i = i0 + 9;
+                    while (n < 32)
+                    {
+                        int a = ta.text.IndexOf('[', i); if (a < 0) break; int b = ta.text.IndexOf(']', a); if (b < 0) break;
+                        var parts = ta.text.Substring(a + 1, b - a - 1).Split(',');
+                        if (parts.Length >= 3 && float.TryParse(parts[0], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float x)
+                            && float.TryParse(parts[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float z)
+                            && float.TryParse(parts[2], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float r))
+                            v[n++] = new Vector4(x, z, r, parts.Length > 3 && float.TryParse(parts[3], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float y) ? y : 2025f);
+                        i = b + 1; if (i < ta.text.Length && ta.text[i] == ']') break;
+                        if (i + 1 < ta.text.Length && ta.text[i] == ',' && ta.text[i + 1] != '[') break;
+                    }
+                }
+            }
+            Shader.SetGlobalVectorArray("_AlatauIcZones", v); Shader.SetGlobalFloat("_AlatauIcCount", n);
+        }
+
         static List<Vector2> Resample(List<Vector2> p, float step)
         {
             var o = new List<Vector2> { p[0] }; float acc = 0;

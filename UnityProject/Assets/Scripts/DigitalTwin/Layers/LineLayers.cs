@@ -181,7 +181,7 @@ namespace AlatauCity.DigitalTwin
             for (int i = 0; i < n && i < traffic.Length; i++)
             {
                 if (TwinData.Roads[i].Year[s] > y) { traffic[i] = 0; continue; }
-                float v = Mathf.Lerp(a[i], b[i], t) * scale;
+                float v = i < a.Length && i < b.Length ? Mathf.Lerp(a[i], b[i], t) * scale : 0f;     // edges added after the traffic model (airport road): no counts
                 traffic[i] = (byte)(v < 3 ? 0 : Mathf.Clamp(Mathf.RoundToInt(v), 1, 255));
             }
             trafficTex.SetPixelData(traffic, 0); trafficTex.Apply(false, false);

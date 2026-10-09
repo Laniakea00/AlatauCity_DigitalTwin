@@ -178,18 +178,18 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 Id = "gtes", Name = "ГТЭС Doosan 2 × 250 МВт", Short = "ГТЭС Doosan", Company = "Doosan Enerbility · KEPCO · GGGI",
                 Purpose = "Газотурбинная электростанция с переходом на водород (ГЧП)", Model = "power",
                 District = 2, Status = LStatus.Agreement, StatusNote = "14.09.2026 — переговоры, окончательных соглашений нет",
-                StartYear = 2028, EndYear = 2031, YearOfficial = false, X = -6362, Z = 5345, Yaw = 0f, PadW = 340f, PadD = 240f, Height = 62f, Radius = 175f, ViewYaw = 210f, ViewPitch = 22f,
+                StartYear = 2028, EndYear = 2031, YearOfficial = false, X = 4200, Z = 900, Yaw = 10f, PadW = 340f, PadD = 240f, Height = 62f, Radius = 175f, ViewYaw = 210f, ViewPitch = 22f,
                 Source = "bes.media, Kapital.kz", SourceDate = "14.09.2026"
             }.F("Мощность", "2 × 250 МВт").F("Сроки", "не объявлены (в демо — 2031)").Stage2("перевод турбин на водород", 2035, 2039));
 
             L.Add(new Landmark
             {
                 Id = "airport", Name = "Аэропорт Алатау", Short = "Аэропорт", Company = "Концепция цифрового двойника · оператор не определён",
-                Purpose = "Пассажирский и грузовой аэропорт: ВПП 3,4 км, терминал, перрон, диспетчерская вышка", Model = "airport",
+                Purpose = "Пассажирский и грузовой аэропорт: две параллельные ВПП, терминал в форме самолёта, карго, ТОиР, ЛРТ до терминала", Model = "airport",
                 District = 2, Status = LStatus.Concept, StatusNote = "концепция: аэродром → пассажирский аэропорт, сроков нет",
-                StartYear = 2032, EndYear = 2036, YearOfficial = false, X = -5900, Z = 8300, Yaw = 30f, PadW = 1300f, PadD = 3800f, Height = 92f, Radius = 900f, ViewYaw = 300f, ViewPitch = 24f,
+                StartYear = 2032, EndYear = 2036, YearOfficial = false, X = -5900, Z = 8300, Yaw = 30f, PadW = 1600f, PadD = 3800f, Height = 98f, Radius = 1000f, ViewYaw = 300f, ViewPitch = 34f,
                 Source = "генплан (аэродром), Astana Times — замысел пассажирского аэропорта", SourceDate = "04.09.2026"
-            }.F("ВПП", "3 400 × 60 м").F("Терминал", "≈ 120 000 м², 6 телетрапов").F("Пассажиры", "до 8 млн в год (оценка)").F("Сроки", "не объявлены (в демо — 2036)"));
+            }.F("ВПП", "3 400 × 60 м и 2 650 × 60 м, параллельные").F("Терминал", "в форме самолёта: 985 × 776 м, ≈ 350 000 м²").F("Стоянки", "32 телетрапа + 6 перронных").F("Подъезд", "шоссе от трассы Алматы–Конаев ≈ 9 км, ветка ЛРТ до терминала").F("Пассажиры", "до 20 млн в год (оценка)").F("Сроки", "не объявлены (в демо — 2036)"));
 
             // ---------------- Green: tourism and recreation on Kapshagay
             L.Add(new Landmark

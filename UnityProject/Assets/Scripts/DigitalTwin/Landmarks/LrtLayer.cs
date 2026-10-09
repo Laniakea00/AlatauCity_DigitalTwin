@@ -17,7 +17,9 @@ namespace AlatauCity.DigitalTwin.Landmarks
         public static bool Showcase;
         GameObject glow; Material glowMat; float glowA;
         [Serializable] class RouteJ { public string name; public float[] pts; }
-        [Serializable] class RoutesJ { public RouteJ[] routes; }
+        [Serializable] class StationJ { public string name; public float x, z; public int phase; }
+        [Serializable] class RoutesJ { public RouteJ[] routes; public StationJ[] stations; }
+        StationJ[] extraStations = new StationJ[0];
 
         public class Route { public string Name; public Vector3[] P; public float[] S; public int[] Phase; public int OpenIdx = -1; public List<float> Stops = new List<float>(); }
         public class Station { public Vector3 P; public Vector3 Dir; public int Phase; public string Name; public int Index; }
@@ -48,6 +50,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             mat = new Material(sh) { name = "LRT" };
             var rj = JsonUtility.FromJson<RoutesJ>(ta.text);
             foreach (var r in rj.routes) Routes.Add(MakeRoute(r));
+            if (rj.stations != null) extraStations = rj.stations;          // stations of the concept extensions (airport), not in the plan's list
             MakeStations();
             for (int ri = 0; ri < Routes.Count; ri++) BuildRoute(Routes[ri]);
             BuildStations();
@@ -98,6 +101,15 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 var dir = br.P[Mathf.Min(bi + 1, br.P.Length - 1)] - br.P[Mathf.Max(bi - 1, 0)]; dir.y = 0; dir.Normalize();
                 int ph = Mathf.RoundToInt(st.z);
                 Stations.Add(new Station { P = br.P[bi], Dir = dir, Phase = ph, Index = k, Name = "Станция ЛРТ · " + (ph < TwinData.LrtPhaseNames.Length ? TwinData.LrtPhaseNames[ph] : "") });
+                br.Stops.Add(br.S[bi]);
+            }
+            foreach (var ex in extraStations)
+            {
+                Route br = null; int bi = 0; float best = float.MaxValue;
+                foreach (var r in Routes) for (int i = 0; i < r.P.Length; i++) { float d = (r.P[i].x - ex.x) * (r.P[i].x - ex.x) + (r.P[i].z - ex.z) * (r.P[i].z - ex.z); if (d < best) { best = d; br = r; bi = i; } }
+                if (br == null || best > 400f * 400f) continue;
+                var dir = br.P[Mathf.Min(bi + 1, br.P.Length - 1)] - br.P[Mathf.Max(bi - 1, 0)]; dir.y = 0; dir.Normalize();
+                Stations.Add(new Station { P = br.P[bi], Dir = dir, Phase = ex.phase, Index = -1, Name = "Станция ЛРТ · " + ex.name });
                 br.Stops.Add(br.S[bi]);
             }
             foreach (var r in Routes) r.Stops.Sort();

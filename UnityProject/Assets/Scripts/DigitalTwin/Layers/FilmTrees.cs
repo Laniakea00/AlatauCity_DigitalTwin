@@ -219,6 +219,7 @@ namespace AlatauCity.DigitalTwin
             void Try(float x, float z, int sp, float year, float size)
             {
                 if (tmpM[sp].Count >= 1023) return;
+                if (Landmarks.LandmarkSystem.OnPlot(x, z)) return;                        // a landmark's plot (airfield, campus…): its own planting
                 if (!Physics.Raycast(new Vector3(x, 6000f, z), Vector3.down, out var hit, 9000f, ~0, QueryTriggerInteraction.Ignore)) return;
                 if (!isGround.TryGetValue(hit.collider, out bool ground)) isGround[hit.collider] = ground = hit.collider.name.StartsWith("Terrain");
                 if (!ground) return;                                                       // a building stands here (in some year)
@@ -235,6 +236,7 @@ namespace AlatauCity.DigitalTwin
                 {
                     if (tmpM[3].Count >= 1023) break;
                     if (Land(hd.x, hd.y, out float yr) == 3) continue;
+                    if (Landmarks.LandmarkSystem.OnPlot(hd.x, hd.y)) continue;
                     if (segs != null) { bool onRoad = false; var q = new Vector2(hd.x, hd.y); foreach (var sg in segs) if (DistToSeg(q, sg.a, sg.b) < sg.half - 1f) { onRoad = true; break; } if (onRoad) continue; }
                     if (!Physics.Raycast(new Vector3(hd.x, 6000f, hd.y), Vector3.down, out var hit, 9000f, ~0, QueryTriggerInteraction.Ignore)) continue;
                     if (!isGround.TryGetValue(hit.collider, out bool ground)) isGround[hit.collider] = ground = hit.collider.name.StartsWith("Terrain");

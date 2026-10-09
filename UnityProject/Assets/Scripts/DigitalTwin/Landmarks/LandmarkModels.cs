@@ -179,72 +179,330 @@ namespace AlatauCity.DigitalTwin.Landmarks
         }
         public static Mesh PlaneMesh() { var k = new LandmarkKit(); Plane(k, Vector3.zero, 0f); return k.ToMesh("Airliner"); }
 
-        // ------------------------------------------------------------------ Airport (concept): runway 3.4 km along z, terminal with a wave roof, apron, tower
+        // ------------------------------------------------------------------ Airport (concept): two parallel runways and, between them, a terminal in the shape
+        // of an airliner — the glazed nose is the landside hall facing the city, the swept wings, the fuselage and the tailplane are the piers
+        // with the gates; cargo, maintenance, the tower and the fuel farm north of the apron; the landside (gate roundabout, boulevard, forecourt,
+        // car parks, hotel, LRT station) south of it. Local frame: x across (+ = east-south-east), z along the runways (− = toward the city).
+        public const float RwyLX = -640f, RwyLZ0 = -1650f, RwyLZ1 = 1750f, RwyRX = 640f, RwyRZ0 = -900f, RwyRZ1 = 1750f;
+        const float TermZ = -300f;           // terminal origin on the plot (its nose tip is 560 m south of it)
+        static readonly Color32 Tarmac = LM.C("#4a4b4d"), Shoulder = LM.C("#77766f"), ApronC = LM.C("#a3a19a"), Line = LM.C("#f2f2ef"), Yellow = LM.C("#e8b923"),
+            GreenL = LM.C("#40e070"), RedL = LM.C("#ff3a2a"), BlueL = LM.C("#3a7bff"), Teal = LM.C("#127a8f"), Turf = LM.C("#8c925e"), Turf2 = LM.C("#848a57");
+
+        /// <summary>An open cross-section (ground → over the top → ground): superelliptic, so the walls stand up near the ground and the roof is full.</summary>
+        static List<Vector3> Section(Vector3 c, Vector3 across, float halfW, float h, int m)
+        {
+            var l = new List<Vector3>(m + 1);
+            for (int j = 0; j <= m; j++)
+            {
+                float th = Mathf.PI * j / m, cs = Mathf.Cos(th), sn = Mathf.Sin(th);
+                l.Add(c - across * (Mathf.Sign(cs) * Mathf.Pow(Mathf.Abs(cs), 0.5f) * halfW) + Vector3.up * (Mathf.Pow(Mathf.Max(sn, 0f), 0.62f) * h));
+            }
+            return l;
+        }
+        /// <summary>A vaulted shell lofted through sections; mat(ring, f) picks glass or metal for each strip (f = 0 on the ridge … 1 at the foot of the wall).</summary>
+        static void Shell(LandmarkKit k, List<List<Vector3>> rings, System.Func<int, float, int> mat, Color32 roof, Color32 glass, bool capA, bool capB)
+        {
+            int m = rings[0].Count - 1; float s = 0f;
+            for (int i = 0; i + 1 < rings.Count; i++)
+            {
+                var A = rings[i]; var B = rings[i + 1];
+                Vector3 cen = (A[0] + A[m] + B[0] + B[m]) * 0.25f; float ds = Vector3.Distance((A[0] + A[m]) * 0.5f, (B[0] + B[m]) * 0.5f);
+                Vector3 acr = (A[m] - A[0] + B[m] - B[0]) * 0.5f; float hw = Mathf.Max(acr.magnitude * 0.5f, 0.01f); acr.Normalize();
+                float v = 0f;
+                for (int j = 0; j < m; j++)
+                {
+                    Vector3 a = A[j], b = A[j + 1], c = B[j + 1], d = B[j]; float L = (b - a).magnitude;
+                    int mm = mat(i, Mathf.Abs(Vector3.Dot((a + b + c + d) * 0.25f - cen, acr)) / hw); bool g = mm == LM.Glass;
+                    k.Quad(a, b, c, d, (a + b + c + d) * 0.25f - cen, g ? glass : roof, mm, g ? 4.5f : 3f,
+                           new Vector2(s, v), new Vector2(s, v + L), new Vector2(s + ds, v + L), new Vector2(s + ds, v));
+                    v += L;
+                }
+                s += ds;
+            }
+            void Cap(List<Vector3> R, Vector3 outward)
+            {
+                var c0 = (R[0] + R[m]) * 0.5f;
+                for (int j = 0; j < m; j++) k.Tri(c0, R[j], R[j + 1], outward, roof, LM.Metal, 3f, new Vector2(c0.x, c0.z), new Vector2(R[j].x, R[j].z), new Vector2(R[j + 1].x, R[j + 1].z));
+            }
+            Vector3 Mid(List<Vector3> R) => (R[0] + R[m]) * 0.5f;
+            if (capA) Cap(rings[0], Mid(rings[0]) - Mid(rings[1]));
+            if (capB) Cap(rings[rings.Count - 1], Mid(rings[rings.Count - 1]) - Mid(rings[rings.Count - 2]));
+        }
+        /// <summary>A contact stand: guide line, a jet bridge from the facade point e (outward normal n) to the front door, and the aircraft nose-in.</summary>
+        static void Stand(LandmarkKit k, Vector3 e, Vector3 n, float scale, bool plane)
+        {
+            n.y = 0; n.Normalize(); e.y = 0f;
+            float yaw = Mathf.Atan2(-n.x, -n.z) * Mathf.Rad2Deg; var r = Quaternion.Euler(0, yaw, 0);
+            var o = e + n * (19.5f * scale + 13f); o.y = 0.45f;
+            k.Beam(e + n * 3f + Vector3.up * 0.47f, e + n * (46f * scale + 22f) + Vector3.up * 0.47f, 0.35f, 0.04f, Yellow, LM.Light);
+            k.Beam(o + r * new Vector3(-9f, 0.02f, 0f), o + r * new Vector3(9f, 0.02f, 0f), 0.3f, 0.04f, Yellow, LM.Light);       // stop bar
+            var door = o + r * (new Vector3(-2.3f, 4.0f, 14.5f) * scale);
+            var root = e + n * 1.5f + Vector3.up * 5.2f;
+            k.Beam(root, door, 3.2f, 3.0f, MetalG, LM.Metal);
+            var leg = Vector3.Lerp(root, door, 0.72f);
+            k.Beam(new Vector3(leg.x, 0.45f, leg.z), leg - Vector3.up * 1.5f, 0.7f, 0.7f, MetalD, LM.Steel);
+            k.Box(new Vector3(leg.x, 0.9f, leg.z), new Vector3(3.4f, 0.9f, 1.4f), yaw, MetalD, LM.Steel, 1f, MetalD, LM.Steel);
+            if (plane) Plane(k, o, yaw, scale);
+            else k.Box(o + r * new Vector3(6f, 1.2f, -6f), new Vector3(2.4f, 2.0f, 5.5f), yaw, Yellow, LM.Solid, 2f, Yellow, LM.Roof);  // tug waiting
+        }
+        static void Runway(LandmarkKit k, float x, float z0, float z1, bool approachSouth)
+        {
+            float L = z1 - z0, zc = (z0 + z1) * 0.5f;
+            k.Prism(LandmarkKit.Rect(x, zc, 76f, L + 12f), 0.25f, 0.40f, Shoulder, LM.Solid, 1f, Shoulder, LM.Paving);
+            k.Prism(LandmarkKit.Rect(x, zc, 60f, L), 0.25f, 0.45f, Tarmac, LM.Solid, 1f, Tarmac, LM.Paving);
+            void Mark(float cx, float cz, float w, float d, Color32 c) => k.Box(new Vector3(cx, 0.47f, cz), new Vector3(w, 0.04f, d), 0, c, LM.Solid, 1f, c, LM.Light);
+            for (float z = z0 + 330f; z < z1 - 330f; z += 60f) Mark(x, z, 0.9f, 30f, Line);
+            Mark(x - 29f, zc, 0.7f, L - 20f, Line); Mark(x + 29f, zc, 0.7f, L - 20f, Line);
+            foreach (float sg in new[] { -1f, 1f })
+            {
+                float zt = sg < 0 ? z0 + 26f : z1 - 26f, inw = -sg;           // threshold, and the direction into the runway
+                for (int i = 0; i < 8; i++) { float xo = -25f + i * 6.8f + (i >= 4 ? 3.2f : 0f); Mark(x + xo, zt, 1.8f, 30f, Line); }
+                Mark(x, zt + inw * 24f, 56f, 1.6f, Line);
+                Mark(x - 10.5f, zt + inw * 400f, 9f, 50f, Line); Mark(x + 10.5f, zt + inw * 400f, 9f, 50f, Line);      // aiming point
+                for (int i = 0; i < 3; i++) { float zz = zt + inw * (190f + i * 150f); if (i == 1) continue; Mark(x - 12f, zz, 3f, 22f, Line); Mark(x + 12f, zz, 3f, 22f, Line); Mark(x - 17f, zz, 3f, 22f, Line); Mark(x + 17f, zz, 3f, 22f, Line); }
+                // threshold (green) and runway end (red) lights
+                for (int i = 0; i < 12; i++) { float xo = -30f + i * 5.45f; float ze = sg < 0 ? z0 : z1; k.Box(new Vector3(x + xo, 0.7f, ze + inw * 1.5f), new Vector3(0.6f, 0.5f, 0.6f), 0, GreenL, LM.Light, 1f, GreenL, LM.Light); k.Box(new Vector3(x + xo, 0.7f, ze - inw * 1.5f), new Vector3(0.6f, 0.5f, 0.6f), 0, RedL, LM.Light, 1f, RedL, LM.Light); }
+            }
+            for (float z = z0; z <= z1 + 0.1f; z += 60f) { k.Box(new Vector3(x - 31f, 0.7f, z), new Vector3(0.5f, 0.5f, 0.5f), 0, Warm, LM.Light, 1f, Warm, LM.Light); k.Box(new Vector3(x + 31f, 0.7f, z), new Vector3(0.5f, 0.5f, 0.5f), 0, Warm, LM.Light, 1f, Warm, LM.Light); }
+            // approach lighting from the south (toward the city): centre line bars and two cross bars
+            if (approachSouth)
+                for (int i = 1; i <= 8; i++)
+                {
+                    float z = z0 - i * 30f; k.Box(new Vector3(x, 1.4f, z), new Vector3(4.2f, 0.6f, 0.6f), 0, Warm, LM.Light, 1f, Warm, LM.Light);
+                    k.Beam(new Vector3(x, 0.25f, z), new Vector3(x, 1.1f, z), 0.3f, 0.3f, Steel, LM.Steel);
+                    if (i == 5) k.Box(new Vector3(x, 1.4f, z), new Vector3(30f, 0.5f, 0.6f), 0, Warm, LM.Light, 1f, Warm, LM.Light);
+                }
+        }
+        /// <summary>A taxiway strip between two points: tarmac, yellow centre line, blue edge lights.</summary>
+        static void Taxi(LandmarkKit k, Vector2 a, Vector2 b, float w = 23f)
+        {
+            var d = b - a; float L = d.magnitude; if (L < 1f) return; var m = (a + b) * 0.5f; float yaw = Mathf.Atan2(d.x, d.y) * Mathf.Rad2Deg; var dn = d / L; var side = new Vector2(dn.y, -dn.x);
+            k.Prism(LandmarkKit.Rect(m.x, m.y, w + 8f, L, yaw), 0.25f, 0.40f, Shoulder, LM.Solid, 1f, Shoulder, LM.Paving);
+            k.Prism(LandmarkKit.Rect(m.x, m.y, w, L, yaw), 0.25f, 0.43f, Tarmac, LM.Solid, 1f, Tarmac, LM.Paving);
+            k.Box(new Vector3(m.x, 0.45f, m.y), new Vector3(0.45f, 0.04f, L - 6f), yaw, Yellow, LM.Solid, 1f, Yellow, LM.Light);
+            for (float s = 0f; s <= L; s += 60f) foreach (float sg in new[] { -1f, 1f })
+                { var p = a + dn * s + side * (sg * (w * 0.5f + 1.5f)); k.Box(new Vector3(p.x, 0.65f, p.y), new Vector3(0.45f, 0.45f, 0.45f), 0, BlueL, LM.Light, 1f, BlueL, LM.Light); }
+        }
+        /// <summary>A road ribbon along a polyline (or a closed loop): asphalt, kerbs implied by the paving around, dashed lane line.</summary>
+        static void Road(LandmarkKit k, IList<Vector2> p, float half, bool closed, bool centreLine = true)
+        {
+            int n = p.Count, segs = closed ? n : n - 1; float s = 0f;
+            Vector2 Side(int i)
+            {
+                Vector2 a = closed ? p[(i - 1 + n) % n] : p[Mathf.Max(i - 1, 0)], b = closed ? p[(i + 1) % n] : p[Mathf.Min(i + 1, n - 1)];
+                var d = (b - a).normalized; return new Vector2(d.y, -d.x);
+            }
+            for (int i = 0; i < segs; i++)
+            {
+                int j = (i + 1) % n; Vector2 sa = Side(i) * half, sb = Side(j) * half; float L = (p[j] - p[i]).magnitude;
+                Vector3 A(Vector2 q) => new Vector3(q.x, 0.47f, q.y);
+                k.Quad(A(p[i] - sa), A(p[i] + sa), A(p[j] + sb), A(p[j] - sb), Vector3.up, Asph, LM.Paving, 1f, new Vector2(p[i].x, p[i].y), new Vector2(p[i].x + 1, p[i].y), new Vector2(p[j].x + 1, p[j].y), new Vector2(p[j].x, p[j].y));
+                if (centreLine)
+                    for (float t = 2f; t < L - 4f; t += 12f)
+                    {
+                        var d = (p[j] - p[i]) / L; var q = p[i] + d * (t + 2.5f);
+                        k.Box(new Vector3(q.x, 0.5f, q.y), new Vector3(0.18f, 0.04f, 5f), Mathf.Atan2(d.x, d.y) * Mathf.Rad2Deg, Line, LM.Solid, 1f, Line, LM.Light);
+                    }
+                s += L;
+            }
+        }
+        static List<Vector2> Bez(Vector2 a, Vector2 b, Vector2 c, Vector2 d, int n)
+        {
+            var l = new List<Vector2>(); for (int i = 0; i <= n; i++) { float t = i / (float)n, u = 1 - t; l.Add(u * u * u * a + 3 * u * u * t * b + 3 * u * t * t * c + t * t * t * d); } return l;
+        }
+        /// <summary>Surface car park: bays in double rows with aisles, most of them taken.</summary>
+        static void CarPark(LandmarkKit k, float x0, float x1, float z0, float z1, float seed)
+        {
+            k.Prism(LandmarkKit.Rect((x0 + x1) * 0.5f, (z0 + z1) * 0.5f, x1 - x0, z1 - z0), 0.25f, 0.44f, PaveDark, LM.Solid, 1f, LM.C("#6b6b69"), LM.Paving);
+            for (float z = z0 + 4f; z + 13f < z1; z += 21f)
+            {
+                Cars(k, x0 + 3f, z + 2.6f, Mathf.FloorToInt((x1 - x0 - 6f) / 2.7f), 2, seed + z);
+                k.Box(new Vector3((x0 + x1) * 0.5f, 0.46f, z + 5.85f), new Vector3(x1 - x0 - 6f, 0.04f, 0.15f), 0, Line, LM.Solid, 1f, Line, LM.Light);
+            }
+        }
+
         static void Airport(LandmarkKit k)
         {
-            float W = 1300f, D = 3800f;
-            // airfield grass only along the runway system: the rest of the plot is the steppe of the map, so the airport sits in the land
-            k.Prism(LandmarkKit.RoundRect(-190f, 0, 560f, 3700f, 60f, 4), -2f, 0.25f, LM.C("#6f7a50"), LM.Plant, 3f, LM.C("#7c8a58"), LM.Plant);
-            var Tarmac = LM.C("#4a4b4d"); var Line = LM.C("#f2f2ef"); var Yellow = LM.C("#e8b923"); var Apron = LM.C("#9a9892");
-            // runway with markings: centre line dashes, threshold bars, touchdown zone
-            float rx = -300f, rl = 3400f;
-            k.Prism(LandmarkKit.Rect(rx, 0, 60f, rl), 0.3f, 0.45f, Tarmac, LM.Solid, 1f, Tarmac, LM.Paving);
-            for (float z = -rl * 0.5f + 120f; z < rl * 0.5f - 120f; z += 60f) k.Box(new Vector3(rx, 0.47f, z), new Vector3(0.9f, 0.04f, 30f), 0, Line, LM.Solid, 1f, Line, LM.Light);
-            foreach (float sgn in new[] { -1f, 1f })
+            float W = 1600f, D = 3800f;
+            // ---- airfield: mown grass over the whole plot, in long stripes along the runways
+            k.Prism(LandmarkKit.RoundRect(0, 0, W, D, 60f, 4), -2f, 0.22f, LM.C("#6f7550"), LM.Plant, 3f, Turf, LM.Plant);
+            for (int i = 0; i < 20; i++) { float x = -W * 0.5f + 40f + i * 80f; k.Prism(LandmarkKit.Rect(x, 0, 40f, D - 140f), 0.22f, 0.24f, Turf2, LM.Plant, 1f, Turf2, LM.Plant); }
+
+            // ---- runways (west 3.4 km, east 2.65 km with a staggered threshold), parallel taxiways, links and rapid exits
+            Runway(k, RwyLX, RwyLZ0, RwyLZ1, true); Runway(k, RwyRX, RwyRZ0, RwyRZ1, false);
+            float TA = -460f, TB = 460f;
+            Taxi(k, new Vector2(TA, RwyLZ0 + 10f), new Vector2(TA, RwyLZ1 - 10f)); Taxi(k, new Vector2(TB, RwyRZ0 + 10f), new Vector2(TB, RwyRZ1 - 10f));
+            foreach (float z in new[] { RwyLZ0 + 12f, -380f, 640f, RwyLZ1 - 12f }) Taxi(k, new Vector2(RwyLX, z), new Vector2(TA, z));
+            foreach (float z in new[] { RwyRZ0 + 12f, 260f, RwyRZ1 - 12f }) Taxi(k, new Vector2(RwyRX, z), new Vector2(TB, z));
+            foreach (float z in new[] { -900f, 260f }) Taxi(k, new Vector2(RwyLX, z), new Vector2(TA, z + 312f));          // rapid exits (landing north)
+            foreach (float z in new[] { 1150f, 60f }) Taxi(k, new Vector2(RwyLX, z), new Vector2(TA, z - 312f));           // (landing south)
+            foreach (float z in new[] { -350f, 760f }) Taxi(k, new Vector2(RwyRX, z), new Vector2(TB, z + 312f));
+            Taxi(k, new Vector2(RwyRX, 1300f), new Vector2(TB, 1300f - 312f));
+
+            // ---- aprons: the main apron round the terminal, a service apron in front of cargo and maintenance
+            k.Prism(LandmarkKit.Rect(0, -80f, 900f, 1360f), 0.25f, 0.44f, ApronC, LM.Solid, 1f, ApronC, LM.Paving);
+            k.Prism(LandmarkKit.Rect(0, 720f, 900f, 240f), 0.25f, 0.44f, ApronC, LM.Solid, 1f, ApronC, LM.Paving);
+            foreach (float x in new[] { -405f, 405f }) k.Box(new Vector3(x, 0.47f, 40f), new Vector3(0.45f, 0.04f, 1560f), 0, Yellow, LM.Solid, 1f, Yellow, LM.Light);     // apron taxilanes
+            k.Box(new Vector3(0, 0.47f, 560f), new Vector3(800f, 0.04f, 0.45f), 0, Yellow, LM.Solid, 1f, Yellow, LM.Light);
+            // flood-light masts round the apron
+            for (int i = 0; i < 7; i++) foreach (float x in new[] { -440f, 440f })
             {
-                float zt = sgn * (rl * 0.5f - 30f);
-                for (int i = 0; i < 8; i++) { float xo = -24f + i * 6.8f; if (i >= 4) xo += 3f; k.Box(new Vector3(rx + xo, 0.47f, zt), new Vector3(1.8f, 0.04f, 30f), 0, Line, LM.Solid, 1f, Line, LM.Light); }
-                for (int i = 0; i < 3; i++) { float zz = zt - sgn * (180f + i * 150f); k.Box(new Vector3(rx - 12f, 0.47f, zz), new Vector3(3f, 0.04f, 22f), 0, Line, LM.Solid, 1f, Line, LM.Light); k.Box(new Vector3(rx + 12f, 0.47f, zz), new Vector3(3f, 0.04f, 22f), 0, Line, LM.Solid, 1f, Line, LM.Light); }
+                float z = -720f + i * 210f; k.Beam(new Vector3(x, 0.4f, z), new Vector3(x, 28f, z), 0.8f, 0.8f, MetalG, LM.Steel);
+                k.Box(new Vector3(x, 28.6f, z), new Vector3(4.5f, 1.2f, 1.6f), 0, Warm, LM.Light, 1f, Steel, LM.Steel);
             }
-            k.Box(new Vector3(rx - 29.5f, 0.47f, 0), new Vector3(0.6f, 0.04f, rl - 20f), 0, Line, LM.Solid, 1f, Line, LM.Light);
-            k.Box(new Vector3(rx + 29.5f, 0.47f, 0), new Vector3(0.6f, 0.04f, rl - 20f), 0, Line, LM.Solid, 1f, Line, LM.Light);
-            // runway edge lights
-            for (float z = -rl * 0.5f; z <= rl * 0.5f; z += 60f) { k.Box(new Vector3(rx - 31f, 0.7f, z), new Vector3(0.5f, 0.5f, 0.5f), 0, Warm, LM.Light, 1f, Warm, LM.Light); k.Box(new Vector3(rx + 31f, 0.7f, z), new Vector3(0.5f, 0.5f, 0.5f), 0, Warm, LM.Light, 1f, Warm, LM.Light); }
-            // parallel taxiway + 5 links, yellow centre line
-            float tx = -120f;
-            k.Prism(LandmarkKit.Rect(tx, 0, 24f, rl - 200f), 0.3f, 0.42f, Tarmac, LM.Solid, 1f, Tarmac, LM.Paving);
-            k.Box(new Vector3(tx, 0.44f, 0), new Vector3(0.5f, 0.04f, rl - 220f), 0, Yellow, LM.Solid, 1f, Yellow, LM.Light);
-            for (int i = 0; i < 5; i++) { float z = -1300f + i * 650f; k.Prism(LandmarkKit.Rect((rx + tx) * 0.5f, z, tx - rx, 24f), 0.3f, 0.42f, Tarmac, LM.Solid, 1f, Tarmac, LM.Paving); }
-            // apron
-            k.Prism(LandmarkKit.Rect(120f, 0, 400f, 1500f), 0.3f, 0.44f, Apron, LM.Solid, 1f, Apron, LM.Paving);
-            k.Prism(LandmarkKit.Rect((tx + (-80f)) * 0.5f, 0, -80f - tx, 1300f), 0.3f, 0.42f, Tarmac, LM.Solid, 1f, Tarmac, LM.Paving);
-            // terminal: long glazed hall under a wave roof, three piers with jet bridges
-            float tx0 = 330f, td = 120f, tl = 1000f;
-            k.Prism(LandmarkKit.RoundRect(tx0 + td * 0.5f, 0, td, tl, 20f, 4), 0.3f, 18f, GlassBlue, LM.Glass, 6f, White, -1);
-            int nr = 40; for (int i = 0; i < nr; i++)
+
+            // ---- the terminal: an airliner 985 m long, 776 m span (local frame of the terminal: origin at TermZ, nose at -z)
+            var T = new Vector3(0, 0, TermZ);
+            // fuselage: (z, half width, height)
+            float[,] fs = { { -560, 3, 4 }, { -553, 17, 14 }, { -540, 29, 22 }, { -518, 40, 30 }, { -488, 48, 36 }, { -450, 53, 40 }, { -400, 56, 42 }, { -150, 56, 42 },
+                            { 120, 56, 42 }, { 200, 54, 40 }, { 270, 48, 36 }, { 330, 38, 30 }, { 380, 25, 22 }, { 412, 11, 15 }, { 425, 3, 9 } };
+            var rings = new List<List<Vector3>>(); var fz = new List<float>();
+            for (int i = 0; i < fs.GetLength(0); i++) { rings.Add(Section(T + new Vector3(0, 0, fs[i, 0]), Vector3.right, fs[i, 1], fs[i, 2], 18)); fz.Add(fs[i, 0]); }
+            Shell(k, rings, (i, t) =>
             {
-                float z0 = -tl * 0.5f - 15f + i * (tl + 30f) / nr, z1 = z0 + (tl + 30f) / nr;
-                float h0 = 26f + 6f * Mathf.Sin(z0 / 160f), h1 = 26f + 6f * Mathf.Sin(z1 / 160f);
-                k.Quad(new Vector3(tx0 - 14f, h0 - 6f, z0), new Vector3(tx0 - 14f, h1 - 6f, z1), new Vector3(tx0 + td + 10f, h1, z1), new Vector3(tx0 + td + 10f, h0, z0), Vector3.up, MetalW, LM.Metal, 3f,
-                       new Vector2(z0, 0), new Vector2(z1, 0), new Vector2(z1, td), new Vector2(z0, td));
-                k.Quad(new Vector3(tx0 + td + 10f, h0, z0), new Vector3(tx0 + td + 10f, h1, z1), new Vector3(tx0 - 14f, h1 - 6f, z1), new Vector3(tx0 - 14f, h0 - 6f, z0), Vector3.down, White, LM.Solid, 3f,
-                       new Vector2(z0, 0), new Vector2(z1, 0), new Vector2(z1, td), new Vector2(z0, td));
-                k.Box(new Vector3(tx0 - 10f, (h0 - 6f) * 0.5f, z0), new Vector3(1.2f, h0 - 6f, 1.2f), 0, White, LM.Solid, 1f, White, -1);
-            }
-            for (int pi = -1; pi <= 1; pi++)
+                if (fz[i] < -470f) return LM.Glass;                                                   // the glazed nose: landside hall
+                if (t > 0.965f) return LM.Glass;                                                      // facades to the apron
+                if (t < 0.035f) return LM.Glass;                                                      // ridge roof light
+                return LM.Metal;
+            }, MetalW, GlassBlue, true, true);
+            // cockpit visor on the nose
+            k.Quad(T + new Vector3(-22f, 25f, -536f), T + new Vector3(22f, 25f, -536f), T + new Vector3(30f, 31f, -517f), T + new Vector3(-30f, 31f, -517f), new Vector3(0, 1f, -1f), GlassDark, LM.Glass, 4f,
+                   new Vector2(0, 0), new Vector2(44, 0), new Vector2(60, 8), new Vector2(0, 8));
+            // wings: sections across the chord, swept 27°, root chord 200 m, tip 60 m; winglets
+            float LE(float x) => -120f + (x - 56f) * 0.51f;
+            float TE(float x) => 80f + (x - 56f) * 0.077f;
+            float WingH(float x) => Mathf.Lerp(30f, 13f, Mathf.InverseLerp(56f, 388f, x));
+            foreach (float sg in new[] { -1f, 1f })
             {
-                float pz = pi * 380f;
-                k.Prism(LandmarkKit.RoundRect(250f, pz, 160f, 34f, 8f, 3), 0.3f, 12f, GlassBlue, LM.Glass, 6f, MetalW, LM.Metal);
-                for (int g = 0; g < 2; g++)
+                var wr = new List<List<Vector3>>();
+                foreach (float x in new[] { 36f, 56f, 110f, 170f, 230f, 290f, 350f, 388f })
                 {
-                    float gz = pz + (g == 0 ? -40f : 40f);
-                    k.Box(new Vector3(205f, 6f, gz), new Vector3(30f, 3.4f, 3.6f), 0, MetalG, LM.Metal, 3f, MetalG, LM.Metal);
-                    Plane(k, new Vector3(150f, 0.45f, gz), -90f);
+                    float le = LE(Mathf.Max(x, 56f)), te = TE(Mathf.Max(x, 56f));
+                    wr.Add(Section(T + new Vector3(sg * x, 0, (le + te) * 0.5f), Vector3.forward * sg, (te - le) * 0.5f, WingH(x), 14));
                 }
+                Shell(k, wr, (i, t) => t > 0.96f || t < 0.04f ? LM.Glass : LM.Metal, MetalW, GlassBlue, false, true);
+                float tx = sg * 388f, tle = LE(388f), tte = TE(388f);
+                k.Slab(T + new Vector3(tx, 11f, tle + 22f), T + new Vector3(tx + sg * 6f, 34f, tte - 4f), T + new Vector3(tx + sg * 6f, 34f, tte + 6f), T + new Vector3(tx, 9f, tte), 2.4f, MetalW, LM.Metal);
+                k.Box(T + new Vector3(tx + sg * 6f, 34.6f, tte + 2f), new Vector3(1.4f, 1.2f, 1.4f), 0, sg < 0 ? RedL : GreenL, LM.Light, 1f, sg < 0 ? RedL : GreenL, LM.Light);
+                // engines: two nacelle pavilions under the leading edge
+                foreach (float ex in new[] { 165f, 285f })
+                {
+                    float z0 = LE(ex) - 46f, z1 = LE(ex) + 12f;
+                    k.Tube(T + new Vector3(sg * ex, 11f, z0), T + new Vector3(sg * ex, 11f, z1), 11.5f, 10f, 16, MetalG, LM.Metal);
+                    k.Tube(T + new Vector3(sg * ex, 11f, z0 - 0.3f), T + new Vector3(sg * ex, 11f, z0 + 0.2f), 9.6f, 9.6f, 16, GlassDark, LM.Glass);
+                    k.Box(T + new Vector3(sg * ex, 14f, z1 + 4f), new Vector3(5f, 10f, 16f), 0, MetalG, LM.Metal, 3f, MetalG, LM.Metal);     // pylon
+                }
+                // tailplane
+                var hr = new List<List<Vector3>>();
+                foreach (float x in new[] { 20f, 40f, 90f, 150f })
+                {
+                    float le = 300f + (x - 20f) * 0.55f, te = 400f + (x - 20f) * 0.09f;
+                    hr.Add(Section(T + new Vector3(sg * x, 0, (le + te) * 0.5f), Vector3.forward * sg, (te - le) * 0.5f, Mathf.Lerp(22f, 10f, (x - 20f) / 130f), 10));
+                }
+                Shell(k, hr, (i, t) => t > 0.96f ? LM.Glass : LM.Metal, MetalW, GlassBlue, false, true);
             }
-            // remote stand planes and service vehicles
-            Plane(k, new Vector3(40f, 0.45f, 640f), -90f); Plane(k, new Vector3(40f, 0.45f, -640f), -90f);
-            for (int i = 0; i < 8; i++) k.Box(new Vector3(175f + (i % 3) * 7f, 1.3f, -560f + i * 140f), new Vector3(3f, 2.4f, 7f), 0, Yellow, LM.Solid, 2f, Yellow, LM.Roof);
-            // control tower
-            k.Cylinder(new Vector3(300f, 0.3f, 760f), 6f, 70f, 16, White, LM.Solid, 4f, White, -1);
-            k.Cylinder(new Vector3(300f, 70.3f, 760f), 11f, 9f, 16, GlassDark, LM.Glass, 3f, MetalG, LM.Metal, 2f);
-            k.Beam(new Vector3(300f, 81f, 760f), new Vector3(300f, 92f, 760f), 0.6f, 0.6f, MetalG, LM.Steel);
-            // landside: forecourt, car parks, road, trees
-            k.Prism(LandmarkKit.Rect(500f, 0, 70f, tl), 0.3f, 0.42f, Tarmac, LM.Solid, 1f, Tarmac, LM.Paving);
-            k.Prism(LandmarkKit.Rect(590f, -260f, 100f, 380f), 0.3f, 0.42f, PaveDark, LM.Solid, 1f, PaveDark, LM.Paving);
-            k.Prism(LandmarkKit.Rect(590f, 260f, 100f, 380f), 0.3f, 0.42f, PaveDark, LM.Solid, 1f, PaveDark, LM.Paving);
-            Cars(k, 548f, -440f, 30, 50, 5f); Cars(k, 548f, 80f, 30, 50, 9f);
-            Trees(k, 470f, -480f, 470f, 480f, 24f, 8f, 4f);
+            // fin: a white sail with a teal leading band and the obstacle light
+            k.Slab(T + new Vector3(0, 30f, 236f), T + new Vector3(0, 88f, 368f), T + new Vector3(0, 90f, 402f), T + new Vector3(0, 12f, 422f), 5f, MetalW, LM.Metal);
+            k.Slab(T + new Vector3(0, 34f, 244f), T + new Vector3(0, 86f, 362f), T + new Vector3(0, 87.5f, 374f), T + new Vector3(0, 36f, 262f), 5.6f, Teal, LM.Solid);
+            k.Box(T + new Vector3(0, 91f, 386f), new Vector3(1.4f, 1.4f, 1.4f), 0, RedL, LM.Light, 1f, RedL, LM.Light);
+
+            // ---- contact stands (32): fuselage sides, wing leading and trailing edges, tailplane
+            int sn = 0;
+            bool Busy() { sn++; return (sn * 7 % 10) < 8; }
+            foreach (float sg in new[] { -1f, 1f })
+            {
+                var nx = new Vector3(sg, 0, 0);
+                foreach (float z in new[] { -420f, -350f, -280f, -210f }) Stand(k, T + new Vector3(sg * 56f, 0, z), nx, z < -400f ? 1.25f : 1f, Busy());
+                foreach (float z in new[] { 205f, 262f }) Stand(k, T + new Vector3(sg * 53f, 0, z), nx, 1f, Busy());
+                var nLE = new Vector3(sg * 0.453f, 0, -0.891f); var nTE = new Vector3(-sg * 0.077f, 0, 0.997f);
+                foreach (float x in new[] { 112f, 222f, 342f }) Stand(k, T + new Vector3(sg * x, 0, LE(x)), nLE, 1f, Busy());
+                foreach (float x in new[] { 112f, 168f, 224f, 280f, 336f }) Stand(k, T + new Vector3(sg * x, 0, TE(x)), nTE, 1f, Busy());
+                var nHT = new Vector3(-sg * 0.09f, 0, 0.996f);
+                foreach (float x in new[] { 72f, 126f }) Stand(k, T + new Vector3(sg * x, 0, 400f + (x - 20f) * 0.09f), nHT, 1f, Busy());
+            }
+            // remote stands north of the tail and a few service vehicles
+            foreach (float x in new[] { -360f, -270f, -180f, 180f, 270f, 360f }) { Plane(k, new Vector3(x, 0.45f, 430f), 180f, 1f); k.Box(new Vector3(x + 14f, 1.6f, 400f), new Vector3(2.6f, 2.9f, 12f), 0, White, LM.Solid, 2f, White, LM.Roof); }
+            for (int i = 0; i < 16; i++) { float x = (i % 2 == 0 ? -1f : 1f) * (392f + (i % 3) * 7f), z = -640f + i * 52f; k.Box(new Vector3(x, 1.2f, z), new Vector3(2.6f, 2.2f, 6f), 0f, Yellow, LM.Solid, 2f, Yellow, LM.Roof); }
+
+            // ---- north side: cargo terminal with two freighters, two maintenance hangars, the control tower, fuel farm, fire station
+            k.Prism(LandmarkKit.Rect(-285f, 930f, 270f, 170f), 0.3f, 17f, MetalG, LM.Metal, 4f, Roof, LM.Roof);
+            for (int i = 0; i < 9; i++) k.Box(new Vector3(-400f + i * 29f, 4.5f, 844.6f), new Vector3(12f, 8f, 0.8f), 0, MetalD, LM.Metal, 2f, MetalD, LM.Metal);   // dock doors
+            Plane(k, new Vector3(-350f, 0.45f, 790f), 0f, 1.5f); Plane(k, new Vector3(-215f, 0.45f, 790f), 0f, 1.5f);
+            foreach (float hx in new[] { 180f, 340f })
+            {
+                var hrng = new List<List<Vector3>>();
+                for (int i = 0; i <= 6; i++) hrng.Add(Section(new Vector3(hx, 0, 885f + i * 25f), Vector3.right, 70f, 32f, 12));
+                Shell(k, hrng, (i, t) => t < 0.06f ? LM.Glass : LM.Metal, MetalW, GlassBlue, false, true);
+                var door = Section(new Vector3(hx, 0, 885f), Vector3.right, 66f, 30f, 12);
+                var c0 = new Vector3(hx, 0, 884.5f);
+                for (int j = 0; j < 12; j++) k.Tri(c0, door[j] + Vector3.back * 0.5f, door[j + 1] + Vector3.back * 0.5f, Vector3.back, (j & 1) == 0 ? MetalG : MetalD, LM.Metal, 3f, Vector2.zero, Vector2.right, Vector2.up);
+            }
+            Plane(k, new Vector3(180f, 0.45f, 790f), 180f, 1.25f);
+            // control tower: a slim tapering shaft, the glazed cab, the radar
+            float twx = -20f, twz = 1110f;
+            k.Prism(LandmarkKit.RoundRect(twx, twz, 56f, 30f, 8f, 3), 0.3f, 9f, GlassBlue, LM.Glass, 4.5f, White, LM.Roof);
+            var shaft0 = LandmarkKit.Circle(twx, twz, 9f, 16); var shaft1 = LandmarkKit.Circle(twx, twz, 5.5f, 16);
+            k.Loft(shaft0, 9f, shaft1, 76f, White, LM.Solid, 4f);
+            k.Prism(LandmarkKit.Circle(twx, twz, 10.5f, 16), 76f, 78f, White, LM.Solid, 2f, White, LM.Roof);
+            k.Loft(LandmarkKit.Circle(twx, twz, 10.5f, 16), 78f, LandmarkKit.Circle(twx, twz, 13f, 16), 87f, GlassDark, LM.Glass, 3f);
+            k.Prism(LandmarkKit.Circle(twx, twz, 13.6f, 16), 87f, 88.4f, White, LM.Solid, 1.4f, MetalG, LM.Metal);
+            k.Beam(new Vector3(twx, 88.4f, twz), new Vector3(twx, 98f, twz), 0.5f, 0.5f, MetalG, LM.Steel);
+            k.Box(new Vector3(twx, 98.3f, twz), new Vector3(0.9f, 0.6f, 0.9f), 0, RedL, LM.Light, 1f, RedL, LM.Light);
+            k.Box(new Vector3(twx, 81f, twz), new Vector3(27f, 0.4f, 27f), 0, Warm, LM.Light, 1f, Warm, -1);
+            // fuel farm in its bund
+            k.Prism(LandmarkKit.Rect(-320f, 1380f, 170f, 120f), 0.25f, 1.6f, Concrete, LM.Solid, 1f, Gravel, LM.Paving);
+            for (int i = 0; i < 3; i++) for (int j = 0; j < 2; j++) k.Cylinder(new Vector3(-375f + i * 55f, 1.6f, 1350f + j * 60f), 15f, 14f, 20, White, LM.Metal, 3f, MetalW, LM.Metal, 1.5f);
+            // fire station (rescue and firefighting) with red doors
+            k.Prism(LandmarkKit.Rect(300f, 1300f, 80f, 34f), 0.3f, 9f, White, LM.Solid, 4.5f, Roof, LM.Roof);
+            for (int i = 0; i < 5; i++) k.Box(new Vector3(268f + i * 16f, 3.5f, 1282.6f), new Vector3(10f, 6f, 0.6f), 0, Red, LM.Solid, 2f, Red, LM.Solid);
+            k.Prism(LandmarkKit.Rect(348f, 1300f, 12f, 12f), 0.3f, 22f, White, LM.Solid, 4.5f, Roof, LM.Roof);
+
+            // ---- landside: the road from the south-west gate, roundabout, boulevard to the forecourt loop at the nose, car parks, hotel
+            var gate = new Vector2(-450f, -1900f); var rbC = new Vector2(-505f, -1805f);
+            Road(k, new List<Vector2> { gate + new Vector2(0.5f, -0.866f) * 6f, rbC + new Vector2(0.5f, -0.866f) * 36f }, 7.5f, false);
+            var ring = LandmarkKit.Circle(rbC.x, rbC.y, 36f, 28); Road(k, ring, 6.5f, true, false);
+            k.Prism(LandmarkKit.Circle(rbC.x, rbC.y, 28f, 20), 0.3f, 0.6f, Stone, LM.Solid, 1f, Grass, LM.Plant);
+            k.Tree(new Vector3(rbC.x, 0.6f, rbC.y), 12f, Leaf, 4f);
+            // boulevard: two carriageways and a planted median
+            Vector2 b1 = new Vector2(-125f, -1054f), b0 = rbC + (b1 - rbC).normalized * 40f, bd = (b1 - b0).normalized, bs = new Vector2(bd.y, -bd.x);
+            Road(k, new List<Vector2> { b0 + bs * 10f, b1 + bs * 10f }, 5.6f, false); Road(k, new List<Vector2> { b0 - bs * 10f, b1 - bs * 10f }, 5.6f, false);
+            { var mm = (b0 + b1) * 0.5f; float yaw = Mathf.Atan2(bd.x, bd.y) * Mathf.Rad2Deg; k.Prism(LandmarkKit.Rect(mm.x, mm.y, 8f, (b1 - b0).magnitude - 30f, yaw), 0.3f, 0.65f, Stone, LM.Solid, 1f, Grass, LM.Plant); }
+            for (float s = 30f; s < (b1 - b0).magnitude - 20f; s += 26f)
+            {
+                var q = b0 + bd * s; k.Tree(new Vector3(q.x, 0.65f, q.y), 9f, (((int)s) & 1) == 0 ? Leaf : Leaf2, s * 0.1f);
+                foreach (float sg in new[] { -1f, 1f }) { var e = q + bs * (sg * 22f); k.Tree(new Vector3(e.x, 0.3f, e.y), 8f, Leaf2, s * 0.07f + sg); }
+            }
+            // forecourt loop round the plaza; departures canopy over the kerb in front of the nose
+            var loop = LandmarkKit.RoundRect(0, -975f, 320f, 170f, 60f, 6); Road(k, loop, 8f, true);
+            k.Prism(LandmarkKit.RoundRect(0, -975f, 296f, 146f, 50f, 6), 0.25f, 0.5f, PaveDark, LM.Solid, 1f, Stone, LM.Paving);
+            k.Prism(LandmarkKit.RoundRect(0, -985f, 150f, 50f, 22f, 4), 0.5f, 0.62f, Stone, LM.Solid, 1f, Water, LM.Water);
+            Lawn(k, -105f, -985f, 60f, 90f, 18f); Lawn(k, 105f, -985f, 60f, 90f, 18f);
+            Trees(k, -128f, -1020f, -84f, -950f, 15f, 9f, 6f); Trees(k, 84f, -1020f, 128f, -950f, 15f, 9f, 7f);
+            k.Prism(LandmarkKit.Rect(0, -868f, 360f, 32f), 0.25f, 0.5f, PaveDark, LM.Solid, 1f, Pave, LM.Paving);       // kerb pavement
+            k.Box(new Vector3(0, 14f, -878f), new Vector3(330f, 1.2f, 40f), 0, GlassBlue, LM.Glass, 1.2f, GlassBlue, LM.Glass);
+            k.Box(new Vector3(0, 14.8f, -878f), new Vector3(334f, 0.5f, 42f), 0, White, LM.Solid, 0.5f, White, LM.Roof);
+            for (int i = 0; i < 12; i++) foreach (float zz in new[] { -895f, -861f }) k.Beam(new Vector3(-150f + i * 27.3f, 0.5f, zz), new Vector3(-150f + i * 27.3f, 13.4f, zz), 0.9f, 0.9f, White, LM.Solid);
+            // exit road from the loop back to the boulevard; the LRT skywalk to the canopy
+            var exitR = new List<Vector2> { new Vector2(130f, -1053f), new Vector2(150f, -1095f), new Vector2(150f, -1560f) }; exitR.AddRange(Bez(new Vector2(150f, -1560f), new Vector2(150f, -1640f), new Vector2(60f, -1650f), new Vector2(-20f, -1650f), 8));
+            exitR.Add(new Vector2(-405f, -1650f)); Road(k, exitR, 7f, false);
+            k.Beam(new Vector3(172f, 10f, -990f), new Vector3(140f, 10f, -872f), 7f, 4.2f, GlassBlue, LM.Glass);
+            k.Beam(new Vector3(172f, 12.2f, -990f), new Vector3(140f, 12.2f, -872f), 7.6f, 0.4f, White, LM.Roof);
+            k.Beam(new Vector3(160f, 0.4f, -945f), new Vector3(160f, 8f, -945f), 1.2f, 1.2f, White, LM.Solid);
+            // car parks: east (under the LRT), centre (taxis and short stay); a multi-storey car park and the hotel west of the boulevard
+            CarPark(k, 175f, 420f, -1560f, -1180f, 11f);
+            CarPark(k, -100f, 112f, -1560f, -1180f, 23f);
+            for (int lv = 0; lv < 5; lv++)
+            {
+                float y0 = 0.3f + lv * 3.4f;
+                k.Prism(LandmarkKit.Rect(-330f, -1170f, 140f, 110f), y0, y0 + 2.2f, GlassDark, LM.Solid, 2.2f, Concrete, -1);
+                k.Prism(LandmarkKit.Rect(-330f, -1170f, 142f, 112f), y0 + 2.2f, y0 + 3.4f, Concrete, LM.Solid, 1.2f, Concrete, LM.Paving);
+            }
+            for (int i = 0; i < 6; i++) k.Box(new Vector3(-330f, 18.6f, -1210f + i * 16f), new Vector3(126f, 0.5f, 9f), 0, LM.C("#1d2d4a"), LM.Glass, 1f, LM.C("#24375a"), LM.Glass);     // solar canopies
+            k.Prism(LandmarkKit.RoundRect(-300f, -980f, 76f, 30f, 6f, 3), 0.3f, 8f, GlassWarm, LM.Glass, 4f, Stone, LM.Paving);
+            k.Prism(LandmarkKit.Chamfer(-300f, -980f, 66f, 24f, 4f), 8f, 52f, GlassTeal, LM.Fins, 3.6f, Roof, LM.Roof);
+            k.Box(new Vector3(-300f, 53f, -980f), new Vector3(40f, 2f, 14f), 0, MetalG, LM.Metal, 2f, Roof, LM.Roof);
+            Trees(k, -40f, -1680f, 100f, -1680f, 20f, 8f, 8f);
+            Trees(k, 430f, -1590f, 430f, -1100f, 22f, 8f, 9f);
         }
 
         // ------------------------------------------------------------------ L7 by Lotte: slim urban hotel, 26 floors

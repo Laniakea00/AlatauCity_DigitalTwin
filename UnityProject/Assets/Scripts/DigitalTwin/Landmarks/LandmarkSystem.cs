@@ -195,20 +195,20 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 node.Flyer = pg.transform; pg.SetActive(false);
             }
         }
-        /// <summary>Take-off run on the airport's runway (local x = -300, along +z): roll, rotate, climb out and leave; then again.</summary>
+        /// <summary>Take-off run on the airport's west runway (along +z): roll, rotate, climb out and leave; then again.</summary>
         static void Fly(Node n, float dt)
         {
             n.FlyT = (n.FlyT + dt) % 30f; float t = n.FlyT;
-            float z, y = 0.45f, pitch = 0f;
-            if (t < 2.5f) z = -1550f;                                                                  // lined up
+            float z, y = 0.45f, pitch = 0f; const float z0 = LandmarkModels.RwyLZ0 + 60f;
+            if (t < 2.5f) z = z0;                                                                  // lined up
             else
             {
-                float tr = t - 2.5f; z = -1550f + 0.5f * 3.2f * tr * tr;                               // 3.2 m/s² roll
-                if (z > 150f) { float tc = Mathf.Sqrt((150f + 1550f) / 1.6f); float ta = tr - tc; float v = 3.2f * tc; z = 150f + v * ta; y = 0.45f + Mathf.Pow(Mathf.Max(ta, 0f), 1.6f) * 2.6f; pitch = -Mathf.Clamp(ta * 3f, 0f, 9f); }
+                float tr = t - 2.5f; z = z0 + 0.5f * 3.2f * tr * tr;                               // 3.2 m/s² roll
+                if (z > 150f) { float tc = Mathf.Sqrt((150f - z0) / 1.6f); float ta = tr - tc; float v = 3.2f * tc; z = 150f + v * ta; y = 0.45f + Mathf.Pow(Mathf.Max(ta, 0f), 1.6f) * 2.6f; pitch = -Mathf.Clamp(ta * 3f, 0f, 9f); }
             }
             bool vis = t < 26f;
             if (n.Flyer.gameObject.activeSelf != vis) n.Flyer.gameObject.SetActive(vis);
-            n.Flyer.localPosition = new Vector3(-300f, y, z); n.Flyer.localRotation = Quaternion.Euler(pitch, 0f, 0f);
+            n.Flyer.localPosition = new Vector3(LandmarkModels.RwyLX, y, z); n.Flyer.localRotation = Quaternion.Euler(pitch, 0f, 0f);
         }
 
         /// <summary>Hoarding and tower cranes of the construction site (shown only while the object is being built).</summary>
@@ -242,6 +242,19 @@ namespace AlatauCity.DigitalTwin.Landmarks
         }
 
         public Landmark Get(string id) { foreach (var l in Items) if (l.Id == id) return l; return null; }
+        /// <summary>Is the point on a landmark's plot (with a margin)? Film trees and hedges keep off the plots.</summary>
+        public static bool OnPlot(float x, float z, float margin = 4f)
+        {
+            var ls = Instance; if (ls == null) return false;
+            foreach (var l in ls.Items)
+            {
+                if (l.IsLrt || l.PadW <= 0f) continue;
+                float dx = x - l.X, dz = z - l.Z, a = l.Yaw * Mathf.Deg2Rad, ca = Mathf.Cos(a), sa = Mathf.Sin(a);
+                float u = dx * ca - dz * sa, v = dx * sa + dz * ca;                 // local frame of the plot (as CityGround.Flatten)
+                if (Mathf.Abs(u) < l.PadW * 0.5f + margin && Mathf.Abs(v) < l.PadD * 0.5f + margin) return true;
+            }
+            return false;
+        }
 
         /// <summary>Year shown by the city now (fractional while the timeline plays).</summary>
         public static float YearNow => TwinState.Playing || Shader.GetGlobalFloat("_AlatauGrow") > 0.5f ? Mathf.Max(Shader.GetGlobalFloat("_AlatauYearF"), TwinState.Year) : TwinState.Year;

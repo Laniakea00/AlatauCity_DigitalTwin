@@ -27,7 +27,7 @@ Shader "AlatauCity/Ground"
         sampler2D _MainTex, _NatTex, _DevTex; half _Ambient; fixed4 _Earth;
         float _AlatauYear, _AlatauYearF, _AlatauGrow, _AlatauDevK, _AlatauMode, _AlatauBlockOn;
         sampler2D _AlatauBlockTex, _CityTex, _DistTex; float _CityOn; fixed4 _AlatauEdgeCol; float _AlatauCamDist, _AlatauFocusD;
-        float4 _DistTex_TexelSize; float _AlatauHiOn; float4 _AlatauHiWave, _AlatauHiCol;
+        float4 _DistTex_TexelSize; float _AlatauHiOn; float4 _AlatauHiWave, _AlatauHiCol; float4 _AlatauIcZones[32]; float _AlatauIcCount;
         // district id from map_districts.png (point sampled): 30 Gate, 90 Golden, 150 Growing, 210 Green, 0 outside
         float DistAt(float2 uv) { float v = tex2Dlod(_DistTex, float4(uv, 0, 0)).r * 255.0; return v < 15.0 ? -1.0 : floor((v - 30.0) / 60.0 + 0.5); }
         struct Input { float2 uv_MainTex; float3 worldPos; };
@@ -243,7 +243,16 @@ Shader "AlatauCity/Ground"
                     // a quarter only exists between roads: far from any street (special zones, the airfield, empty plots) the land stays land
                     float noBlock = smoothstep(50.0, 61.0, sd);
                     f = lerp(f, land, noBlock * built * done);
-                    f = lerp(f, yard, done * (1.0 - water) * inBlock * (1.0 - green) * (1.0 - open) * (1.0 - noBlock) * 0.92);      // everywhere the city is built
+                    // inside a motorway interchange (FilmRoads.PublishZones) the land between the ramps is a mown verge, never yards
+                    float icz = 0.0;
+                    for (int iz = 0; iz < 32; iz++)
+                    {
+                        if (iz >= (int)_AlatauIcCount) break;
+                        float4 zz = _AlatauIcZones[iz];
+                        icz = max(icz, 1.0 - smoothstep(zz.z * 0.8, zz.z, distance(wp.xz, zz.xy)));
+                    }
+                    f = lerp(f, yard, done * (1.0 - water) * inBlock * (1.0 - green) * (1.0 - open) * (1.0 - noBlock) * (1.0 - icz) * 0.92);      // everywhere the city is built
+                    f = lerp(f, verge, icz * done * (1.0 - water) * (1.0 - green));
                     f = lerp(f, verge, town * (1.0 - inBlock));                                   // the whole road corridor is a mown verge
                     f = lerp(f, paved, town * walk * 0.9);
                     f *= 1.0 - 0.30 * kerb * town * saturate(1.6 - sw * 2.0);

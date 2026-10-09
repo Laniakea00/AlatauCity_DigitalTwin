@@ -61,7 +61,7 @@ namespace AlatauCity.DigitalTwin
             // axis by the road ribbons, bridges get a deck, runways concrete
             foreach (var r in FindObjectsByType<MeshRenderer>(FindObjectsSortMode.None))
             {
-                float kind = r.name == "Rivers" || r.name.StartsWith("BAKAD") ? 3f : r.name.Contains("bridges") ? 2f : r.name == "Runways" ? 5f : 0f;
+                float kind = r.name == "Rivers" || r.name.StartsWith("BAKAD") || r.name.Contains("bridges") ? 3f : r.name == "Runways" ? 5f : 0f;     // the plan's bridge slabs are wider than the roads: the film roads carry on over them
                 if (kind == 0f) continue;
                 var mpb = new MaterialPropertyBlock(); r.GetPropertyBlock(mpb); mpb.SetFloat("_InfraKind", kind); r.SetPropertyBlock(mpb);
             }
