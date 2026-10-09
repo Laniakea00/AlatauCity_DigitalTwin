@@ -35,3 +35,6 @@ _backup_before_landmarks/
 *.apk
 *.aab
 *.unitypackage
+
+# editor debug probe output
+UnityProject/probe.txt

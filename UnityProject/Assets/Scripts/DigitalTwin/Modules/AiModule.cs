@@ -353,8 +353,10 @@ namespace AlatauCity.DigitalTwin.Modules
             return a;
         }
 
-        // generative planning: where to put a new school (also story 7)
-        Answer Placement(int y)
+        /// <summary>Where to put a new school: the district with the largest seat gap, homes farther than 10 min (800 m) from any school,
+        /// 400 m candidate cells scored by school-age children within 800 m, three variants at least 1.5 km apart.</summary>
+        public class SchoolPlan { public int D, Cells, Seats, Homes, Far; public float Gap; public List<(Vector2 p, float kids)> Pick = new List<(Vector2, float)>(); public HashSet<int> Near = new HashSet<int>(), Unc = new HashSet<int>(); }
+        public static SchoolPlan PlanSchool(int y)
         {
             int s = S, yi = TwinData.YI(y), d = 0; float g = -1;
             for (int k = 0; k < 4; k++) { float gap = TwinData.SocialNeed[s][k][0][yi] - TwinData.SocialCap[s][k][0][yi]; if (gap > g) { g = gap; d = k; } }
@@ -366,16 +368,26 @@ namespace AlatauCity.DigitalTwin.Modules
             // candidate = 400 m grid cell centres; score = school-age children in 800 m (10 min walk) not covered today
             var cells = unc.GroupBy(b => (Mathf.FloorToInt(b.X / 400f), Mathf.FloorToInt(b.Z / 400f))).Select(gr => new Vector2(gr.Average(b => b.X), gr.Average(b => b.Z))).ToList();
             var scored = cells.Select(p => (p, kids: unc.Where(b => (new Vector2(b.X, b.Z) - p).sqrMagnitude < 800f * 800f).Sum(b => SituationData.ResidentsOf(b)) * 0.12f)).OrderByDescending(x => x.kids).ToList();
-            var pick = new List<(Vector2 p, float kids)>();
-            foreach (var x in scored) { if (pick.All(o => (o.p - x.p).magnitude > 1500f)) pick.Add(x); if (pick.Count == 3) break; }
+            var r = new SchoolPlan { D = d, Gap = Mathf.Max(0, g), Cells = cells.Count, Homes = homes.Count, Far = unc.Count };
+            foreach (var x in scored) { if (r.Pick.All(o => (o.p - x.p).magnitude > 1500f)) r.Pick.Add(x); if (r.Pick.Count == 3) break; }
+            if (r.Pick.Count == 0) return r;
+            r.Seats = Mathf.Clamp(Mathf.RoundToInt(r.Pick[0].kids / 100f) * 100, 600, 1500);
+            var best = r.Pick[0].p;
+            foreach (var b in unc) { r.Unc.Add(b.Bid); if ((new Vector2(b.X, b.Z) - best).sqrMagnitude < 800f * 800f) r.Near.Add(b.Bid); }
+            return r;
+        }
+
+        // generative planning: where to put a new school (also story 7)
+        Answer Placement(int y)
+        {
+            var P = PlanSchool(y); int d = P.D; float g = P.Gap; var pick = P.Pick; int seats = P.Seats;
             var a = new Answer { Conf = 79, Sources = "социальная инфраструктура (нормы), здания школ генплана, жильё по годам; радиус 800 м = 10 мин пешком" };
             if (pick.Count == 0) { a.Text = $"В {y} году в {Dn[d]} все дома в 10 минутах от школы."; return a; }
-            int seats = Mathf.Clamp(Mathf.RoundToInt(pick[0].kids / 100f) * 100, 600, 1500);
             a.Text = $"Больше всего мест не хватает в {Dn[d]} ({Loc.N0(Mathf.Max(0, g))} мест в {y}). Я сравнил участки, откуда до школы дальше 10 минут пешком, и предлагаю 3 варианта. Лучший — A: рядом {Loc.N0(pick[0].kids)} детей школьного возраста, школа на {Loc.N0(seats)} мест закроет {Mathf.RoundToInt(100f * Mathf.Min(seats, g) / Mathf.Max(g, 1))} % дефицита района." + (g > seats * 1.5f ? $" Всего району нужно ещё ~{Mathf.CeilToInt(g / 1000f)} школ по 1 000 мест — B и C следующие по очереди." : "");
             string[] L = { "A", "B", "C" };
             for (int i = 0; i < pick.Count; i++) a.Facts.Add(($"вариант {L[i]}", $"{Loc.N0(pick[i].kids)} детей в 10 мин"));
             a.Tools.Add($"query(\"social.school.gap\", year={y})"); a.Tools.Add("isochrones(walk=10 мин, from=школы)"); a.Tools.Add("optimize(site, maximize=дети без школы рядом)"); a.Tools.Add("show_variants(3)");
-            var best = pick[0].p; var near = new HashSet<int>(unc.Where(b => (new Vector2(b.X, b.Z) - best).sqrMagnitude < 800f * 800f).Select(b => b.Bid)); var uncSet = new HashSet<int>(unc.Select(b => b.Bid));
+            var best = pick[0].p; var near = P.Near; var uncSet = P.Unc;
             a.Apply = () =>
             {
                 TwinState.Year = y;

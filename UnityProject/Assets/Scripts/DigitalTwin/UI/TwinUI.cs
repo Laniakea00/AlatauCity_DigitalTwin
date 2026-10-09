@@ -79,10 +79,13 @@ namespace AlatauCity.DigitalTwin.UI
             root.pickingMode = PickingMode.Ignore; root.AddToClassList("twin-root");
             root.style.position = Position.Absolute; root.style.left = 0; root.style.top = 0; root.style.right = 0; root.style.bottom = 0;
             root.RegisterCallback<GeometryChangedEvent>(_ => root.EnableInClassList("compact", root.resolvedStyle.width < 1560));
+            // keyboard belongs to the map and the presentation (Space, arrows), never to a button that happens to have focus
+            root.RegisterCallback<NavigationSubmitEvent>(e => { if (root.focusController?.focusedElement is Button b) { e.StopImmediatePropagation(); b.Blur(); } }, TrickleDown.TrickleDown);
+            root.RegisterCallback<NavigationMoveEvent>(e => { if (!(root.focusController?.focusedElement is TextField)) e.StopImmediatePropagation(); }, TrickleDown.TrickleDown);
             root.EnableInClassList("rail-open", railOpen);
 
             root.Add(BuildHeader());
-            var middle = new VisualElement { pickingMode = PickingMode.Ignore }; middle.AddToClassList("middle"); root.Add(middle);
+            var middle = new VisualElement { pickingMode = PickingMode.Ignore }; middle.AddToClassList("middle"); root.Add(middle); middleEl = middle;
             scene = new VisualElement { pickingMode = PickingMode.Ignore }; scene.AddToClassList("scene"); middle.Add(scene);
             pins = new VisualElement { pickingMode = PickingMode.Ignore }; pins.AddToClassList("pins"); scene.Add(pins);
 
@@ -297,10 +300,16 @@ namespace AlatauCity.DigitalTwin.UI
         void HidePopups() { if (popup != null) popup.style.display = DisplayStyle.None; if (districtPopup != null) districtPopup.style.display = DisplayStyle.None; }
 
         // ------------------------------------------------------------------ passport card
+        VisualElement middleEl;
+        /// <summary>The middle area (scene + columns): carries "lm-open" while a landmark passport is open (it takes the right column's place)
+        /// and "tour-on" during the presentation.</summary>
+        public VisualElement Middle => middleEl;
         public void RefreshCard()
         {
             if (card == null) return;
             card.RemoveFromClassList("lm-card");
+            var lsel = Landmarks.LandmarkSystem.Instance != null ? Landmarks.LandmarkSystem.Instance.Selected : null;
+            middleEl?.EnableInClassList("lm-open", lsel != null);
             // a landmark (Iconic Complex, plants, LRT …) has its own passport
             var ls = Landmarks.LandmarkSystem.Instance;
             if (ls != null && ls.Selected != null) { Landmarks.LandmarkCard.Fill(card, ls.Selected); return; }

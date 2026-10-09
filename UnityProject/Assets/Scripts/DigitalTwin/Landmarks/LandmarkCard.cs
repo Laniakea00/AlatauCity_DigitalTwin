@@ -25,7 +25,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 var dc = new VisualElement(); dc.AddToClassList("lm-chip"); var d = Widgets.Dot(CityStats.DistrictColors[l.District], true); dc.Add(d);
                 dc.Add(new Label(CityStats.DistrictIds[l.District] + " District")); chips.Add(dc);
             }
-            var stc = Widgets.Status(LandmarkCatalog.StatusOf(l), LandmarkCatalog.StatusCls[(int)l.Status]); chips.Add(stc);
+            var stc = Widgets.Status(LandmarkCatalog.StatusOf(l), LandmarkCatalog.ClsOf(l)); chips.Add(stc);
             card.Add(chips);
             var pu = new Label(l.Purpose); pu.AddToClassList("lm-purpose"); card.Add(pu);
 
@@ -44,12 +44,24 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 var bar = new VisualElement(); bar.AddToClassList("lm-bar"); var fill = new VisualElement(); fill.AddToClassList("lm-fill");
                 fill.style.width = Length.Percent(pr * 100f); fill.EnableInClassList("done", pr >= 0.999f); bar.Add(fill); tl.Add(bar);
                 card.Add(tl);
-                foreach (var (k, v) in l.Facts) card.Add(Widgets.Fact(k, v));
-                card.Add(Widgets.Fact("Расположение", "условное — по функции района в генплане"));
+                // the 5 figures an investor asks about first; the rest (and the sources) stay behind "Источники"
+                var facts = new VisualElement(); facts.AddToClassList("lm-facts"); card.Add(facts);
+                foreach (var (k, v) in KeyFacts(l)) facts.Add(Widgets.Fact(k, v));
             }
-            card.Add(Widgets.Fact("Статус", l.StatusNote));
-            var src = Widgets.Fact("Источник", l.Source + " · " + l.SourceDate); src.style.borderBottomWidth = 0; card.Add(src);
-            if (!l.IsLrt && !l.YearOfficial) { var n = new Label("* срок ввода не опубликован — в демо принят ориентир"); n.AddToClassList("lm-note"); card.Add(n); }
+            if (!TwinTour.Running)
+            {
+                var more = new VisualElement(); more.AddToClassList("lm-src");
+                var mb = Widgets.Btn(srcOpen ? "Скрыть источники" : "Источники и статус ›", () => { srcOpen = !srcOpen; Fill(card, l); }, "small", "ghost"); mb.style.alignSelf = Align.FlexStart; mb.style.marginLeft = -8;
+                card.Add(mb);
+                if (srcOpen)
+                {
+                    more.Add(new Label("Статус: " + l.StatusNote));
+                    more.Add(new Label("Источник: " + l.Source + " · " + l.SourceDate));
+                    if (!l.IsLrt) more.Add(new Label("Расположение условное — по функции района в генплане."));
+                    if (!l.IsLrt && !l.YearOfficial) more.Add(new Label("Срок ввода не опубликован — в демо принят ориентир."));
+                    card.Add(more);
+                }
+            }
 
             var btns = new VisualElement(); btns.AddToClassList("lm-btns");
             if (!l.IsLrt)
@@ -58,13 +70,27 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 if (LandmarkSystem.OrbitOn) ob.AddToClassList("active");
                 btns.Add(ob);
             }
-            btns.Add(Widgets.Btn("Весь город", () =>
+            if (!TwinTour.Running) btns.Add(Widgets.Btn("Весь город", () =>
             {
                 sys?.Select(null, false);
                 var cam = Camera.main != null ? Camera.main.GetComponent<MapCamera>() : null; if (cam != null) cam.FlyTo(cam.overview);
             }, "small", "ghost"));
             card.Add(btns);
         }
+
+        static bool srcOpen;
+        static readonly string[] Skip = { "Расположение", "Примечание" };
+        static readonly string[] Order = { "Инвестиции", "Рабочие места", "Площадь", "Главная башня", "Мощность", "Студенты", "Номера", "Склады", "Параметры", "Сроки" };
+        /// <summary>Up to five facts, the ones that matter to an investor first.</summary>
+        static System.Collections.Generic.List<(string, string)> KeyFacts(Landmark l)
+        {
+            var all = new System.Collections.Generic.List<(string, string)>();
+            foreach (var f in l.Facts) if (System.Array.IndexOf(Skip, f.Item1) < 0) all.Add(f);
+            all.Sort((a, b) => Rank(a.Item1).CompareTo(Rank(b.Item1)));
+            if (all.Count > 5) all.RemoveRange(5, all.Count - 5);
+            return all;
+        }
+        static int Rank(string k) { for (int i = 0; i < Order.Length; i++) if (k.StartsWith(Order[i])) return i; return Order.Length; }
 
         static void LrtBody(VisualElement card, Landmark l)
         {

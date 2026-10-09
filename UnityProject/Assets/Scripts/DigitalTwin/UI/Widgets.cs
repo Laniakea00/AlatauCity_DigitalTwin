@@ -106,7 +106,7 @@ namespace AlatauCity.DigitalTwin.UI
         }
         public static Button Btn(string text, System.Action onClick, params string[] classes)
         {
-            var b = new Button(onClick) { text = text }; b.AddToClassList("btn"); foreach (var c in classes) b.AddToClassList(c); return b;
+            var b = new Button(onClick) { text = text, focusable = false }; b.AddToClassList("btn"); foreach (var c in classes) b.AddToClassList(c); return b;
         }
         public static Label Status(string text, string cls) { var l = new Label(text); l.AddToClassList("status"); l.AddToClassList(cls); return l; }
     }

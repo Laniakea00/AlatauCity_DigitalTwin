@@ -25,16 +25,18 @@ namespace AlatauCity.DigitalTwin
 
         class Step
         {
-            public int Zone = -1; public string Module = "overview"; public int Year = 2050; public Scenario Sc = Scenario.Base; public float Dur = 20f;
-            public Action Enter; public Func<string> Title, Text; public Func<string[]> Bullets;
+            public int Seg, Zone = -1; public string Module = "overview"; public int Year = 2050; public Scenario Sc = Scenario.Base; public float Dur = 20f;
+            public Action Enter; public Func<string> Title; public (float, Action)[] Shots;
             public bool Grow; public int AnimFrom, AnimTo;   // year animation within the step (growth / a landmark rising)
+            public bool Gfa;                                  // the «growth by use» chart is shown only in the steps about the whole city's growth
         }
         readonly List<Step> steps = new List<Step>();
         bool running, paused; int idx; float t;
-        VisualElement box, bar, zoneDot, bulletsBox, segs; Label lZone, lStep, lTitle, lText; Button bPause; VisualElement host;
+        VisualElement box, bar, zoneDot, segs; Label lZone, lStep, lStepName; Button bPause; VisualElement host;
 
-        static readonly string[] ZoneName = { "GATE · ворота и деловой центр", "GOLDEN · наука, образование, медицина", "GROWING · промышленность и логистика", "GREEN · туризм на Капшагае" };
-        static readonly string[] SegName = { "Город", "Gate", "Golden", "Growing", "Green", "Итог" };
+        static readonly string[] SegTitle = { "ALATAU CITY · ГОРОД ЦЕЛИКОМ", "GATE · ворота и деловой центр", "GOLDEN · наука, образование, медицина", "GROWING · промышленность и логистика", "GREEN · туризм на Капшагае", "ЛРТ · Алматы — Алатау — Конаев", "ЦИФРОВОЙ ДВОЙНИК · ВОЗМОЖНОСТИ", "ИТОГ" };
+        static readonly string[] SegName = { "Город", "Gate", "Golden", "Growing", "Green", "ЛРТ", "Двойник", "Итог" };
+        static readonly Color Brand = new Color(0.88f, 0.15f, 0.11f), LrtC = new Color(0.70f, 0.52f, 0.89f);
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         static void Boot() { if (Instance == null) new GameObject("Twin tour").AddComponent<TwinTour>(); }
@@ -63,6 +65,9 @@ namespace AlatauCity.DigitalTwin
             float ext = Mathf.Max(x1 - x0, z1 - z0);
             Fly(new Vector2((x0 + x1) * 0.5f, (z0 + z1) * 0.5f - ext * 0.12f), Mathf.Clamp(ext * 1.35f, 9000f, 45000f), 52f, 0f);
         }
+        /// <summary>A district in 2050: highlighted on the ground, the camera glides low along it (buildings read in 3D, not a plan).</summary>
+        static void ZoneGlide(int d, float dur) { LS?.Select(null, false); TwinState.SetDistrict(d); TourFx.Instance?.GlideDistrict(d, dur, only: b => b.Source != "existing_osm" && b.Kind != "house" && b.Kind != "solar"); }   // over the new city, not over the old villages
+        static void Spot(int d, string name, Color c, Func<BuildingInfo, bool> pred) => TourFx.Instance?.Spot(d, new TourFx.Cat { Name = name, Col = c, Is = pred });
         static void Object(string id) { var l = LS?.Get(id); if (l != null) LS.Select(l); }
         static void Station(int phase)
         {
@@ -78,102 +83,62 @@ namespace AlatauCity.DigitalTwin
         static int LrtYear(int p) { int s = (int)TwinState.Scenario; return TwinData.LrtPhaseYear[s] != null && p < TwinData.LrtPhaseYear[s].Length ? TwinData.LrtPhaseYear[s][p] : 2031; }
         static string Fact(string id, string key) { var l = LS?.Get(id); if (l == null) return ""; foreach (var (k, v) in l.Facts) if (k == key) return v; return ""; }
 
+        /// <summary>A camera move or an action at a moment of the step (seconds from its start).</summary>
+        static (float, Action) At(float t, Action a) => (t, a);
+
         void Build()
         {
             steps.Clear();
-            var db = CityDatabase.Instance; int all = db != null ? db.Buildings.Length : 0;
-            // ---------------- the city
-            steps.Add(new Step { Zone = -1, Year = 2025, Dur = 18, Enter = Overview,
-                Title = () => "Alatau City",
-                Text = () => "Новый город у Капшагая, между Алматы и Конаевом. Конституционный закон об особом режиме действует с 1 июля 2026 года.",
-                Bullets = () => new[] { "88 267 га, четыре района: Gate, Golden, Growing, Green", "≈1,8–2 млн жителей и 1 млн рабочих мест к 2050 году", "67 инвестпроектов на ≈ $6,9 млрд (26.08.2026)", $"{Loc.N0(all)} зданий генплана в цифровом двойнике" } });
-            steps.Add(new Step { Zone = -1, Year = 2025, Dur = 24, Grow = true, Enter = Overview,
-                Title = () => "25 лет за 25 секунд",
-                Text = () => $"Город растёт по годам ввода генплана. {TwinState.Year}: ~{K(Res(TwinState.Year))} жителей.",
-                Bullets = () => new[] { "Новые здания поднимаются в год ввода и подсвечены", "Земля проходит путь «степь → стройплощадка → квартал»", "Все цифры панелей считаются из тех же данных" } });
+            // ================= the city (segment 0)
+            steps.Add(new Step { Seg = 0, Zone = -1, Year = 2025, Dur = 14, Enter = Overview, Title = () => "Alatau City сегодня" });
+            steps.Add(new Step { Seg = 0, Zone = -1, Year = 2025, Dur = 24, Grow = true, Gfa = true, Enter = Overview, Title = () => "Город растёт: 2025 → 2050" });
 
-            // ---------------- Gate
-            steps.Add(new Step { Zone = 0, Year = 2050, Dur = 18, Enter = () => FrameZone(0),
-                Title = () => "Gate — ворота города",
-                Text = () => $"Финансы, бизнес, торговля и транспортный узел у трассы Алматы–Конаев и БАКАД. В 2050 году — {K(CityStats.Residents(0, 2050))} жителей.",
-                Bullets = () => ObjectsOf(0) });
-            steps.Add(new Step { Zone = 0, Module = "objects", Year = 2030, Dur = 22, Enter = () => Object("iconic"),
-                Title = () => "Iconic Complex · 272 м",
-                Text = () => "Самая высокая башня юга Казахстана от SOM: вертикальный район из башни 272 м, отеля 80 м и подиума, который террасами спускается к площади.",
-                Bullets = () => new[] { "Площадь — " + Fact("iconic", "Площадь"), "Инвестиции — " + Fact("iconic", "Инвестиции"), "Сейсмостойкий каркас с демпферами", "Сдача — конец 2029 – начало 2030" } });
-            steps.Add(new Step { Zone = 0, Module = "construction", Year = 2026, Dur = 22, AnimFrom = 2026, AnimTo = 2030, Enter = () => { TwinState.SetDistrict(0); Object("iconic"); },
-                Title = () => "Стройка под контролем двойника",
-                Text = () => $"{TwinState.Year}: Iconic поднимается по графику 2027–2030. Площадки района окрашены: по графику — оранжевые, отстают — красные, сданы — зелёные.",
-                Bullets = () => new[] { "Съёмка БПЛА → объёмы и готовность «план / факт»", "Прогноз срыва сроков за недели до него", "Деньги по источникам и рейтинг подрядчиков" } });
-            steps.Add(new Step { Zone = 0, Module = "overview", Year = 2031, Dur = 20, Enter = () => Station(0),
-                Title = () => "ЛРТ: первая очередь Gate – Golden",
-                Text = () => $"Лёгкое метро на эстакаде открывается в {LrtYear(0)} году: {Loc.N1(TwinData.LrtPhaseKm.Length > 0 ? TwinData.LrtPhaseKm[0] : 0)} км. Метро до Алатау не рассматривается — ставка на LRT.",
-                Bullets = () => new[] { "Станции с навесами и лифтами к улице", "Поезда идут по открытым очередям, движение ускорено ×6", "Очереди 2 и 3 — Growing и Green" } });
-            steps.Add(new Step { Zone = 0, Module = "situation", Year = 2036, Dur = 22, Enter = () => { TwinState.SetDistrict(0); Active<SituationModule>()?.TourOpen("dtp", true); },
-                Title = () => "Ситуационный центр: ДТП на трассе у Gate",
-                Text = () => { var i = SituationModule.Find("dtp"); return i == null ? "Камеры и вызов 112 фиксируют ДТП, центр управления движением открывает объезд." : $"Камеры подтверждают ДТП за минуты. Объезд и «зелёная волна»: в заторе {Loc.N0(i.Yes.AffectedMax)} человек вместо {Loc.N0(i.No.AffectedMax)}."; },
-                Bullets = () => new[] { "112, камеры с видеоаналитикой и детекторы трафика в одной ленте", "Сравнение «решение принято / не принято»", "Работает по всей карте — здесь показано у Gate" } });
+            // ================= Gate: business centre (segment 1)
+            steps.Add(new Step { Seg = 1, Zone = 0, Year = 2050, Dur = 14, Enter = () => ZoneGlide(0, 16f), Title = () => "Район Gate в 2050 году" });
+            steps.Add(new Step { Seg = 1, Zone = 0, Module = "objects", Year = 2030, Dur = 20, Enter = () => Object("iconic"), Title = () => "Iconic Complex · 272 м" });
+            steps.Add(new Step { Seg = 1, Zone = 0, Module = "construction", Year = 2026, Dur = 24, AnimFrom = 2026, AnimTo = 2030, Enter = () => { TwinState.SetDistrict(0); Object("iconic"); }, Title = () => "Стройка Iconic: 2026 → 2030" });
+            steps.Add(new Step { Seg = 1, Zone = 0, Module = "objects", Year = 2030, Dur = 18, Enter = () => Object("lotte_l7"), Title = () => "L7 by Lotte · PepsiCo · Griffin Logopark",
+                Shots = new[] { At(6f, () => Object("pepsico")), At(12f, () => Object("griffin")) } });
 
-            // ---------------- Golden
-            steps.Add(new Step { Zone = 1, Year = 2050, Dur = 18, Enter = () => FrameZone(1),
-                Title = () => "Golden — знания и здоровье",
-                Text = () => $"Наука, образование и медицина между Малой Алматинкой и Каскеленом: кампус на 40 тыс. студентов, медкластер, K-Park. В 2050 году — {K(CityStats.Residents(1, 2050))} жителей.",
-                Bullets = () => ObjectsOf(1) });
-            steps.Add(new Step { Zone = 1, Module = "objects", Year = 2033, Dur = 20, Enter = () => Object("kaist"),
-                Title = () => "KAIST Kazakhstan",
-                Text = () => "Технологический университет с корейским партнёром: главный корпус под стеклянной кровлей, библиотека-башня, лаборатории вокруг зелёного двора.",
-                Bullets = () => new[] { "Кампус Golden — до 40 000 студентов", "Статус: прорабатывается", "Срок в демо — ориентир" } });
-            steps.Add(new Step { Zone = 1, Module = "prediction", Year = 2034, Dur = 22, Enter = () => { FrameZone(1); Active<PredictionModule>()?.TourMetric("power"); },
-                Title = () => "Двойник видит дефицит заранее", Text = () => Active<PredictionModule>()?.Summary ?? "",
-                Bullets = () => new[] { "Спрос по годам ввода зданий против мощности подстанций", "Причина — сдвиг 2-й очереди ПС «Golden»", "Рекомендация — ускорить ввод" } });
-            steps.Add(new Step { Zone = 1, Module = "situation", Year = 2036, Dur = 22, Enter = () => { TwinState.SetDistrict(1); Active<SituationModule>()?.TourOpen("leak", true); },
-                Title = () => "Утечка на водоводе: решение принято",
-                Text = () => { var i = SituationModule.Find("leak"); return i == null ? "" : $"Датчики давления находят утечку, участок перекрыт, вода идёт по резервной нитке: без воды {Loc.N0(i.Yes.AffectedMax)} человек вместо {Loc.N0(i.No.AffectedMax)}, ущерб {Money(i.Yes.Peak)} вместо {Money(i.No.Peak)}."; },
-                Bullets = () => new[] { "16 потоков данных: SCADA, счётчики, 112, обращения жителей", "Прогноз последствий по часам", "Брифинг для акима одним экраном" } });
+            // ================= Golden: science, education, health (segment 2)
+            steps.Add(new Step { Seg = 2, Zone = 1, Year = 2050, Dur = 16, Enter = () => ZoneGlide(1, 16f), Title = () => "Район Golden в 2050 году" });
+            steps.Add(new Step { Seg = 2, Zone = 1, Year = 2050, Dur = 20, Enter = () => { TwinState.SetDistrict(1); TourFx.Instance?.GlideDistrict(1, 20f, 0.28f, -0.22f, 5200f, 4300f, 38f, -22f); },
+                Title = () => "Университеты, школы, больницы",
+                Shots = new[] {
+                    At(0.6f, () => Spot(1, "Вузы и кампусы", new Color(0.62f, 0.48f, 1f), b => b.Kind == "education" && b.GfaM2 >= 12000f)),
+                    At(5f, () => Spot(1, "Школы и сады", new Color(0.30f, 0.66f, 1f), b => b.Kind == "education" && b.GfaM2 < 12000f)),
+                    At(9.5f, () => Spot(1, "Больницы и клиники", new Color(1f, 0.38f, 0.56f), b => b.Kind == "health")),
+                    At(14f, () => Spot(1, "Наука и технопарки", new Color(0.24f, 0.86f, 0.74f), b => b.Kind == "public")) } });
 
-            // ---------------- Growing
-            steps.Add(new Step { Zone = 2, Year = 2050, Dur = 18, Enter = () => FrameZone(2),
-                Title = () => "Growing — промышленность и логистика",
-                Text = () => $"Экспортные производства вдоль трассы и ж/д Жетыген – Казыбек-бек: пищевая, бумажная, упаковка, логистика. В 2050 году — {K(CityStats.Residents(2, 2050))} жителей.",
-                Bullets = () => ObjectsOf(2) });
-            steps.Add(new Step { Zone = 2, Module = "objects", Year = 2027, Dur = 20, Enter = () => Object("tlc"),
-                Title = () => "ТЛЦ «Жетыген»",
-                Text = () => "Транспортно-логистический центр Исткомтранса у железной дороги: пути, козловые краны, контейнерная площадка и склад.",
-                Bullets = () => new[] { "Инвестиции — " + Fact("tlc", "Инвестиции"), "Связка трассы, ж/д и складов Growing", "Рядом — Sunny Paper, DanaFlex, G-Trans" } });
-            steps.Add(new Step { Zone = 2, Module = "infra", Year = 2034, Dur = 22, Enter = () => { TwinState.SetDistrict(2); Object("ps_arna"); },
-                Title = () => "Сети и подстанции",
-                Text = () => "ПС «Арна» 220/110 кВ строится в первой фазе инфраструктуры. Вода, канализация, электричество, тепло, газ и связь проложены вдоль улиц генплана и вводятся очередями.",
-                Bullets = () => new[] { "Фаза 1 — 21 проект, 365,1 млрд ₸", "Нагрузка и мощность по каждому объекту и году", "Однолинейная схема электросети" } });
-            steps.Add(new Step { Zone = 2, Module = "prediction", Year = 2050, Dur = 20, Enter = () => { FrameZone(2); Active<PredictionModule>()?.TourMetric("school"); },
-                Title = () => "Школы: хватает ли мест", Text = () => Active<PredictionModule>()?.Summary ?? "",
-                Bullets = () => new[] { "Нормативы обеспеченности по районам и годам", "Growing — самый быстрый рост населения" } });
-            steps.Add(new Step { Zone = 2, Module = "prediction", Year = 2050, Dur = 20, Enter = () => { Active<PredictionModule>()?.TourMetric("flood"); TwinState.SetDistrict(2); var f = SituationData.Incidents((int)TwinState.Scenario, 2050).FirstOrDefault(i => i.Id == "flood"); if (f != null) Fly(f.P, 5200f); },
-                Title = () => "Риски: паводок на Каскелене", Text = () => Active<PredictionModule>()?.Summary ?? "",
-                Bullets = () => new[] { "Подъём воды 1,6 и 3,0 м — здания в зоне риска", "Сейсмика 8–9 баллов — уязвимость по типу и возрасту" } });
+            // ================= Growing: industry and logistics (segment 3)
+            steps.Add(new Step { Seg = 3, Zone = 2, Year = 2050, Dur = 14, Enter = () => ZoneGlide(2, 16f), Title = () => "Район Growing в 2050 году" });
+            steps.Add(new Step { Seg = 3, Zone = 2, Year = 2050, Dur = 20, Enter = () => { TwinState.SetDistrict(2); TourFx.Instance?.GlideDistrict(2, 20f, -0.35f, 0.35f, 4200f, 3000f, 32f, 24f, b => b.Kind == "industry" || b.Kind == "utility"); },
+                Title = () => "Долина заводов",
+                Shots = new[] {
+                    At(0.6f, () => Spot(2, "Заводы", new Color(1f, 0.62f, 0.22f), b => b.Kind == "industry")),
+                    At(6f, () => Spot(2, "Энергетика и сети", new Color(1f, 0.86f, 0.25f), b => b.Kind == "utility" || b.Kind == "solar")) } });
+            steps.Add(new Step { Seg = 3, Zone = 2, Year = 2050, Dur = 24, Enter = () => { LS?.Select(null, false); var c = Cam; if (c != null) c.FlyTo(c.overview); TourFx.Instance?.ShowSilkRoad(); }, Title = () => "Шёлковый путь через Алатау" });
+            steps.Add(new Step { Seg = 3, Zone = 2, Module = "objects", Year = 2050, Dur = 22, Enter = () => Object("airport"), Title = () => "Новый аэропорт · концепция" });
 
-            // ---------------- Green
-            steps.Add(new Step { Zone = 3, Year = 2050, Dur = 18, Enter = () => FrameZone(3),
-                Title = () => "Green — туризм на Капшагае",
-                Text = () => $"Набережная, курорты и отдых на берегу водохранилища: 31 730 га. В 2050 году — {K(CityStats.Residents(3, 2050))} жителей.",
-                Bullets = () => ObjectsOf(3) });
-            steps.Add(new Step { Zone = 3, Module = "objects", Year = 2035, Dur = 20, Enter = () => Object("marina"),
-                Title = () => "Марина Капшагай",
-                Text = () => "Яхтенная марина с клубом и набережной — концепция Green District. Причалы уходят в воду, у берега — променад.",
-                Bullets = () => new[] { "Статус: концепция, сроков нет", "4 млн туристов в год — цель к 2050" } });
-            steps.Add(new Step { Zone = 3, Module = "overview", Year = 2041, Dur = 18, Enter = () => Station(2),
-                Title = () => "ЛРТ доходит до Green",
-                Text = () => $"Третья очередь открывается в {LrtYear(2)} году: {Loc.N1(TwinData.LrtPhaseKm.Length > 2 ? TwinData.LrtPhaseKm[2] : 0)} км до набережной Капшагая.",
-                Bullets = () => new[] { "Вся линия — " + Loc.N1(TwinData.LrtPhaseKm.Sum()) + " км в три очереди", "41 станция" } });
+            // ================= Green: tourism on Kapshagay (segment 4)
+            steps.Add(new Step { Seg = 4, Zone = 3, Year = 2050, Dur = 16, Title = () => "Район Green в 2050 году",
+                Enter = () => { ZoneGlide(3, 16f); TourFx.Instance?.Callout("Green District · туризм", new[] { ("4 млн", "туристов в год к 2050", new Color(1f, 0.82f, 0.45f)), ("31 730 га", "курортов, пляжей и набережных", new Color(0.55f, 0.85f, 0.65f)) }, null); } });
+            steps.Add(new Step { Seg = 4, Zone = 3, Year = 2050, Dur = 26, Title = () => "Паводок на Капшагае: модель и решение",
+                Enter = () => { TourFx.Instance?.GlideDistrict(3, 26f, -0.10f, 0.22f, 3400f, 2600f, 34f, 16f, b => b.GroundM < 479f); TourFx.Instance?.Flood(new Rect(-1500f, 11000f, 19500f, 17000f), 3, 475.0f, 3.2f, 10f, 16f); } });
 
-            // ---------------- the whole city again
-            steps.Add(new Step { Zone = -1, Module = "ai", Year = 2034, Dur = 22, Enter = () => { LS?.Select(null, false); TwinState.SetDistrict(-1); Active<AiModule>()?.TourAsk("Где поставить новую школу?"); },
-                Title = () => "ИИ-ассистент",
-                Text = () => "Вопрос своими словами — ИИ сам выставляет год, двигает камеру, красит районы и предлагает три участка для новой школы. Все цифры — из данных двойника.",
-                Bullets = () => new[] { "Работает на всей карте и во всех районах", "Показывает, что сделал и насколько уверен" } });
-            steps.Add(new Step { Zone = -1, Year = 2050, Dur = 20, Enter = Overview,
-                Title = () => "Alatau City 2050",
-                Text = () => $"~{K(Res(2050))} жителей. Один цифровой двойник для стройки, прогноза, инфраструктуры, ситуационного центра и ИИ — qTwin.",
-                Bullets = () => new[] { "Gate · Golden · Growing · Green — на одной карте", "Реальные проекты, сценарии и риски в одном окне" } });
+            // ================= LRT (segment 5)
+            steps.Add(new Step { Seg = 5, Zone = -1, Year = 2050, Dur = 20, Title = () => "ЛРТ соединит Алматы и Конаев",
+                Enter = () => { LS?.Select(null, false); LrtLayer.Showcase = true; TourFx.Instance?.GlideLine(new Vector2(-3000f, -22000f), new Vector2(0f, 6000f), 20f, 16000f, 15000f, 6f, -4f, 50f, 46f);
+                                 TourFx.Instance?.Callout("ЛРТ Алматы — Алатау — Конаев", new[] { (Loc.N1(TwinData.LrtPhaseKm.Sum()) + " км", "лёгкого метро на эстакаде", new Color(0.78f, 0.62f, 1f)), ("41", "станция", new Color(0.78f, 0.62f, 1f)), ("к 2050", "линия соединит два города", new Color(1f, 1f, 1f)) }, null); } });
+
+            // ================= what the twin does (segment 6)
+            steps.Add(new Step { Seg = 6, Zone = -1, Module = "construction", Year = 2027, AnimFrom = 2027, AnimTo = 2032, Dur = 24, Enter = () => { LS?.Select(null, false); TwinState.SetDistrict(-1); ConstructionModule.TourOverlays = true; ConstructionModule.ApplyTourLayers(); TourFx.Instance?.ConstructionWatch(); TourFx.Instance?.GlideLine(new Vector2(-3200f, -23500f), new Vector2(-1800f, -9000f), 24f, 9500f, 8500f, 8f, -6f, 52f, 46f); }, Title = () => "Контроль стройки: план против факта" });
+            steps.Add(new Step { Seg = 6, Zone = -1, Module = "situation", Year = 2036, Dur = 26, Enter = () => TourFx.Instance?.ShowSituation("dtp"), Title = () => "Ситуационный центр" });
+            steps.Add(new Step { Seg = 6, Zone = 1, Module = "overview", Year = TourEnergy.Y0, Dur = 28, Enter = () => { LS?.Select(null, false); TourFx.Instance?.ShowEnergy(); }, Title = () => "Прогноз: энергия 2034" });
+            steps.Add(new Step { Seg = 6, Zone = -1, Module = "ai", Year = 2034, Dur = 26, Enter = () => { LS?.Select(null, false); TwinState.SetDistrict(-1); TourFx.Instance?.ShowAi(); }, Title = () => "ИИ-ассистент" });
+
+            // ================= finale (segment 7)
+            steps.Add(new Step { Seg = 7, Zone = -1, Year = 2050, Dur = 18, Gfa = true, Enter = Overview, Title = () => "Alatau City 2050 · qTwin" });
         }
 
         // ------------------------------------------------------------------ control
@@ -184,45 +149,37 @@ namespace AlatauCity.DigitalTwin
         }
         public void Stop()
         {
-            running = false; CityTimeline.StopGrowth(); if (box != null) box.style.display = DisplayStyle.None; host?.RemoveFromClassList("tour-on"); ReleaseColumn();
+            running = false; CityTimeline.StopGrowth(); if (box != null) box.style.display = DisplayStyle.None; host?.RemoveFromClassList("tour-on"); TwinUI.Instance?.Middle?.RemoveFromClassList("tour-on"); TwinUI.Instance?.Middle?.RemoveFromClassList("tour-gfa"); ReleaseCard();
             if (TwinState.Scenario != Scenario.Base) TwinState.Scenario = Scenario.Base;
             TwinState.SetDistrict(-1);
+            TourFx.Instance?.Reset(); LrtLayer.Showcase = false;
+            TwinState.SetModule("overview");             // panels built for the presentation (one district only) are rebuilt for normal work
         }
         void Go(int i)
         {
             idx = Mathf.Clamp(i, 0, steps.Count - 1); t = 0; var s = steps[idx]; CityTimeline.StopGrowth();
-            TwinState.Playing = false; if (TwinState.Selected != null) TwinState.SetSelected(null);
+            TwinState.Playing = false; ConstructionModule.TourOverlays = false; LrtLayer.Showcase = false; TourFx.Instance?.Reset(); if (TwinState.Selected != null) TwinState.SetSelected(null);
             if (LS != null && LS.Selected != null) LS.Select(null, false);    // each step opens its own passport, if any
             if (TwinState.Scenario != s.Sc) TwinState.Scenario = s.Sc;
             TwinState.SetModule(s.Module);
             TwinState.Year = s.AnimTo > 0 ? s.AnimFrom : s.Year;
             if (s.Zone < 0 && TwinState.District >= 0 && s.Module != "ai") TwinState.SetDistrict(-1);
+            if (s.Zone >= 0) TwinState.SetDistrict(s.Zone);              // the step's district is lit on the ground and named in the header
+            TwinUI.Instance?.Middle?.EnableInClassList("tour-gfa", s.Gfa);
             try { s.Enter?.Invoke(); } catch (Exception e) { Debug.LogWarning("[Alatau] tour step " + idx + ": " + e.Message); }
             Caption();
         }
         void Caption()
         {
             Ensure(); if (box == null) return; var s = steps[idx];
-            int seg = s.Zone >= 0 ? s.Zone + 1 : idx < 2 ? 0 : 5;
-            lZone.text = s.Zone >= 0 ? ZoneName[s.Zone] : idx < 2 ? "ALATAU CITY · ГОРОД ЦЕЛИКОМ" : "ИТОГ";
-            zoneDot.style.backgroundColor = s.Zone >= 0 ? CityStats.DistrictColors[s.Zone] : new Color(0.88f, 0.15f, 0.11f);
+            int seg = s.Seg;
+            lZone.text = SegTitle[seg].ToUpperInvariant();
+            zoneDot.style.backgroundColor = s.Zone >= 0 ? CityStats.DistrictColors[s.Zone] : seg == 5 ? LrtC : Brand;
             lStep.text = $"{idx + 1} / {steps.Count}";
             int k = 0; foreach (var c in segs.Children()) { c.EnableInClassList("on", k == seg); c.EnableInClassList("done", k < seg); k++; }
-            try { lTitle.text = s.Title(); lText.text = s.Text(); } catch { }
-            bulletsBox.Clear();
-            try
-            {
-                var bl = s.Bullets?.Invoke();
-                if (bl != null) foreach (var b in bl.Where(x => !string.IsNullOrWhiteSpace(x)).Take(5))
-                    {
-                        var r = new VisualElement(); r.AddToClassList("tour-bullet");
-                        var d = new VisualElement { pickingMode = PickingMode.Ignore }; d.AddToClassList("tour-bdot"); d.style.backgroundColor = s.Zone >= 0 ? CityStats.DistrictColors[s.Zone] : new Color(0.88f, 0.15f, 0.11f); r.Add(d);
-                        r.Add(new Label(b) { pickingMode = PickingMode.Ignore }); bulletsBox.Add(r);
-                    }
-            }
-            catch { }
+            try { lStepName.text = s.Title != null ? s.Title() : ""; } catch { lStepName.text = ""; }
             bPause.text = paused ? "Продолжить" : "Пауза";
-            box.style.display = DisplayStyle.Flex; host?.AddToClassList("tour-on");
+            box.style.display = DisplayStyle.Flex; host?.AddToClassList("tour-on"); TwinUI.Instance?.Middle?.AddToClassList("tour-on");
         }
 
         void Ensure()
@@ -238,9 +195,7 @@ namespace AlatauCity.DigitalTwin
             lStep = new Label { pickingMode = PickingMode.Ignore }; lStep.AddToClassList("tour-count"); top.Add(lStep);
             segs = new VisualElement(); segs.AddToClassList("tour-segs"); box.Add(segs);
             foreach (var n in SegName) { var sg = new VisualElement(); sg.AddToClassList("tour-seg"); sg.Add(new Label(n) { pickingMode = PickingMode.Ignore }); segs.Add(sg); }
-            lTitle = new Label(); lTitle.AddToClassList("tour-title"); box.Add(lTitle);
-            lText = new Label(); lText.AddToClassList("tour-text"); box.Add(lText);
-            bulletsBox = new VisualElement(); bulletsBox.AddToClassList("tour-bullets"); box.Add(bulletsBox);
+            lStepName = new Label { pickingMode = PickingMode.Ignore }; lStepName.AddToClassList("tour-stepname"); box.Add(lStepName);
             var track = new VisualElement(); track.AddToClassList("tour-track"); box.Add(track);
             bar = new VisualElement(); bar.AddToClassList("tour-bar"); track.Add(bar);
             var row = new VisualElement(); row.AddToClassList("row"); row.style.marginTop = 10; box.Add(row);
@@ -257,15 +212,15 @@ namespace AlatauCity.DigitalTwin
             ui.BlockWhileHovered(box);
             host.Add(box);
         }
-        /// <summary>The caption takes the bottom of the right column; the column's panels end above it.</summary>
-        void FitColumn()
+        /// <summary>The passport (top right) ends above the caption (bottom right).</summary>
+        void FitCard()
         {
-            if (host == null || box == null) return;
-            var col = host.parent?.Q(className: "col-right"); if (col == null) return;
-            float h = box.layout.height; if (float.IsNaN(h) || h < 10f) return;
-            col.style.bottom = h + 22f;
+            var mid = TwinUI.Instance?.Middle; if (mid == null || box == null) return;
+            var card = mid.Q(className: "card"); if (card == null) return;
+            float h = box.layout.height, H = mid.layout.height; if (float.IsNaN(h) || h < 10f || float.IsNaN(H) || H < 100f) return;
+            card.style.maxHeight = Mathf.Max(160f, H - h - 40f);
         }
-        void ReleaseColumn() { var col = host?.parent?.Q(className: "col-right"); if (col != null) col.style.bottom = StyleKeyword.Null; }
+        void ReleaseCard() { var card = TwinUI.Instance?.Middle?.Q(className: "card"); if (card != null) card.style.maxHeight = StyleKeyword.Null; }
         void JumpZone(int z) { int i = steps.FindIndex(s => s.Zone == z); if (i >= 0) Go(i); }
         void Next() { if (idx >= steps.Count - 1) Stop(); else Go(idx + 1); }
 
@@ -277,8 +232,12 @@ namespace AlatauCity.DigitalTwin
             if (Input.GetKeyDown(KeyCode.Space)) { paused = !paused; Caption(); }
             if (Input.GetKeyDown(KeyCode.RightArrow)) { Next(); return; }
             if (Input.GetKeyDown(KeyCode.LeftArrow)) { Go(idx - 1); return; }
+            // presenter shortcut: Shift + 1..8 jumps to the start of a part (Город, Gate, Golden, Growing, Green, ЛРТ, Двойник, Итог)
+            if (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift))
+                for (int d = 0; d < 8; d++) if (Input.GetKeyDown(KeyCode.Alpha1 + d)) { int j = steps.FindIndex(x => x.Seg == d); if (j >= 0) { Go(j); return; } }
             if (box == null || box.parent == null) Caption();
             var s = steps[idx];
+            TourFx.Paused = paused;
             if (!paused)
             {
                 t += Time.deltaTime;
@@ -286,7 +245,7 @@ namespace AlatauCity.DigitalTwin
                 {
                     float yf = Mathf.Clamp(2025f + (t - 1.5f) / (s.Dur - 4f) * 25f, 2025f, 2050f);
                     int y = Mathf.Min(2050, Mathf.FloorToInt(yf));
-                    if (y != TwinState.Year) { TwinState.Year = y; lText.text = s.Text(); }
+                    if (y != TwinState.Year) TwinState.Year = y;
                     if (yf < 2050f) CityTimeline.Growth(yf); else CityTimeline.StopGrowth();
                 }
                 else if (s.AnimTo > 0)
@@ -294,14 +253,15 @@ namespace AlatauCity.DigitalTwin
                     // a landmark rising: the year runs from AnimFrom to AnimTo over the step, smoothly
                     float yf = Mathf.Clamp(s.AnimFrom + (t - 1.5f) / (s.Dur - 5f) * (s.AnimTo - s.AnimFrom), s.AnimFrom, s.AnimTo);
                     int y = Mathf.FloorToInt(yf);
-                    if (y != TwinState.Year) { TwinState.Year = y; lText.text = s.Text(); }
+                    if (y != TwinState.Year) TwinState.Year = y;
                     if (yf < s.AnimTo) CityTimeline.Growth(yf); else CityTimeline.StopGrowth();
                 }
                 if (t > 0.6f && t - Time.deltaTime <= 0.6f) Caption();     // modules refresh their summaries after the first frames
+                if (s.Shots != null) foreach (var (st, act) in s.Shots) if (t >= st && t - Time.deltaTime < st) { try { act(); } catch (Exception e) { Debug.LogWarning("[Alatau] tour shot: " + e.Message); } }
                 if (t >= s.Dur) { Next(); return; }
             }
             if (bar != null) bar.style.width = Length.Percent(100f * Mathf.Clamp01(t / s.Dur));
-            FitColumn();
+            FitCard();
         }
     }
 }

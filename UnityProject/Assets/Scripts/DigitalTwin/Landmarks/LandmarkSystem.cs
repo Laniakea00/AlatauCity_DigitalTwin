@@ -21,10 +21,17 @@ namespace AlatauCity.DigitalTwin.Landmarks
         /// <summary>Planned objects drawn as ghosts (set by the Investment projects module).</summary>
         public static bool ShowPlanned;
 
-        class Node { public Landmark L; public GameObject Go; public MeshRenderer R; public MeshCollider C; public MaterialPropertyBlock B; public float hi; }
+        class Crane { public Transform Mast, Head; public MeshRenderer MastR; public MaterialPropertyBlock B; public float Yaw, Speed; }
+        class Node
+        {
+            public Landmark L; public GameObject Go; public MeshRenderer R; public MeshCollider C; public MaterialPropertyBlock B; public float hi;
+            public GameObject Site; public readonly List<Crane> Cranes = new List<Crane>(); public float lastP = -1f, glow = -1f;
+            public Transform Flyer; public float FlyT;
+        }
         readonly Dictionary<string, Node> nodes = new Dictionary<string, Node>();
         Material mat; bool built;
-        static readonly int RevealId = Shader.PropertyToID("_Reveal"), BuildId = Shader.PropertyToID("_Build"), GhostId = Shader.PropertyToID("_Ghost"), HiId = Shader.PropertyToID("_Hi");
+        static readonly int RevealId = Shader.PropertyToID("_Reveal"), BuildId = Shader.PropertyToID("_Build"), GhostId = Shader.PropertyToID("_Ghost"), HiId = Shader.PropertyToID("_Hi"),
+            FacadeId = Shader.PropertyToID("_Facade"), LandId = Shader.PropertyToID("_Land"), GlowId = Shader.PropertyToID("_Glow"), HeightId = Shader.PropertyToID("_H");
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         static void Boot() { if (Instance == null) new GameObject("Landmarks (Alatau City projects)").AddComponent<LandmarkSystem>(); }
@@ -39,7 +46,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
         // ------------------------------------------------------------------ plots: level ground, replaced buildings, no trees
         static byte[] hidden;
         /// <summary>Generic buildings of the plan that a landmark replaces (hidden in AlatauLit, not pickable).</summary>
-        public static bool IsHiddenBid(int bid) => hidden != null && bid >= 0 && bid < hidden.Length && hidden[bid] != 0;
+        public static bool IsHiddenBid(int bid) => hidden != null && bid >= 0 && bid < hidden.Length && hidden[bid] != 0 && (hidden[bid] == 1 || TwinState.Year >= 2000 + hidden[bid]);
 
         /// <summary>Before anything is draped on the terrain (roads, trees, networks, LRT): every plot is levelled to one height with a soft
         /// edge, the terrain mesh follows, the generic buildings standing on the plot are hidden, and an invisible slab keeps the trees off it.</summary>
@@ -50,23 +57,31 @@ namespace AlatauCity.DigitalTwin.Landmarks
             var mf = tgo != null ? tgo.GetComponent<MeshFilter>() : null;
             if (mf != null && mf.sharedMesh != null && mf.sharedMesh.isReadable) { mesh = mf.mesh; verts = mesh.vertices; }
             hidden = new byte[256 * 256]; int nh = 0;
+            LoadBounds();
             var db = CityDatabase.Instance;
             foreach (var l in Items)
             {
                 if (l.IsLrt || l.PadW <= 0f) continue;
                 float lvl = Ground(l.X, l.Z, Mathf.Max(l.PadW, l.PadD) * 0.5f);
                 l.Base = lvl;
-                var idx = CityGround.Flatten(l.X, l.Z, l.Yaw, l.PadW + 16f, l.PadD + 16f, lvl - 0.05f, 80f);
+                var idx = CityGround.Flatten(l.X, l.Z, l.Yaw, l.PadW + 16f, l.PadD + 16f, lvl - 0.05f, Mathf.Max(80f, Mathf.Min(l.PadW, l.PadD) * 0.15f));
                 if (verts != null) foreach (var i in idx) if (i < verts.Length) verts[i].y = CityGround.RawHeight(i);
                 float a = l.Yaw * Mathf.Deg2Rad, ca = Mathf.Cos(a), sa = Mathf.Sin(a);
-                if (db != null)
-                    foreach (var b in db.Buildings)
+                // every building whose real footprint (Resources/Landmarks/bid_bounds) touches the plot is replaced by the landmark:
+                // planned and generated ones never appear, existing ones disappear in the year the landmark's construction starts
+                if (bounds != null)
+                {
+                    float hw = l.PadW * 0.5f + 6f, hd = l.PadD * 0.5f + 6f, R = Mathf.Sqrt(hw * hw + hd * hd);
+                    for (int bid = 0; bid < boundsN && bid < hidden.Length; bid++)
                     {
-                        if (b == null || b.Source == "existing_osm" || b.Bid < 0 || b.Bid >= hidden.Length) continue;
-                        float x = b.X - l.X, z = b.Z - l.Z; if (x * x + z * z > (l.PadW + l.PadD) * (l.PadW + l.PadD)) continue;
-                        float u = x * ca - z * sa, v = x * sa + z * ca, br = Mathf.Sqrt(Mathf.Max(b.GfaM2 / Mathf.Max(b.Floors, 1), 25f)) * 0.5f + 8f;
-                        if (Mathf.Abs(u) <= l.PadW * 0.5f + br && Mathf.Abs(v) <= l.PadD * 0.5f + br) { hidden[b.Bid] = 1; nh++; }
+                        float x0 = bounds[bid * 4], z0 = bounds[bid * 4 + 1], x1 = bounds[bid * 4 + 2], z1 = bounds[bid * 4 + 3];
+                        if (x1 <= x0 || x1 < l.X - R || x0 > l.X + R || z1 < l.Z - R || z0 > l.Z + R) continue;
+                        if (!ObbHitsAabb(l.X, l.Z, ca, sa, hw, hd, x0, z0, x1, z1)) continue;
+                        var bi = db?.Get(bid);
+                        byte code = bi != null && bi.Source == "existing_osm" ? (byte)Mathf.Clamp(l.StartYear - 2000, 2, 254) : (byte)1;
+                        if (hidden[bid] == 0 || code < hidden[bid]) { if (hidden[bid] == 0) nh++; hidden[bid] = code; }
                     }
+                }
                 // an invisible slab over the plot: the film trees and hedges see "a building stands here" and keep off
                 var blk = new GameObject("Plot · " + l.Name); blk.transform.SetParent(transform, false);
                 blk.transform.SetPositionAndRotation(new Vector3(l.X, lvl, l.Z), Quaternion.Euler(0, l.Yaw, 0));
@@ -74,10 +89,71 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 blk.AddComponent<LandmarkObject>().Id = l.Id;
             }
             if (mesh != null) { mesh.vertices = verts; mesh.RecalculateNormals(); mesh.RecalculateBounds(); }
+            // buildings the base data puts on a road carriageway or on open water (Tools/fix_water_roads.py): generated and planned ones never
+            // appear, existing ones go in the year the new road opens
+            var extra = Resources.Load<TextAsset>("Landmarks/hide_extra");
+            if (extra != null && extra.bytes.Length >= 8 && extra.bytes[0] == (byte)'H')
+            {
+                var eb = extra.bytes; int n = System.BitConverter.ToInt32(eb, 4);
+                for (int i = 0; i < n && 16 + i * 8 <= eb.Length; i++)
+                {
+                    int bid = System.BitConverter.ToInt32(eb, 8 + i * 8); byte code = (byte)Mathf.Clamp(System.BitConverter.ToInt32(eb, 12 + i * 8), 1, 254);
+                    if (bid < 0 || bid >= hidden.Length) continue;
+                    if (hidden[bid] == 0 || code < hidden[bid]) { if (hidden[bid] == 0) nh++; hidden[bid] = code; }
+                }
+            }
+            BuildPadMask();
             var tex = new Texture2D(256, 256, TextureFormat.R8, false, true) { name = "Alatau hidden buildings", filterMode = FilterMode.Point, wrapMode = TextureWrapMode.Clamp };
             tex.SetPixelData(hidden, 0); tex.Apply(false, false);
             Shader.SetGlobalTexture("_AlatauHideTex", tex); Shader.SetGlobalFloat("_AlatauHideOn", 1f);
             Debug.Log("[Alatau] landmark plots levelled; generic buildings replaced: " + nh + (mesh == null ? " (terrain mesh not readable)" : ""));
+        }
+        /// <summary>Plots of the landmarks as a mask over the map (same UVs as the base map, ≈ 21 m per texel): the line layers of the plan
+        /// (street axes, ribbons) and the film roads are not drawn under a landmark (AlatauLit / AlatauRoad read _AlatauPadTex).</summary>
+        void BuildPadMask()
+        {
+            const int W = 2048, H = 2898; var px = new byte[W * H];
+            foreach (var l in Items)
+            {
+                if (l.IsLrt || l.PadW <= 0f) continue;
+                float a = l.Yaw * Mathf.Deg2Rad, ca = Mathf.Cos(a), sa = Mathf.Sin(a), hw = l.PadW * 0.5f + 3f, hd = l.PadD * 0.5f + 3f, R = Mathf.Sqrt(hw * hw + hd * hd);
+                int x0 = Mathf.Max(0, (int)(U(l.X - R) * W)), x1 = Mathf.Min(W - 1, (int)(U(l.X + R) * W) + 1);
+                int y0 = Mathf.Max(0, (int)(V(l.Z - R) * H)), y1 = Mathf.Min(H - 1, (int)(V(l.Z + R) * H) + 1);
+                for (int y = y0; y <= y1; y++) for (int x = x0; x <= x1; x++)
+                {
+                    float wx = ((x + 0.5f) / W - 0.5f) / 2.29357798e-5f, wz = ((y + 0.5f) / H - 0.491085899f) / 1.62074554e-5f;
+                    float dx = wx - l.X, dz = wz - l.Z, u = dx * ca - dz * sa, v = dx * sa + dz * ca;
+                    if (Mathf.Abs(u) <= hw && Mathf.Abs(v) <= hd) px[y * W + x] = 255;
+                }
+            }
+            var tex = new Texture2D(W, H, TextureFormat.R8, false, true) { name = "Alatau landmark plots", filterMode = FilterMode.Point, wrapMode = TextureWrapMode.Clamp };
+            tex.SetPixelData(px, 0); tex.Apply(false, true);
+            Shader.SetGlobalTexture("_AlatauPadTex", tex); Shader.SetGlobalFloat("_AlatauPadOn", 1f);
+        }
+        static float U(float x) => 2.29357798e-5f * x + 0.5f;
+        static float V(float z) => 1.62074554e-5f * z + 0.491085899f;
+        static float[] bounds; static int boundsN;
+        /// <summary>Footprint (x0, z0, x1, z1) of every building of the plan, by bid — generated from CityData/layer_buildings.bytes.</summary>
+        static void LoadBounds()
+        {
+            var ta = Resources.Load<TextAsset>("Landmarks/bid_bounds"); if (ta == null) { Debug.LogWarning("[Alatau] bid_bounds missing"); return; }
+            var b = ta.bytes; if (b.Length < 8 || b[0] != 'A' || b[1] != 'B' || b[2] != 'B' || b[3] != '1') return;
+            boundsN = System.BitConverter.ToInt32(b, 4); bounds = new float[boundsN * 4];
+            System.Buffer.BlockCopy(b, 8, bounds, 0, Mathf.Min(bounds.Length * 4, b.Length - 8));
+        }
+        /// <summary>Oriented rectangle (centre, cos/sin of yaw, half sizes) against an axis-aligned box: separating axis test.</summary>
+        static bool ObbHitsAabb(float cx, float cz, float ca, float sa, float hw, float hd, float x0, float z0, float x1, float z1)
+        {
+            // rectangle axes in world: u = (ca, -sa)·? — Unity yaw: local (u, v) -> world (u ca + v sa, -u sa + v ca)
+            float ux = ca, uz = -sa, vx = sa, vz = ca;
+            float ex = Mathf.Abs(ux) * hw + Mathf.Abs(vx) * hd, ez = Mathf.Abs(uz) * hw + Mathf.Abs(vz) * hd;
+            if (cx + ex < x0 || cx - ex > x1 || cz + ez < z0 || cz - ez > z1) return false;          // world axes
+            float bx = (x0 + x1) * 0.5f - cx, bz = (z0 + z1) * 0.5f - cz, bhx = (x1 - x0) * 0.5f, bhz = (z1 - z0) * 0.5f;
+            float pu = bx * ux + bz * uz, ru = bhx * Mathf.Abs(ux) + bhz * Mathf.Abs(uz);
+            if (Mathf.Abs(pu) > hw + ru) return false;
+            float pv = bx * vx + bz * vz, rv = bhx * Mathf.Abs(vx) + bhz * Mathf.Abs(vz);
+            if (Mathf.Abs(pv) > hd + rv) return false;
+            return true;
         }
         public bool Ready => built;
 
@@ -107,7 +183,55 @@ namespace AlatauCity.DigitalTwin.Landmarks
             var r = go.AddComponent<MeshRenderer>(); r.sharedMaterial = mat; r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.On; r.receiveShadows = true;
             var c = go.AddComponent<MeshCollider>(); c.sharedMesh = m;
             go.AddComponent<LandmarkObject>().Id = l.Id;
-            nodes[l.Id] = new Node { L = l, Go = go, R = r, C = c, B = new MaterialPropertyBlock() };
+            var node = new Node { L = l, Go = go, R = r, C = c, B = new MaterialPropertyBlock() };
+            nodes[l.Id] = node;
+            l.Anchor = go.transform.TransformPoint(LandmarkSite.TopAnchor(m));
+            try { BuildSite(node, m); } catch (Exception e) { Debug.LogWarning("[Alatau] site " + l.Id + ": " + e.Message); }
+            if (l.Model == "airport")
+            {
+                // one airliner taking off in a loop once the airport works
+                var pg = new GameObject("Airliner taking off"); pg.transform.SetParent(go.transform, false);
+                pg.AddComponent<MeshFilter>().sharedMesh = LandmarkModels.PlaneMesh(); var pr = pg.AddComponent<MeshRenderer>(); pr.sharedMaterial = mat;
+                node.Flyer = pg.transform; pg.SetActive(false);
+            }
+        }
+        /// <summary>Take-off run on the airport's runway (local x = -300, along +z): roll, rotate, climb out and leave; then again.</summary>
+        static void Fly(Node n, float dt)
+        {
+            n.FlyT = (n.FlyT + dt) % 30f; float t = n.FlyT;
+            float z, y = 0.45f, pitch = 0f;
+            if (t < 2.5f) z = -1550f;                                                                  // lined up
+            else
+            {
+                float tr = t - 2.5f; z = -1550f + 0.5f * 3.2f * tr * tr;                               // 3.2 m/s² roll
+                if (z > 150f) { float tc = Mathf.Sqrt((150f + 1550f) / 1.6f); float ta = tr - tc; float v = 3.2f * tc; z = 150f + v * ta; y = 0.45f + Mathf.Pow(Mathf.Max(ta, 0f), 1.6f) * 2.6f; pitch = -Mathf.Clamp(ta * 3f, 0f, 9f); }
+            }
+            bool vis = t < 26f;
+            if (n.Flyer.gameObject.activeSelf != vis) n.Flyer.gameObject.SetActive(vis);
+            n.Flyer.localPosition = new Vector3(-300f, y, z); n.Flyer.localRotation = Quaternion.Euler(pitch, 0f, 0f);
+        }
+
+        /// <summary>Hoarding and tower cranes of the construction site (shown only while the object is being built).</summary>
+        void BuildSite(Node n, Mesh model)
+        {
+            var l = n.L; if (l.PadW <= 0f) return;
+            var site = new GameObject("Site · " + l.Name); site.transform.SetParent(n.Go.transform, false); n.Site = site;
+            var f = new GameObject("Hoarding"); f.transform.SetParent(site.transform, false);
+            f.AddComponent<MeshFilter>().sharedMesh = LandmarkSite.Fence(l.PadW, l.PadD); f.AddComponent<MeshRenderer>().sharedMaterial = mat;
+            float mastH = Mathf.Max(l.Height + 18f, 34f), jib = Mathf.Clamp(l.Height * 0.28f + 30f, 34f, 62f);
+            var mastMesh = LandmarkSite.Mast(mastH); var headMesh = LandmarkSite.Head(jib);
+            int i = 0;
+            foreach (var spot in LandmarkSite.CraneSpots(model, l.PadW, l.PadD, l.Height))
+            {
+                var cr = new Crane { B = new MaterialPropertyBlock(), Yaw = (l.Id.GetHashCode() & 255) + i * 140f, Speed = (i & 1) == 0 ? 5.5f : -4f };
+                var mg = new GameObject("Crane mast " + i); mg.transform.SetParent(site.transform, false); mg.transform.localPosition = spot;
+                mg.AddComponent<MeshFilter>().sharedMesh = mastMesh; cr.MastR = mg.AddComponent<MeshRenderer>(); cr.MastR.sharedMaterial = mat; cr.Mast = mg.transform;
+                var hg = new GameObject("Crane head " + i); hg.transform.SetParent(site.transform, false);
+                hg.AddComponent<MeshFilter>().sharedMesh = headMesh; hg.AddComponent<MeshRenderer>().sharedMaterial = mat; cr.Head = hg.transform;
+                n.Cranes.Add(cr); i++;
+                if (l.Height < 30f) break;          // low plants: one crane is enough
+            }
+            site.SetActive(false);
         }
         /// <summary>Base of a site on sloping ground: the median of the terrain under it, so the plinth is half buried, never floating.</summary>
         static float Ground(float x, float z, float r)
@@ -124,8 +248,10 @@ namespace AlatauCity.DigitalTwin.Landmarks
         /// <summary>0 = not started, (0,1) = under construction, 1 = complete in the shown year.</summary>
         public static float Progress(Landmark l, float y)
         {
-            if (y < l.StartYear) return 0f;
-            return Mathf.Clamp01((y - l.StartYear + 1f) / (l.EndYear - l.StartYear + 1f));
+            // works run through the start year: progress grows continuously from the end of the year before (no jump when the year turns)
+            float s0 = l.StartYear - 1f;
+            if (y <= s0) return 0f;
+            return Mathf.Clamp01((y - s0) / (l.EndYear - l.StartYear + 1f));
         }
         public bool IsBuilt(Landmark l) => Progress(l, YearNow) >= 0.999f;
         public bool IsVisible(Landmark l) => l.IsLrt || Progress(l, YearNow) > 0f || ShowPlanned;
@@ -142,15 +268,48 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 bool ghost = p <= 0f && ShowPlanned;
                 bool on = p > 0f || ghost;
                 if (n.Go.activeSelf != on) n.Go.SetActive(on);
+                // completion: a sweep of light runs up the building once, in the moment it is handed over
+                if (n.lastP >= 0f && n.lastP < 0.999f && p >= 0.999f) n.glow = 0f;
+                n.lastP = p;
+                if (n.glow >= 0f) { n.glow += Time.deltaTime / 2.6f; if (n.glow > 1f) n.glow = -1f; }
                 if (!on) continue;
                 float target = (n.L == Selected ? 0.12f : 0f) + (n.L == Hovered ? 0.45f : 0f);
                 n.hi = Mathf.MoveTowards(n.hi, Mathf.Min(target, 0.9f), Time.deltaTime * 3f);
+                bool building = !ghost && p < 0.999f;
+                float H = n.L.Height;
+                // stages: site + excavation → frame rises → facade follows bottom-up → paving and planting → handed over
+                float frame = H * Mathf.Clamp01((p - 0.08f) / 0.62f), facade = H * Mathf.Clamp01((p - 0.25f) / 0.65f), land = Mathf.Clamp01((p - 0.85f) / 0.13f);
                 n.R.GetPropertyBlock(n.B);
-                n.B.SetFloat(RevealId, ghost || p >= 0.999f ? 100000f : Mathf.Max(n.L.Height * p, 2f));
-                n.B.SetFloat(BuildId, !ghost && p < 0.999f ? 1f : 0f);
+                n.B.SetFloat(RevealId, ghost || !building ? 100000f : Mathf.Max(frame, 0.6f));
+                n.B.SetFloat(BuildId, building ? 1f : 0f);
+                n.B.SetFloat(FacadeId, building ? facade : 100000f);
+                n.B.SetFloat(LandId, building ? land : 1f);
+                n.B.SetFloat(GlowId, n.glow);
+                n.B.SetFloat(HeightId, H);
                 n.B.SetFloat(GhostId, ghost ? 1f : 0f);
                 n.B.SetFloat(HiId, n.hi);
                 n.R.SetPropertyBlock(n.B);
+                if (n.Flyer != null) { bool f = !ghost && !building; if (!f && n.Flyer.gameObject.activeSelf) n.Flyer.gameObject.SetActive(false); if (f) Fly(n, Time.deltaTime); }
+                // site: hoarding and cranes while building (the cranes leave once the facade is closed)
+                if (n.Site != null)
+                {
+                    bool siteOn = building && p > 0f;
+                    if (n.Site.activeSelf != siteOn) n.Site.SetActive(siteOn);
+                    if (siteOn)
+                    {
+                        bool cranes = p < 0.93f;
+                        float top = Mathf.Max(frame + 14f, 34f);
+                        foreach (var c in n.Cranes)
+                        {
+                            if (c.Mast.gameObject.activeSelf != cranes) { c.Mast.gameObject.SetActive(cranes); c.Head.gameObject.SetActive(cranes); }
+                            if (!cranes) continue;
+                            c.MastR.GetPropertyBlock(c.B); c.B.SetFloat(RevealId, top); c.B.SetFloat(BuildId, 0f); c.B.SetFloat(GlowId, -1f); c.B.SetFloat(LandId, 1f); c.B.SetFloat(FacadeId, 100000f); c.MastR.SetPropertyBlock(c.B);
+                            c.Yaw += c.Speed * Time.deltaTime * (0.6f + 0.4f * Mathf.Sin(Time.time * 0.21f + c.Speed));
+                            c.Head.localPosition = c.Mast.localPosition + Vector3.up * (top - 0.3f);
+                            c.Head.localRotation = Quaternion.Euler(0f, c.Yaw, 0f);
+                        }
+                    }
+                }
             }
             if (Input.GetKeyDown(KeyCode.Escape) && Selected != null && !MapCamera.Typing) Select(null, false);
         }
@@ -162,7 +321,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
         void FrameShift()
         {
             var cam = Camera.main; if (cam == null) return;
-            float want = Selected != null && !Selected.IsLrt ? 0.21f : 0f;
+            float want = Selected != null && !Selected.IsLrt ? 0.035f : 0f;     // the passport stands on the right now: a nudge to the centre of the free area
             shift = Mathf.MoveTowards(shift, want, Time.unscaledDeltaTime * 0.22f);
             if (shift > 0.0005f) { cam.ResetProjectionMatrix(); var P = cam.projectionMatrix; P.m02 = -shift; cam.projectionMatrix = P; shifted = true; }
             else if (shifted) { cam.ResetProjectionMatrix(); shifted = false; }

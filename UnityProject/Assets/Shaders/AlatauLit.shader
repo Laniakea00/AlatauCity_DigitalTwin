@@ -25,7 +25,7 @@ Shader "AlatauCity/Lit"
         #pragma surface surf Soft fullforwardshadows vertex:vert addshadow noambient
         #pragma target 3.5
         #include "Assets/Shaders/AlatauFilm.cginc"
-        sampler2D _MainTex; fixed4 _Color, _AlatauSelColor; half _Ambient; float _AlatauYear, _AlatauSel, _AlatauScenario, _AlatauMode, _AlatauYearF, _AlatauGrow, _AlatauBldSat;
+        sampler2D _MainTex; fixed4 _Color, _AlatauSelColor; half _Ambient; float _AlatauYear, _AlatauSel, _AlatauScenario, _AlatauMode, _AlatauYearF, _AlatauGrow, _AlatauBldSat, _AlatauBlackout, _InfraKind, _AlatauHiOn, _AlatauHiCur; float4 _AlatauHiWave;
         sampler2D _AlatauYearTex, _AlatauStateTex, _AlatauGeoTex, _AlatauTintTex, _AlatauStyleTex, _AlatauHideTex; float _AlatauHideOn;
         struct Input { float2 uv_MainTex; float4 color : COLOR; float2 info; float2 wall; float3 worldPos; float3 worldNormal; float vface : VFACE; };
         void vert(inout appdata_full v, out Input o) { UNITY_INITIALIZE_OUTPUT(Input, o); o.info = v.texcoord1.xy; o.wall = v.texcoord.xy; }
@@ -51,7 +51,13 @@ Shader "AlatauCity/Lit"
             float part = IN.wall.y < -0.5 ? round(-IN.wall.y) : 0.0;      // 1 parapet / crown, 2 plant, 3 tile roof (AlatauRoofs)
             AFacade F = AlatauFacade(IN.wall, IN.worldPos.y - geoF.r, max(geoF.g, 3.0), max(sty.b * 255.0, 1.0), round(sty.r * 255.0), sty.g, IN.color.rgb, wn, view, IN.worldPos, part);
             // buildings replaced by a landmark (Iconic Complex, plants …) are not drawn
-            if (_AlatauHideOn > 0.5 && IN.info.y > 0.5 && tex2Dlod(_AlatauHideTex, tuv).r > 0.5) clip(-1.0);
+            if (_AlatauHideOn > 0.5 && IN.info.y > 0.5)
+            {
+                // 1 = never built (generated / planned buildings on a landmark plot); n > 1 = existing building, gone from year 2000 + n
+                float hcode = round(tex2Dlod(_AlatauHideTex, tuv).r * 255.0);
+                float yNow = _AlatauYear < 1 ? 2050 : max(_AlatauYear, _AlatauGrow > 0.5 ? _AlatauYearF : 0);
+                if (hcode > 0.5 && (hcode < 1.5 || yNow >= 2000 + hcode)) clip(-1.0);
+            }
             // the film facades stay in every tab: construction and analysis colour them by data but keep floors, windows and glass
             bool filmAny = _AlatauFilm > 0.5 && IN.info.y > 0.5;
             bool film = filmAny && _AlatauMode < 0.5;
@@ -76,13 +82,56 @@ Shader "AlatauCity/Lit"
                 // calm building colours (the plan colours stay readable, but the city reads as one maket)
                 float lb = dot(a, fixed3(0.299, 0.587, 0.114)); a = lerp(fixed3(lb, lb, lb), a, _AlatauBldSat);
             }
-            if (_AlatauFilm > 0.5 && _AlatauMode < 0.5 && IN.info.y < 0.5)
+            if (_AlatauFilm > 0.5 && IN.info.y < 0.5)
             {
-                // film look: roads, rails and rivers of the plan drawn as ribbons stay, but in quiet colours
-                float lf = dot(a, fixed3(0.299, 0.587, 0.114)); a = lerp(fixed3(lf, lf, lf), a, 0.22) * 0.97;
+                // film look, the plan's line layers (vertex colour = palette): the LRT corridor is drawn by the viaduct itself,
+                // street axes / highways / main roads / the ring road become asphalt (the film road ribbons with markings lie on top),
+                // railways a dark ballast bed, rivers and the rest stay in quiet colours
+                float3 vc = IN.color.rgb;
+                if (distance(vc, float3(0.9357, 0.3492, 0.7977)) < 0.06) clip(-1.0);
+                if (AlatauOnPad(IN.worldPos) > 0.5) clip(-1.0);
+                // per layer (FilmLook sets _InfraKind): 3 = drawn by something better in the film (river lines → the ground's water,
+                // the ring-road axis → the road ribbons), 2 = bridge decks: asphalt on top, concrete at the sides, 5 = runway concrete
+                if (_InfraKind > 2.5 && _InfraKind < 3.5) clip(-1.0);
+                bool street = min(vc.r, min(vc.g, vc.b)) > 0.965;
+                bool road = distance(vc, float3(0.4366, 0.4236, 0.41)) < 0.03 || distance(vc, float3(0.5469, 0.5371, 0.5169)) < 0.03;
+                bool rail = distance(vc, float3(0.3133, 0.3133, 0.3492)) < 0.03 || distance(vc, float3(0.4845, 0.4845, 0.5271)) < 0.03;
+                float gn = ANoise(IN.worldPos.xz * 0.35) * 0.6 + ANoise(IN.worldPos.xz * 0.05) * 0.4;
+                float3 wn0 = normalize(IN.worldNormal);
+                if (_InfraKind > 1.5 && _InfraKind < 2.5)
+                    a = wn0.y > 0.7 ? float3(0.30, 0.30, 0.31) * lerp(float3(1, 1, 1), AlatauMat(IN.worldPos.xz, 6.0).pattern, 0.8) : float3(0.62, 0.61, 0.58) * lerp(float3(1, 1, 1), AlatauMat(float2(IN.worldPos.x + IN.worldPos.z, IN.worldPos.y), 1.0).pattern, 0.5);
+                else if (_InfraKind > 4.5 && _InfraKind < 5.5) a = float3(0.55, 0.55, 0.53) * lerp(float3(1, 1, 1), AlatauMat(IN.worldPos.xz, 7.0).pattern, 0.6);
+                else if (street || road) a = float3(0.33, 0.33, 0.335) * (0.90 + 0.16 * gn);
+                else if (rail) a = float3(0.36, 0.34, 0.31) * (0.85 + 0.25 * gn);
+                else { float lf = dot(a, fixed3(0.299, 0.587, 0.114)); a = lerp(fixed3(lf, lf, lf), a, 0.22) * 0.97; }
             }
             half3 emit = a * _Ambient;
             if (film) emit += F.emit;
+            if (film && _AlatauHiOn > 0.5 && IN.info.y > 0.5)
+            {
+                // presentation spotlight in the film look: buildings of a category (tint lookup: rgb = colour, a = index / 8) take its colour
+                // and a soft glow; the newest category arrives with a wave of light running out from the centre of the district
+                float4 hi = tex2Dlod(_AlatauTintTex, tuv);
+                float idx = round(hi.a * 8.0);
+                if (idx > 0.5)
+                {
+                    float dW = distance(IN.worldPos.xz, _AlatauHiWave.xy);
+                    bool cur = abs(idx - _AlatauHiCur) < 0.5;
+                    float on = idx < _AlatauHiCur - 0.5 ? 1.0 : cur ? saturate((_AlatauHiWave.z - dW) / 160.0) : 0.0;
+                    float front = cur ? exp(-abs(_AlatauHiWave.z - dW) / 60.0) : 0.0;
+                    float pulse = 0.85 + 0.15 * sin(_Time.y * 2.4 + idx);
+                    float lum0 = dot(a, fixed3(0.299, 0.587, 0.114));
+                    a = lerp(a, hi.rgb * (0.65 + 0.6 * lum0), 0.85 * on);
+                    emit = lerp(emit, emit * 0.5, on) + hi.rgb * (0.42 * pulse * on + 1.3 * front);
+                }
+                else { a *= 0.86; emit *= 0.8; }                                // the rest of the city steps back a little
+            }
+            if (film && _AlatauBlackout > 0.001 && IN.info.y > 0.5)
+            {
+                // presentation: power outage — the buildings marked in the tint lookup (alpha) lose their lights
+                float dk = tex2Dlod(_AlatauTintTex, tuv).a * _AlatauBlackout;
+                emit *= 1.0 - 0.94 * dk; a *= 1.0 - 0.45 * dk;
+            }
             if (grow)
             {
                 // fresh buildings glow warm for about a year, then settle into the city colour

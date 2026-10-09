@@ -161,6 +161,23 @@ namespace AlatauCity.DigitalTwin
                     plots++;
                 }
             }
+            // villages that stand today (the existing low houses): orchards and shade trees round every house, as in any aul of the
+            // Almaty region, so a village reads as green gardens and not as boxes scattered over the steppe
+            int village = 0; var dbv = CityDatabase.Instance;
+            if (dbv != null)
+                foreach (var b in dbv.Buildings)
+                {
+                    if (b == null || b.Source != "existing_osm" || b.HeightM > 10f) continue;
+                    int hb = (int)(unchecked((uint)b.Bid * 2654435761u) >> 8); int nt = 2 + (hb & 1) + ((hb >> 1) & 1);
+                    for (int t = 0; t < nt; t++)
+                    {
+                        float a = ((hb >> (2 + t * 4)) & 15) / 16f * Mathf.PI * 2f, r = 9f + ((hb >> (5 + t * 3)) & 7);
+                        float gx = b.X + Mathf.Cos(a) * r, gz = b.Z + Mathf.Sin(a) * r; long k = Key(C(gx), C(gz));
+                        if (!street.TryGetValue(k, out var gl)) street[k] = gl = new List<Vector3>();
+                        gl.Add(new Vector3(gx, gz, ((hb >> (12 + t)) & 7) == 0 ? 1 : 0)); village++;
+                    }
+                }
+            Debug.Log($"[Alatau] film trees: {village} trees in the gardens of existing villages");
             hi[3] = lo[3] = HedgeMesh();
             Debug.Log($"[Alatau] film trees: {plots} house plots");
             hi[0] = Blob("Tree round", 9, 6, new Vector3(3.3f, 3.5f, 3.3f), 3.2f, 0.28f, 0.22f, new Color(0.17f, 0.27f, 0.13f), new Color(0.31f, 0.42f, 0.19f), 11);

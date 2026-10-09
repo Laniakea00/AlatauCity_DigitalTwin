@@ -57,6 +57,14 @@ namespace AlatauCity.DigitalTwin
             foreach (var r in FindObjectsByType<MeshRenderer>(FindObjectsSortMode.None))
                 if (r.name.Contains("District boundary") || r.name == "Main roads" || r.name == "Highways" || r.name == "Planned street axes") list.Add(r);
             roads = gameObject.AddComponent<FilmRoads>(); trees = gameObject.AddComponent<FilmTrees>();
+            // how the plan's line layers look in the film (AlatauLit reads _InfraKind): rivers are drawn by the ground's water, the ring-road
+            // axis by the road ribbons, bridges get a deck, runways concrete
+            foreach (var r in FindObjectsByType<MeshRenderer>(FindObjectsSortMode.None))
+            {
+                float kind = r.name == "Rivers" || r.name.StartsWith("BAKAD") ? 3f : r.name.Contains("bridges") ? 2f : r.name == "Runways" ? 5f : 0f;
+                if (kind == 0f) continue;
+                var mpb = new MaterialPropertyBlock(); r.GetPropertyBlock(mpb); mpb.SetFloat("_InfraKind", kind); r.SetPropertyBlock(mpb);
+            }
             curtains = list.ToArray();
 
             // material photo textures (built by Alatau City > Build material textures); without them the look falls back to flat colours
@@ -130,7 +138,7 @@ namespace AlatauCity.DigitalTwin
             if (post != null)
             {
                 post.enabled = true; post.aoRadius = Mathf.Clamp(dist * 0.012f, 5f, 60f);
-                post.focus = dist; post.focusRange = dist * 0.42f; post.depthOfField = true; post.maxBlur = 5f * (1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(3500f, 9000f, dist)));
+                post.focus = dist; post.focusRange = dist * 0.75f; post.depthOfField = true; post.maxBlur = 2f * (1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(3500f, 9000f, dist)));   // a hint of depth only: blur reads as low quality
             }
             foreach (var r in curtains) if (r != null && r.enabled) r.enabled = false;
             Shader.SetGlobalFloat("_AlatauScenIdx", (int)TwinState.Scenario);

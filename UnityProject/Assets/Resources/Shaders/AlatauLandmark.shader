@@ -13,6 +13,10 @@ Shader "AlatauCity/Landmark"
         _Build ("Under construction", Range(0, 1)) = 0
         _Ghost ("Planned (ghost)", Range(0, 1)) = 0
         _Hi ("Highlight", Range(0, 1)) = 0
+        _Facade ("Facade closed up to (m)", Float) = 100000
+        _Land ("Landscaping done", Range(0, 1)) = 1
+        _Glow ("Hand-over light sweep (0..1, <0 off)", Float) = -1
+        _H ("Object height (m)", Float) = 100
     }
     SubShader
     {
@@ -24,7 +28,7 @@ Shader "AlatauCity/Landmark"
         #pragma surface surf Soft fullforwardshadows vertex:vert addshadow noambient
         #pragma target 3.5
         #include "Assets/Shaders/AlatauFilm.cginc"
-        float _Reveal, _Build, _Ghost, _Hi;
+        float _Reveal, _Build, _Ghost, _Hi, _Facade, _Land, _Glow, _H;
         struct Input { float4 color : COLOR; float2 fac; float2 mat; float ly; float3 worldPos; float3 worldNormal; float4 screenPos; };
         void vert(inout appdata_full v, out Input o)
         {
@@ -41,7 +45,7 @@ Shader "AlatauCity/Landmark"
         void surf(Input IN, inout SurfaceOutput o)
         {
             // every derivative first, before any branch
-            float2 uv = IN.fac, fw = fwidth(uv);
+            float2 uv = IN.fac, fw = fwidth(uv); float lyW = fwidth(IN.ly);
             float3 n = normalize(IN.worldNormal), view = normalize(_WorldSpaceCameraPos - IN.worldPos);
             clip(_Reveal - IN.ly);
             if (_Ghost > 0.01)
@@ -50,7 +54,10 @@ Shader "AlatauCity/Landmark"
                 float ign = frac(52.9829189 * frac(dot(floor(sp), float2(0.06711056, 0.00583715))));
                 clip((1.0 - 0.72 * _Ghost) - ign);
             }
-            int id = (int)round(IN.mat.x); float prm = max(IN.mat.y, 0.05);
+            int id = (int)round(IN.mat.x);
+            bool tree = IN.mat.y < -6.5;                                   // LandmarkKit.TreeTag: planted at the end of construction
+            float prm = tree ? 3.0 : max(IN.mat.y, 0.05);
+            if (tree && _Build > 0.5) clip(_Land * 1.15 - AHash2(floor(IN.worldPos.xz / 4.0)));
             float3 a = IN.color.rgb; float3 emit = 0; float spec = 0;
             float film = step(0.5, _AlatauFilm);
             float3 rdir = reflect(-view, n);
@@ -130,14 +137,51 @@ Shader "AlatauCity/Landmark"
                 a *= (1.0 - joint * saturate(1.3 - max(tw.x, tw.y) * 2.5)) * (0.96 + 0.07 * grain);
             }
 
-            // under construction: bare concrete frame just below the working level, an orange safety edge at the top
-            if (_Build > 0.5 && id != 4 && id != 6 && id != 7)
+            // under construction (stages driven by LandmarkSystem):
+            //  · above the closed facade and below the working level: the bare frame — concrete slabs every floor, dark open floors
+            //    with columns between them, an orange safety edge on the working level;
+            //  · the ground of the plot stays an earth site with tyre tracks until paving and planting (_Land)
+            if (_Build > 0.5)
             {
-                float fromTop = _Reveal - IN.ly;
-                float bare = saturate(1.0 - fromTop / 26.0);
-                a = lerp(a, float3(0.62, 0.61, 0.59) * (0.95 + 0.08 * grain), bare); emit *= 1.0 - bare; spec *= 1.0 - bare;
-                float edge = saturate(1.0 - fromTop / 2.2);
-                a = lerp(a, float3(0.98, 0.52, 0.10), edge); emit += float3(0.98, 0.52, 0.10) * edge * 0.35;
+                bool ground = IN.ly < 1.2 && n.y > 0.6;
+                bool raised = !ground && IN.ly >= 1.2 && (id == 4 || (id == 6 && !tree) || id == 7);
+                if (raised)
+                {
+                    // terraces and roof gardens above the ground: a bare concrete slab until they are paved and planted (never soil in the air)
+                    float l2 = saturate(_Land * 1.5 - 0.5);
+                    float3 slabC = float3(0.64, 0.63, 0.60) * (0.92 + 0.10 * grain);
+                    a = lerp(slabC, a, l2); emit *= l2; spec *= l2;
+                }
+                else if (ground || id == 4 || (id == 6 && !tree) || id == 7)
+                {
+                    float tracks = smoothstep(0.35, 0.5, abs(frac(dot(IN.worldPos.xz, float2(0.083, 0.052))) - 0.5)) * 0.08;
+                    float3 soil = float3(0.50, 0.42, 0.32) * (0.82 + 0.30 * grain + 0.10 * ANoise(IN.worldPos.xz * 0.05)) - tracks;
+                    float l = ground || id == 4 ? _Land : saturate(_Land * 1.5 - 0.5);
+                    a = lerp(soil, a, l); emit *= l; spec *= l;
+                }
+                else if (!tree && IN.ly > _Facade && IN.ly > 1.2)
+                {
+                    float fh = (id == 1 || id == 8 || id == 0) ? max(prm, 3.0) : 4.0;
+                    float q = frac(IN.ly / fh), qw = max(lyW / fh, 1e-4);
+                    float slab = 1.0 - saturate((q - 0.16) / qw + 0.5);
+                    float colm = 1.0 - saturate((abs(frac(uv.x / 7.5) - 0.5) - 0.44) / max(fw.x / 7.5, 1e-4) + 0.5);
+                    float3 concrete = float3(0.66, 0.65, 0.62) * (0.92 + 0.10 * grain);
+                    float3 inside = float3(0.09, 0.09, 0.10) + concrete * 0.08;
+                    float wall = 1.0 - saturate(abs(n.y) * 3.0);
+                    float3 frameA = lerp(concrete, lerp(inside, concrete, saturate(slab + colm)), wall);
+                    // the facade crew works a few metres above the closed part: a band of scaffold mesh
+                    float net = saturate(1.0 - (IN.ly - _Facade) / 6.0) * wall;
+                    frameA = lerp(frameA, float3(0.20, 0.42, 0.30) * (0.9 + 0.2 * grain), net * 0.85);
+                    a = frameA; emit = 0; spec = 0.05;
+                    float edge = saturate(1.0 - (_Reveal - IN.ly) / 2.2);
+                    a = lerp(a, float3(0.98, 0.52, 0.10), edge); emit += float3(0.98, 0.52, 0.10) * edge * 0.35;
+                }
+            }
+            // hand-over: a warm band of light runs up the building once
+            if (_Glow >= 0.0)
+            {
+                float band = exp(-abs(IN.ly - _Glow * _H * 1.15) / max(_H * 0.04, 3.0));
+                emit += float3(1.0, 0.86, 0.58) * band * 1.4 + a * (1.0 - _Glow) * 0.18;
             }
             if (_Ghost > 0.01) { a = lerp(a, float3(0.70, 0.78, 0.92), 0.55 * _Ghost); emit += float3(0.10, 0.16, 0.26) * _Ghost; spec = 0; }
 

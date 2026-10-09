@@ -25,7 +25,7 @@ namespace AlatauCity.DigitalTwin.Modules
         static readonly float[] InfraShare = { 0.60f, 0f, 0.10f, 0.30f };   // budget, private, PPP, quasi-state (norms.FUNDING["infra"])
 
         Label eyebrow, summary, sGap, moneyNote; readonly Label[] kv = new Label[4], kl = new Label[4]; readonly VisualElement[] kb = new VisualElement[4];
-        TwinChart sChart, money; VisualElement worstList, contractors;
+        BuildChart bChart; Label bcV1, bcL1, bcV2, bcL2; VisualElement srcBar, srcLeg; VisualElement worstList, contractors;
 
         static bool showNets = true, showRoads = true, showTraffic;
         VisualElement netRows; Label trafficNote; Button chipNets, chipRoads, chipTraffic;
@@ -37,14 +37,21 @@ namespace AlatauCity.DigitalTwin.Modules
         {
             var L = LineLayers.Instance; if (L == null) return;
             L.Style(0.45f, 0f, 1f);
-            foreach (var k in LineLayers.NetKeys) L.Show(k, showNets);
-            L.Show("roadworks", showRoads); L.Show("traffic", showTraffic);
+            // in the presentation the overlays (networks, road works) belong to their own step ("Контроль стройки")
+            bool nets = TwinTour.Running ? TourOverlays : showNets, roads = TwinTour.Running ? TourOverlays : showRoads, traffic = !TwinTour.Running && showTraffic;
+            foreach (var k in LineLayers.NetKeys) L.Show(k, nets);
+            L.Show("roadworks", roads); L.Show("traffic", traffic);
         }
+        /// <summary>Presentation: show networks and road works (the "Контроль стройки" step) or keep the city clean (other steps).</summary>
+        public static bool TourOverlays;
+        public static void ApplyTourLayers() => ApplyLayers();
         Button Chip(VisualElement parent, string text, System.Func<bool> get, System.Action toggle)
         {
             Button b = null; b = new Button(() => { toggle(); ApplyLayers(); b.EnableInClassList("active", get()); Refresh(); }) { text = text };
             b.AddToClassList("chip"); b.EnableInClassList("active", get()); parent.Add(b); return b;
         }
+
+        static string Money(float bln) => bln >= 1000f ? Loc.N1(bln / 1000f) + " трлн ₸" : Loc.N0(bln) + " млрд ₸";
 
         protected override void Build()
         {
@@ -63,18 +70,19 @@ namespace AlatauCity.DigitalTwin.Modules
 
             BuildBimTeaser();
 
-            var sb = Widgets.Block(panel, Loc.T("c_scurve"), Loc.T("c_scurve_u"));
-            sChart = new TwinChart { Colors = new[] { new Color(0.53f, 0.53f, 0.53f), new Color(0.99f, 0.99f, 0.99f) }, Stacked = false, LineWidths = new[] { 1.5f, 2.5f } }; sb.Add(sChart);
-            var lg = new VisualElement(); lg.AddToClassList("legend"); sb.Add(lg);
-            lg.Add(Widgets.LegendItem(new Color(0.53f, 0.53f, 0.53f), Loc.T("c_plan"))); lg.Add(Widgets.LegendItem(new Color(0.99f, 0.99f, 0.99f), Loc.T("c_fact")));
-            sGap = new Label(); sGap.AddToClassList("note"); sGap.style.marginTop = 6; sb.Add(sGap);
-
-            var mb = Widgets.Block(panel, Loc.T("c_money"), Loc.T("c_money_u"));
-            money = new TwinChart { Colors = SrcColors, Bars = true }; mb.Add(money);
-            var ml = new VisualElement(); ml.AddToClassList("legend"); mb.Add(ml);
-            string[] src = { "src_budget", "src_private", "src_ppp", "src_quasi" };
-            for (int i = 0; i < 4; i++) ml.Add(Widgets.LegendItem(SrcColors[i], Loc.T(src[i])));
-            moneyNote = new Label(); moneyNote.AddToClassList("note"); moneyNote.style.marginTop = 6; mb.Add(moneyNote);
+            // one chart: commissioning plan vs fact (lines) over the money spent per year (columns)
+            var cbk = Widgets.Block(panel, "Стройка: план, факт и деньги", "");
+            var heads = new VisualElement(); heads.AddToClassList("bc-heads"); cbk.Add(heads);
+            VisualElement Head(out Label v, out Label l) { var h = new VisualElement(); h.AddToClassList("bc-head"); v = new Label("—"); v.AddToClassList("bc-v"); l = new Label(); l.AddToClassList("bc-l"); h.Add(v); h.Add(l); heads.Add(h); return h; }
+            Head(out bcV1, out bcL1); Head(out bcV2, out bcL2);
+            bChart = new BuildChart { MoneyColors = SrcColors }; cbk.Add(bChart);
+            // the money by source in the shown year: one thin segmented bar instead of four colours inside the chart
+            srcBar = new VisualElement(); srcBar.AddToClassList("bc-src"); cbk.Add(srcBar);
+            srcLeg = new VisualElement(); srcLeg.AddToClassList("bc-srcleg"); cbk.Add(srcLeg);
+            sGap = new Label(); sGap.AddToClassList("note"); sGap.style.marginTop = 6; cbk.Add(sGap);
+            moneyNote = new Label(); moneyNote.style.display = DisplayStyle.None; cbk.Add(moneyNote);
+            // the year runs smoothly in the presentation: the chart follows it every frame
+            bChart.schedule.Execute(() => { if (bChart.panel == null) return; float yf = Landmarks.LandmarkSystem.YearNow; if (Mathf.Abs(yf - bChart.Year) > 0.002f) { bChart.Year = yf; bChart.MarkDirtyRepaint(); } }).Every(33);
 
             Right();
             var nb = Widgets.Block(panel, Loc.T("c_nets"), Loc.T("c_nets_sub"));
@@ -93,7 +101,7 @@ namespace AlatauCity.DigitalTwin.Modules
 
             var n = Widgets.Block(panel); var note = new Label(Loc.T("c_note")); note.AddToClassList("note"); n.Add(note);
             // secondary blocks start folded: the first screen shows status, plan/fact and the worst sites
-            Widgets.SetCollapsed(mb, true); Widgets.SetCollapsed(cb, true);
+            Widgets.SetCollapsed(cb, true);
         }
 
         public override void Refresh()
@@ -134,7 +142,6 @@ namespace AlatauCity.DigitalTwin.Modules
             {
                 var pl = new float[TwinData.NY]; var fa = new float[TwinData.NY];
                 for (int i = 0; i < TwinData.NY; i++) for (int dd = 0; dd < 4; dd++) if (d < 0 || dd == d) { pl[i] += TwinData.PlanGfa[s][dd][i]; fa[i] += TwinData.FactGfa[s][dd][i]; }
-                sChart.Series = new[] { pl, fa }; sChart.MarkYear = y; sChart.Refresh();
                 float gp = pl[TwinData.YI(y)], gf = fa[TwinData.YI(y)];
                 sGap.text = gp - gf > 0.05f ? string.Format(Loc.T("c_gap"), y, Loc.N1(gp - gf), Mathf.RoundToInt(100f * (gp - gf) / Mathf.Max(gp, 0.01f)), Loc.N1(gp)) : string.Format(Loc.T("c_gap0"), y, Loc.N1(gp));
 
@@ -144,7 +151,18 @@ namespace AlatauCity.DigitalTwin.Modules
                     float inf = 0; foreach (var kvp in TwinData.CapexInfra[s]) inf += kvp.Value[i];
                     for (int k = 0; k < 4; k++) { float v = inf * InfraShare[k]; for (int dd = 0; dd < 4; dd++) v += TwinData.CapexSources[s][dd][k][i]; ser[k][i] = v; }
                 }
-                money.Series = ser; money.HighlightIndex = TwinData.YI(y); money.MarkYear = -1; money.Refresh();
+                bChart.Plan = pl; bChart.Fact = fa; bChart.Money = ser; bChart.Year = Mathf.Max(y, Landmarks.LandmarkSystem.YearNow); bChart.Refresh();
+                srcBar.Clear(); srcLeg.Clear(); int yi2 = TwinData.YI(y); float tot = 0; for (int k = 0; k < 4; k++) tot += ser[k][yi2];
+                string[] srcK = { "src_budget", "src_private", "src_ppp", "src_quasi" };
+                for (int k = 0; k < 4 && tot > 0; k++)
+                {
+                    float sh = ser[k][yi2] / tot; if (sh <= 0.001f) continue;
+                    var seg = new VisualElement(); seg.AddToClassList("bc-seg"); seg.style.flexGrow = sh; seg.style.backgroundColor = SrcColors[k]; srcBar.Add(seg);
+                    var it = new VisualElement(); it.AddToClassList("bc-si"); var dot = new VisualElement(); dot.AddToClassList("bc-sdot"); dot.style.backgroundColor = SrcColors[k]; it.Add(dot);
+                    it.Add(new Label(Loc.T(srcK[k]) + " " + Mathf.RoundToInt(sh * 100f) + " %")); srcLeg.Add(it);
+                }
+                bcV1.text = Loc.N1(gf) + " млн м²"; bcL1.text = $"введено к {y} · {Mathf.RoundToInt(100f * gf / Mathf.Max(gp, 0.01f))} % плана";
+                bcV2.text = Money(factAll); bcL2.text = $"освоено в {y} · {Mathf.RoundToInt(pct)} % плана года";
                 moneyNote.text = string.Format(Loc.T("c_money_note"), y, Loc.N0(planAll), Loc.N0(factAll), Mathf.RoundToInt(pct), Loc.N0(infra));
             }
 

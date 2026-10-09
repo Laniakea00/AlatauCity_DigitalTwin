@@ -11,7 +11,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
     public class LandmarkPins : MonoBehaviour
     {
         public static LandmarkPins Instance;
-        class Pin { public Landmark L; public LrtLayer.Station St; public VisualElement El, Box; public Label Name; public VisualElement Dot; public int Prio; public float X, Y; }
+        class Pin { public Landmark L; public LrtLayer.Station St; public VisualElement El, Box; public Label Name, Stat; public VisualElement Dot; public int Prio; public float X, Y; public int StIdx = -1; }
         readonly List<Pin> pins = new List<Pin>();
         VisualElement host;
 
@@ -42,7 +42,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             var n = new Label(st != null ? "ЛРТ" : l.Short) { pickingMode = PickingMode.Ignore }; n.AddToClassList("lm-name"); box.Add(n); p.Name = n;
             if (st == null)
             {
-                var s = new Label(LandmarkCatalog.StatusOf(l)) { pickingMode = PickingMode.Ignore }; s.AddToClassList("lm-st"); s.AddToClassList(LandmarkCatalog.StatusCls[(int)l.Status]); box.Add(s);
+                var s = new Label(LandmarkCatalog.StatusOf(l)) { pickingMode = PickingMode.Ignore }; s.AddToClassList("lm-st"); box.Add(s); p.Stat = s;
             }
             w.Add(box);
             var stem = new VisualElement { pickingMode = PickingMode.Ignore }; stem.AddToClassList("lm-stem"); w.Add(stem);
@@ -57,6 +57,15 @@ namespace AlatauCity.DigitalTwin.Landmarks
         {
             if (TwinUI.Instance == null) return;
             EnsurePins();
+            // the status chip follows the year the map shows (in 2050 a finished plant says «Работает», not «Строится»)
+            foreach (var p in pins)
+            {
+                if (p.Stat == null || p.L == null) continue;
+                int si = LandmarkCatalog.StatusIdx(p.L); string txt = LandmarkCatalog.StatusLabel(p.L);
+                if (si == p.StIdx && txt == p.Stat.text) continue;
+                if (p.StIdx >= 0) p.Stat.RemoveFromClassList(LandmarkCatalog.StatusCls[p.StIdx]);
+                p.StIdx = si; p.Stat.text = txt; p.Stat.AddToClassList(LandmarkCatalog.StatusCls[si]);
+            }
             var cam = Camera.main; var sys = LandmarkSystem.Instance; if (cam == null || sys == null || !sys.Ready || host == null || host.panel == null) return;
             string mod = TwinState.Module; bool objectsTab = mod == "objects", overview = mod == "overview";
             var mc = cam.GetComponent<MapCamera>(); float camD = mc != null ? mc.distance : 30000f;
@@ -78,8 +87,10 @@ namespace AlatauCity.DigitalTwin.Landmarks
                     float pr = LandmarkSystem.Progress(p.L, y);
                     // in the presentation: the labels of the zone being shown (its projects), the rest of the city stays clean
                     show = tour ? sel || (zone >= 0 && p.L.District == zone && (pr > 0f || objectsTab))
-                                : sel || objectsTab || (overview && pr >= 0.999f && !TwinState.Playing);
-                    wp = p.L.World + Vector3.up * (p.L.Height * Mathf.Max(pr, objectsTab ? 1f : pr) + 10f);
+                                : sel || objectsTab || (overview && (pr > 0f || p.StIdx == 2) && !TwinState.Playing);   // built, being built or being prepared
+                    float vis = pr >= 0.999f || (objectsTab && pr <= 0f) ? 1f : Mathf.Clamp01((pr - 0.08f) / 0.62f);
+                    var top = p.L.Anchor != Vector3.zero ? p.L.Anchor : p.L.World + Vector3.up * p.L.Height;
+                    wp = new Vector3(top.x, p.L.World.y + (top.y - p.L.World.y) * vis + 10f, top.z);
                     p.El.EnableInClassList("planned", pr <= 0f);
                     p.El.EnableInClassList("hover", sys.Hovered == p.L);
                 }

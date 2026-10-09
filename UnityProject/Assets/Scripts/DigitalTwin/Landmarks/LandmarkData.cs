@@ -21,16 +21,40 @@ namespace AlatauCity.DigitalTwin.Landmarks
         public List<(string k, string v)> Facts = new List<(string, string)>();
         public string Source, SourceDate;
         public Vector3 World;                 // filled at build time: base on the terrain
+        /// <summary>Top of the tallest part of the model (world): the label stands over it.</summary>
+        public Vector3 Anchor;
         public float Base;                    // level of the plot after the ground was levelled
         public bool IsLrt;
         public Landmark F(string k, string v) { Facts.Add((k, v)); return this; }
+        // the second phase of a working object (scenario of the twin, not announced): «Расширение» on the map in those years
+        public int S2Start, S2End; public string S2;
+        public Landmark Stage2(string what, int a, int b) { S2 = what; S2Start = a; S2End = b; Facts.Add(("2-я очередь", what + " · " + a + "–" + b + " (сценарий двойника)")); return this; }
     }
 
     public static class LandmarkCatalog
     {
-        public static readonly string[] StatusText = { "Работает", "Строится", "Подготовка к стройке", "Соглашение (MoU)", "Концепция" };
-        public static readonly string[] StatusCls = { "ok", "warn", "warn", "info", "muted" };
-        public static string StatusOf(Landmark l) => StatusText[(int)l.Status];
+        public static readonly string[] StatusText = { "Работает", "Строится", "Подготовка к стройке", "Соглашение (MoU)", "Концепция", "Пусконаладка", "Расширение" };
+        public static readonly string[] StatusCls = { "ok", "warn", "warn", "info", "muted", "info", "info" };
+        /// <summary>The status with the share built: «Строится 45 %».</summary>
+        public static string StatusLabel(Landmark l)
+        {
+            int si = StatusIdx(l);
+            return si == 1 ? StatusText[1] + " " + Mathf.RoundToInt(LandmarkSystem.Progress(l, TwinState.Year) * 100f) + " %" : StatusText[si];
+        }
+        public static string StatusOf(Landmark l) => StatusText[StatusIdx(l)];
+        public static string ClsOf(Landmark l) => StatusCls[StatusIdx(l)];
+        /// <summary>Status in the year the map shows: built by then → «Работает», under way → «Строится», otherwise today's status.</summary>
+        public static int StatusIdx(Landmark l)
+        {
+            if (l.IsLrt) return (int)l.Status;
+            int y = TwinState.Year; float p = LandmarkSystem.Progress(l, y);
+            if (p >= 0.999f) return l.S2End > 0 && y >= l.S2Start && y < l.S2End ? 6 : 0;   // working, or its 2nd phase is being built
+            if (p >= 0.85f) return 5;                                                          // the last months: commissioning
+            if (p > 0f) return 1;
+            if (y >= l.StartYear - 2) return 2;                                                // a year or two before: site preparation
+            // further ahead: today's status, but a project that is not started yet is never «Работает» / «Строится»
+            return l.Status == LStatus.Working || l.Status == LStatus.Construction ? 2 : (int)l.Status;
+        }
 
         public static List<Landmark> All()
         {
@@ -45,7 +69,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 Source = "SOM, Forbes.kz, primeminister.kz", SourceDate = "05.03.2026 / 23.04.2026 / 26.08.2026"
             }.F("Площадь", "276 800 м²").F("Главная башня", "272 м · 56 этажей — офисы и резиденции").F("Вторая башня", "80 м — отель 5* и брендированные резиденции")
              .F("Подиум", "58 000 м², 3 уровня террасами к площади").F("Конструкции", "сейсмостойкий каркас с демпферами").F("Инвестиции", "> $800 млн (по другим данным > $1 млрд), без бюджетных денег")
-             .F("Токенизация", "Iconic Tower — до $50 млн на KASE (план до конца 2026)").F("Сроки", "сдача конец 2029 – начало 2030"));
+             .F("Токенизация", "Iconic Tower — до $50 млн на KASE (план до конца 2026)").F("Сроки", "сдача конец 2029 – начало 2030").Stage2("культурный центр на площади", 2037, 2039));
             L.Add(new Landmark
             {
                 Id = "lotte_l7", Name = "L7 by Lotte", Short = "L7 by Lotte", Company = "Lotte Hotels & Resorts (Южная Корея)",
@@ -62,7 +86,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 StartYear = 2025, EndYear = 2027, YearOfficial = true, X = -5050, Z = -16926, Yaw = 129.8f, PadW = 430f, PadD = 300f, Height = 40f, Radius = 215f, ViewYaw = 200f, ViewPitch = 24f,
                 Source = "Kapital.kz, 24.kz", SourceDate = "20.05.2025 / 26.08.2026"
             }.F("Инвестиции", "≈ $360 млн (81 млрд ₸); первый этап $160 млн").F("Сырьё", "210 тыс. т картофеля в год").F("Рабочие места", "≈ 900")
-             .F("Сроки", "1-я очередь — 03.2026, полная мощность — 09.2027"));
+             .F("Сроки", "1-я очередь — 03.2026, полная мощность — 09.2027").Stage2("новые линии", 2030, 2032));
             L.Add(new Landmark
             {
                 Id = "griffin", Name = "Griffin Logopark Almaty", Short = "Griffin Logopark", Company = "Griffin Partners · кредит ЕАБР",
@@ -71,7 +95,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 StartYear = 2026, EndYear = 2027, YearOfficial = true, X = -5430, Z = -19400, Yaw = 7.9f, PadW = 380f, PadD = 420f, Height = 15f, Radius = 210f, ViewYaw = 200f, ViewPitch = 26f,
                 Source = "ЕАБР, bizmedia.kz", SourceDate = "10.08.2026 / 25.09.2026"
             }.F("Инвестиции", "$125 млн").F("Склады", "≈ 120 тыс. м²").F("Рабочие места", "≈ 600").F("Сроки", "1-я фаза — I кв. 2027")
-             .F("Примечание", "площадка у БАКАД формально относится к Алматы"));
+             .F("Примечание", "площадка у БАКАД формально относится к Алматы").Stage2("третий склад", 2031, 2033));
 
             // ---------------- Golden: science, education, medicine
             L.Add(new Landmark
@@ -81,7 +105,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 District = 1, Status = LStatus.Concept, StatusNote = "прорабатывается",
                 StartYear = 2029, EndYear = 2032, YearOfficial = false, X = -1457, Z = -12698, Yaw = 45.6f, PadW = 420f, PadD = 360f, Height = 58f, Radius = 210f, ViewYaw = 190f, ViewPitch = 22f,
                 Source = "Kazinform, Kapital.kz", SourceDate = "29.09.2025 / 09.2026"
-            }.F("Студенты", "до 40 000 (кампус Golden)").F("Сроки", "не объявлены (в демо — 2032)"));
+            }.F("Студенты", "до 40 000 (кампус Golden)").F("Сроки", "не объявлены (в демо — 2032)").Stage2("общежития и лаборатории", 2034, 2037));
             L.Add(new Landmark
             {
                 Id = "medcluster", Name = "Медицинский кластер Golden", Short = "Медкластер", Company = "ACA · партнёры не объявлены",
@@ -89,7 +113,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 District = 1, Status = LStatus.Concept, StatusNote = "в функциональном зонировании генплана",
                 StartYear = 2030, EndYear = 2033, YearOfficial = false, X = -1075, Z = -10343, Yaw = 105.2f, PadW = 280f, PadD = 210f, Height = 48f, Radius = 140f, ViewYaw = 200f, ViewPitch = 22f,
                 Source = "Kazinform", SourceDate = "29.09.2025"
-            }.F("Сроки", "не объявлены (в демо — 2033)"));
+            }.F("Сроки", "не объявлены (в демо — 2033)").Stage2("реабилитационный центр", 2036, 2039));
             L.Add(new Landmark
             {
                 Id = "kpark", Name = "K-Park", Short = "K-Park", Company = "Корейские партнёры · ACA",
@@ -97,7 +121,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 District = 1, Status = LStatus.Construction, StatusNote = "первый камень — 14.09.2025",
                 StartYear = 2025, EndYear = 2027, YearOfficial = false, X = -515, Z = -8826, Yaw = 128f, PadW = 360f, PadD = 280f, Height = 14f, Radius = 180f, ViewYaw = 200f, ViewPitch = 28f,
                 Source = "Kazinform", SourceDate = "14.09.2025"
-            }.F("Площадь", "10 га").F("Сроки", "завершение не объявлено (в демо — 2027)"));
+            }.F("Площадь", "10 га").F("Сроки", "завершение не объявлено (в демо — 2027)").Stage2("вторая очередь парка", 2031, 2033));
             L.Add(new Landmark
             {
                 Id = "mars", Name = "Завод Mars Petcare", Short = "Mars Petcare", Company = "Mars Petcare Kazakhstan",
@@ -105,7 +129,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 District = 1, Status = LStatus.Construction, StatusNote = "работы начаты (сводка 26.08.2026)",
                 StartYear = 2026, EndYear = 2028, YearOfficial = false, X = -6209, Z = -3488, Yaw = 21.9f, PadW = 430f, PadD = 300f, Height = 42f, Radius = 215f, ViewYaw = 200f, ViewPitch = 24f,
                 Source = "DigitalBusiness.kz, 24.kz", SourceDate = "20.02.2026 / 26.08.2026"
-            }.F("Инвестиции", "≈ $180–185 млн (в соцсетях — $160 млн)").F("Сроки", "не объявлены (в демо — 2028)"));
+            }.F("Инвестиции", "≈ $180–185 млн (в соцсетях — $160 млн)").F("Сроки", "не объявлены (в демо — 2028)").Stage2("второй цех", 2032, 2034));
 
             // ---------------- Growing: export industry and logistics along the highway and the Zhetygen railway
             L.Add(new Landmark
@@ -115,7 +139,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 District = 2, Status = LStatus.Construction, StatusNote = "активная фаза (сводка 26.08.2026)",
                 StartYear = 2026, EndYear = 2028, YearOfficial = false, X = 3098, Z = 1606, Yaw = 93.7f, PadW = 440f, PadD = 280f, Height = 62f, Radius = 210f, ViewYaw = 200f, ViewPitch = 24f,
                 Source = "24.kz", SourceDate = "26.08.2026"
-            }.F("Параметры", "не раскрыты").F("Сроки", "не объявлены (в демо — 2028)"));
+            }.F("Параметры", "не раскрыты").F("Сроки", "не объявлены (в демо — 2028)").Stage2("вторая бумагоделательная линия", 2033, 2036));
             L.Add(new Landmark
             {
                 Id = "danaflex", Name = "DanaFlex", Short = "DanaFlex", Company = "DanaFlex",
@@ -139,7 +163,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 District = 2, Status = LStatus.Construction, StatusNote = "строится",
                 StartYear = 2025, EndYear = 2027, YearOfficial = false, X = 7870, Z = 9941, Yaw = -29.0f, PadW = 520f, PadD = 220f, Height = 25f, Radius = 260f, ViewYaw = 215f, ViewPitch = 24f,
                 Source = "bes.media, Tengrinews", SourceDate = "11.06.2024 / 23.09.2025"
-            }.F("Инвестиции", "+$150 млн (2024); 43 млрд ₸").F("Сроки", "не объявлены (в демо — 2027)"));
+            }.F("Инвестиции", "+$150 млн (2024); 43 млрд ₸").F("Сроки", "не объявлены (в демо — 2027)").Stage2("контейнерный терминал", 2030, 2032));
             L.Add(new Landmark
             {
                 Id = "ps_arna", Name = "ПС «Арна» 220/110 кВ", Short = "ПС «Арна»", Company = "Фаза 1 инфраструктуры Алатау",
@@ -156,7 +180,16 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 District = 2, Status = LStatus.Agreement, StatusNote = "14.09.2026 — переговоры, окончательных соглашений нет",
                 StartYear = 2028, EndYear = 2031, YearOfficial = false, X = -6362, Z = 5345, Yaw = 0f, PadW = 340f, PadD = 240f, Height = 62f, Radius = 175f, ViewYaw = 210f, ViewPitch = 22f,
                 Source = "bes.media, Kapital.kz", SourceDate = "14.09.2026"
-            }.F("Мощность", "2 × 250 МВт").F("Сроки", "не объявлены (в демо — 2031)"));
+            }.F("Мощность", "2 × 250 МВт").F("Сроки", "не объявлены (в демо — 2031)").Stage2("перевод турбин на водород", 2035, 2039));
+
+            L.Add(new Landmark
+            {
+                Id = "airport", Name = "Аэропорт Алатау", Short = "Аэропорт", Company = "Концепция цифрового двойника · оператор не определён",
+                Purpose = "Пассажирский и грузовой аэропорт: ВПП 3,4 км, терминал, перрон, диспетчерская вышка", Model = "airport",
+                District = 2, Status = LStatus.Concept, StatusNote = "концепция: аэродром → пассажирский аэропорт, сроков нет",
+                StartYear = 2032, EndYear = 2036, YearOfficial = false, X = -5900, Z = 8300, Yaw = 30f, PadW = 1300f, PadD = 3800f, Height = 92f, Radius = 900f, ViewYaw = 300f, ViewPitch = 24f,
+                Source = "генплан (аэродром), Astana Times — замысел пассажирского аэропорта", SourceDate = "04.09.2026"
+            }.F("ВПП", "3 400 × 60 м").F("Терминал", "≈ 120 000 м², 6 телетрапов").F("Пассажиры", "до 8 млн в год (оценка)").F("Сроки", "не объявлены (в демо — 2036)"));
 
             // ---------------- Green: tourism and recreation on Kapshagay
             L.Add(new Landmark
@@ -164,9 +197,9 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 Id = "marina", Name = "Марина Капшагай", Short = "Марина", Company = "ACA · инвесторы не объявлены",
                 Purpose = "Яхтенная марина и набережная туристического района", Model = "marina",
                 District = 3, Status = LStatus.Concept, StatusNote = "концепция Green District, сроков нет",
-                StartYear = 2032, EndYear = 2035, YearOfficial = false, X = 5177, Z = 23845, Yaw = -30f, PadW = 200f, PadD = 140f, Height = 14f, Radius = 180f, ViewYaw = 160f, ViewPitch = 22f,
+                StartYear = 2033, EndYear = 2037, YearOfficial = false, X = 5177, Z = 23845, Yaw = -30f, PadW = 200f, PadD = 140f, Height = 14f, Radius = 180f, ViewYaw = 160f, ViewPitch = 22f,
                 Source = "Kazinform, Astana Times", SourceDate = "29.09.2025 / 04.09.2026"
-            }.F("Состав", "марина, клуб, набережная").F("Сроки", "не объявлены (в демо — 2035)"));
+            }.F("Состав", "марина, клуб, набережная").F("Сроки", "не объявлены (в демо — 2037)"));
             return L;
         }
 

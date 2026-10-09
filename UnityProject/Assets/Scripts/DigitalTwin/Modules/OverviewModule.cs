@@ -45,7 +45,7 @@ namespace AlatauCity.DigitalTwin.Modules
                 var t = Widgets.Block(panel, Loc.T("districts"), Loc.T("o_dist_sub"));
                 distRows = new VisualElement(); t.Add(distRows);
             }
-            var g = Widgets.Block(panel, Loc.T("chart_gfa"), Loc.T("mln_m2"));
+            var g = Widgets.Block(panel, Loc.T("chart_gfa"), Loc.T("mln_m2")); g.AddToClassList("gfa-block");
             chart = new TwinChart { Colors = CityStats.CatColors, Stacked = true }; g.Add(chart);
             var legend = new VisualElement(); legend.AddToClassList("legend"); g.Add(legend);
             for (int c = 0; c < CityStats.Cats; c++) legend.Add(Widgets.LegendItem(CityStats.CatColors[c], Loc.T(CityStats.CatKeys[c])));

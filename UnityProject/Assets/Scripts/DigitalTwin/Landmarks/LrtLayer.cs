@@ -13,6 +13,9 @@ namespace AlatauCity.DigitalTwin.Landmarks
     {
         public static LrtLayer Instance;
         public static bool TrainsOn = true;
+        /// <summary>Presentation: the whole line glows with light pulses running from Almaty to Konaev (all phases shown as built).</summary>
+        public static bool Showcase;
+        GameObject glow; Material glowMat; float glowA;
         [Serializable] class RouteJ { public string name; public float[] pts; }
         [Serializable] class RoutesJ { public RouteJ[] routes; }
 
@@ -240,6 +243,47 @@ namespace AlatauCity.DigitalTwin.Landmarks
             int y = TwinState.Year, s = (int)TwinState.Scenario;
             if (y != lastYear || TwinState.Scenario != lastSc) { ApplyYear(y, s); lastYear = y; lastSc = TwinState.Scenario; }
             MoveTrains(Time.deltaTime);
+            // showcase glow: fades in and out
+            glowA = Mathf.MoveTowards(glowA, Showcase ? 1f : 0f, Time.deltaTime * 0.8f);
+            if (glowA > 0.001f && glow == null) BuildGlow();
+            if (glow != null) { glow.SetActive(glowA > 0.001f); glowMat.SetFloat("_Fade", glowA); }
+            UpdateEnds();
+        }
+        void BuildGlow()
+        {
+            var sh = Shader.Find("AlatauCity/Glow"); if (sh == null) return;
+            glowMat = new Material(sh) { name = "LRT glow" }; glowMat.SetColor("_Color", new Color(0.62f, 0.30f, 1f) * 0.55f);   // dimmed: additive over the light ground must stay violet, not burn to white
+            glow = new GameObject("LRT glow"); glow.transform.SetParent(transform, false);
+            var V = new List<Vector3>(); var U = new List<Vector2>(); var T = new List<int>();
+            const float W = 220f;
+            foreach (var r in Routes)
+            {
+                float acc = 0; int v0 = V.Count;
+                for (int i = 0; i < r.P.Length; i++)
+                {
+                    var a = r.P[Mathf.Max(i - 1, 0)]; var b = r.P[Mathf.Min(i + 1, r.P.Length - 1)]; var d = (b - a); d.y = 0; d.Normalize();
+                    var side = new Vector3(-d.z, 0, d.x) * (W * 0.5f);
+                    if (i > 0) acc += Vector3.Distance(r.P[i], r.P[i - 1]);
+                    var c = r.P[i] + Vector3.up * 6f;
+                    V.Add(c - side); U.Add(new Vector2(acc, 0)); V.Add(c + side); U.Add(new Vector2(acc, 1));
+                    if (i > 0) { int k = v0 + (i - 1) * 2; T.Add(k); T.Add(k + 2); T.Add(k + 1); T.Add(k + 1); T.Add(k + 2); T.Add(k + 3); }
+                }
+            }
+            var m = new Mesh { name = "LRT glow", indexFormat = UnityEngine.Rendering.IndexFormat.UInt32 }; m.SetVertices(V); m.SetUVs(0, U); m.SetTriangles(T, 0); m.RecalculateBounds();
+            glow.AddComponent<MeshFilter>().sharedMesh = m; var mr = glow.AddComponent<MeshRenderer>(); mr.sharedMaterial = glowMat; mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        }
+        /// <summary>Labels at the ends of the trunk while the line is showcased: the line continues to Almaty (south) and Konaev (north).</summary>
+        bool endsShown;
+        void UpdateEnds()
+        {
+            bool want = Showcase && Routes.Count > 0;
+            if (want == endsShown) return; endsShown = want;
+            if (!want) { MapPins.Instance?.Clear(); return; }
+            var tr = Routes[0]; var s0 = tr.P[0]; var s1 = tr.P[tr.P.Length - 1];
+            bool southFirst = s0.z < s1.z; var south = southFirst ? s0 : s1; var north = southFirst ? s1 : s0;
+            MapPins.Instance?.Set(new List<MapPins.Pin> {
+                new MapPins.Pin { Id = "lrt_almaty", Label = "↓ в Алматы", World = south + Vector3.up * 20f, Fill = new Color(0.72f, 0.50f, 1f), ShowLabel = true, Size = 16f },
+                new MapPins.Pin { Id = "lrt_konaev", Label = "в Конаев ↑", World = north + Vector3.up * 20f, Fill = new Color(0.72f, 0.50f, 1f), ShowLabel = true, Size = 16f } });
         }
         public int OpenYear(int phase) { int s = (int)TwinState.Scenario; return TwinData.LrtPhaseYear[s] != null && phase < TwinData.LrtPhaseYear[s].Length ? TwinData.LrtPhaseYear[s][phase] : 2040; }
 

@@ -71,7 +71,7 @@ AFacade AlatauFacade(float2 wall, float hy, float H, float floorsN, float style,
     float bw = 3.4, ww = 0.52, wh = 0.50, sill = 0.30, spandrel = 0.0, mull = 0.0, gf = 1.0;      // bay width m, window share, sill share
     float wallL = 0.0, roofL = 5.0;                                                              // material layers of the wall and of the flat roof
     if (style < 1.5 && style > 0.5)       { wallL = r1 < 0.75 ? 0.0 : 2.0; roofL = r2 < 0.45 ? 4.0 : 10.0; bw = 3.8; ww = 0.34; wh = 0.42; sill = 0.34; gf = 0.0; wallC = r1 < 0.45 ? float3(0.90, 0.87, 0.80) : r1 < 0.75 ? float3(0.83, 0.74, 0.62) : float3(0.74, 0.50, 0.40); }
-    else if (style < 2.5 && style > 1.5)  { wallL = r1 < 0.62 ? 0.0 : r1 < 0.80 ? 1.0 : r1 < 0.92 ? 2.0 : 1.0; bw = 3.3; ww = 0.50; wh = 0.52; sill = 0.28; wallC = r1 < 0.40 ? float3(0.90, 0.89, 0.86) : r1 < 0.62 ? float3(0.82, 0.78, 0.70) : r1 < 0.80 ? float3(0.70, 0.71, 0.72) : r1 < 0.92 ? float3(0.69, 0.44, 0.34) : float3(0.36, 0.38, 0.41); }
+    else if (style < 2.5 && style > 1.5)  { wallL = r1 < 0.62 ? 0.0 : r1 < 0.80 ? 1.0 : r1 < 0.92 ? 2.0 : 1.0; bw = 3.3; ww = 0.50; wh = 0.52; sill = 0.28; wallC = r1 < 0.26 ? float3(0.91, 0.90, 0.87) : r1 < 0.46 ? float3(0.86, 0.79, 0.66) : r1 < 0.60 ? float3(0.78, 0.71, 0.60) : r1 < 0.74 ? float3(0.70, 0.71, 0.72) : r1 < 0.86 ? float3(0.72, 0.47, 0.35) : r1 < 0.94 ? float3(0.38, 0.40, 0.43) : float3(0.60, 0.66, 0.70); }
     else if (style < 3.5 && style > 2.5)
     {
         wallL = 1.0;
@@ -134,9 +134,11 @@ AFacade AlatauFacade(float2 wall, float hy, float H, float floorsN, float style,
     // ---- roofs and other faces that are not walls
     if (n.y > 0.45 || wall.y < 0.05)
     {
-        float3 roof = float3(0.80, 0.80, 0.78);
+        // flat roofs seen from above: dark membranes, grey gravel and a few pale ones, as on any real city from the air
+        float3 roof = r2 < 0.30 ? float3(0.46, 0.47, 0.48) : r2 < 0.62 ? float3(0.62, 0.62, 0.60) : r2 < 0.88 ? float3(0.76, 0.76, 0.74) : float3(0.38, 0.39, 0.41);
         if (style < 1.5 && style > 0.5) roof = r2 < 0.45 ? float3(0.52, 0.30, 0.24) : r2 < 0.8 ? float3(0.33, 0.33, 0.35) : float3(0.44, 0.36, 0.30);
-        else if (style < 3.5 && style > 2.5) roof = float3(0.72, 0.73, 0.74);
+        else if (style < 3.5 && style > 2.5) roof = r2 < 0.5 ? float3(0.56, 0.57, 0.58) : float3(0.40, 0.41, 0.43);
+        else if (style > 4.5 && style < 5.5) roof = r2 < 0.5 ? float3(0.62, 0.64, 0.66) : float3(0.48, 0.50, 0.52);      // metal roofs of plants and warehouses
         else if (r3 < 0.14 && style < 4.5) roof = float3(0.42, 0.52, 0.34);                                    // planted roof
         roof *= 1.0 + 0.07 * grainFade * (ANoise(wpos.xz * 0.35) * 0.5 + ANoise(wpos.xz * 1.7) * 0.5 - 0.5);
         roof *= surf;
@@ -219,10 +221,26 @@ AFacade AlatauFacade(float2 wall, float hy, float H, float floorsN, float style,
         refl *= saturate(inner / max(win, 1e-3)) * (1.0 - bar) * (1.0 - 0.4 * head);
     }
     float3 nearA = lerp(wallS, glass, win), farA = lerp(wallC * 0.96, glassC, share);
-    o.albedo = lerp(farA, nearA, detail);
-    o.emit = lerp(share * (avgGlass - glassC + float3(1.0, 0.82, 0.55) * 0.42 * _AlatauNight * (0.10 + 0.50 * _AlatauNight)), win * (refl + lamp), detail);
+    // middle distance: the bays are too small to draw but the floors are not, so the window rows show as bands — a building reads
+    // as a building from a kilometre away instead of a plain box
+    float rowDetail = saturate(1.35 - cw.y * 1.9);
+    float bandY = (spandrel > 0.0 ? saturate((q.y - spandrel) / max(cw.y, 1e-4) + 0.5) : saturate((ws.y - abs(q.y - wc.y)) / max(cw.y, 1e-4) + 0.5)) * inWall * step(0.9, top);
+    float hsh = spandrel > 0.0 ? 1.0 - 2.0 * mull : saturate(2.0 * ws.x);
+    float3 rowA = lerp(wallS, lerp(wallS, glassC * (0.85 + 0.3 * h), hsh), bandY);
+    float3 glowE = avgGlass - glassC + float3(1.0, 0.82, 0.55) * 0.42 * _AlatauNight * (0.10 + 0.50 * _AlatauNight);
+    o.albedo = lerp(lerp(farA, rowA, rowDetail), nearA, detail);
+    o.emit = lerp(lerp(share * glowE, bandY * hsh * glowE, rowDetail), win * (refl + lamp), detail);
     o.spec = lerp(share, win, detail) * (1.0 - blind * detail);
     o.ao = lerp(0.70, 1.0, smoothstep(0.0, 1.0, saturate(hy / 10.0)));                                  // walls darken towards the ground
     return o;
 }
 #endif
+
+// ---- landmark plots (LandmarkSystem.BuildPadMask): 1 where a landmark stands — line layers and film roads are not drawn there
+sampler2D _AlatauPadTex; float _AlatauPadOn;
+float AlatauOnPad(float3 wpos)
+{
+    if (_AlatauPadOn < 0.5) return 0.0;
+    float2 uv = float2(2.29357798e-5 * wpos.x + 0.5, 1.62074554e-5 * wpos.z + 0.491085899);
+    return tex2Dlod(_AlatauPadTex, float4(uv, 0, 0)).r;
+}

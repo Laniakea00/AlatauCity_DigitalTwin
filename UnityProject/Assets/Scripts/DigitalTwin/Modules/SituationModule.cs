@@ -39,7 +39,7 @@ namespace AlatauCity.DigitalTwin.Modules
         public override void OnEnter() { }
         public override void OnExit()
         {
-            tick?.Pause(); MapPins.Instance?.Clear(); TintLayer.Disable(); LineLayers.Instance?.HideAll();
+            tick?.Pause(); MapPins.Instance?.Clear(); TintLayer.Disable(); LineLayers.Instance?.HideAll(); LineLayers.JamOff();
         }
 
         static int Y => TwinState.Year; static int S => (int)TwinState.Scenario;
@@ -242,6 +242,9 @@ namespace AlatauCity.DigitalTwin.Modules
         public void TourView(int v) { view = v; Select(null); Refresh(); }
         public void TourOpen(string id, bool taken) { view = 1; Select(id); mapTaken = taken; ApplyMap(); TwinUI.Instance?.FillLegend(Legend); RebuildBody(); }
         public static Inc Find(string id) => incs.FirstOrDefault(i => i.Id == id);
+        /// <summary>Presentation: switch the map between "decision not taken" and "taken" without moving the camera.</summary>
+        public void TourDecide(bool taken) { mapTaken = taken; ApplyMap(); TwinUI.Instance?.FillLegend(Legend); RebuildBody(); }
+        public static string MoneyText(float mln) => Money(mln);
 
         void Select(string id)
         {
@@ -426,8 +429,9 @@ namespace AlatauCity.DigitalTwin.Modules
         {
             var L = LineLayers.Instance; L?.HideAll();
             var i = selInc != null ? incs.FirstOrDefault(x => x.Id == selInc) : null;
-            if (i == null) { TintLayer.Disable(); return; }
-            if (i.Id == "dtp" && L != null) L.Show("traffic", true);
+            if (i == null) { TintLayer.Disable(); LineLayers.JamOff(); return; }
+            if (i.Id == "dtp" && L != null) { L.Show("traffic", true); LineLayers.Jam(i.P, 1700f, 1f, mapTaken ? 1f : 0f); }
+            else LineLayers.JamOff();
             var br = mapTaken ? i.Yes : i.No; var set = new HashSet<int>(br.Bids);
             if (set.Count == 0) { TintLayer.Disable(); return; }
             var col = i.FloodTint ? new Color(0.30f, 0.55f, 1f, 0.9f) : mapTaken ? new Color(WARN.r, WARN.g, WARN.b, 0.85f) : new Color(BAD.r, BAD.g, BAD.b, 0.9f);

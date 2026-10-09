@@ -37,7 +37,23 @@ namespace AlatauCity.DigitalTwin
             if (cam != null) Shader.SetGlobalFloat(PxId, 2f * Mathf.Tan(cam.fieldOfView * 0.5f * Mathf.Deg2Rad) / Mathf.Max(1, Screen.height));
             Shader.SetGlobalFloat(ScenIdx, (int)TwinState.Scenario);
             if (layers.TryGetValue("traffic", out var t) && t.enabled) UpdateTraffic();
+            // a local jam over the traffic layer (situational centre): red builds up around the incident, turns green after the decision
+            float dt = Mathf.Min(Time.unscaledDeltaTime, 0.1f);
+            jamNow = Mathf.MoveTowards(jamNow, jamTarget, dt * 0.7f); clearNow = Mathf.MoveTowards(clearNow, clearTarget, dt * 0.22f);
+            Shader.SetGlobalVector(JamId, new Vector4(jamC.x, jamC.y, jamR, jamNow * (1f - clearNow)));
+            Shader.SetGlobalFloat(JamClearId, clearNow);
         }
+
+        static Vector2 jamC; static float jamR = 1f, jamTarget, clearTarget, jamNow, clearNow;
+        static readonly int JamId = Shader.PropertyToID("_AlatauJam"), JamClearId = Shader.PropertyToID("_AlatauJamClear");
+        /// <summary>Traffic around a point: jam 1 = a red queue builds up (v/c pushed over capacity), clear 1 = the roads there turn green
+        /// (detour open). Both move smoothly; the clearing takes about five seconds.</summary>
+        public static void Jam(Vector2 centre, float radius, float jam, float clear)
+        {
+            if ((centre - jamC).sqrMagnitude > 1f) { jamNow = 0; clearNow = 0; }
+            jamC = centre; jamR = Mathf.Max(radius, 1f); jamTarget = jam; clearTarget = clear;
+        }
+        public static void JamOff() { jamTarget = clearTarget = jamNow = clearNow = 0; Shader.SetGlobalVector(JamId, Vector4.zero); Shader.SetGlobalFloat(JamClearId, 0); }
 
         // ------------------------------------------------------------------ public API
         public void Show(string layer, bool on) { if (layers.TryGetValue(layer, out var r)) r.enabled = on; else if (on) Debug.LogWarning("[Alatau] no line layer " + layer); }

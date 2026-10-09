@@ -31,7 +31,7 @@ Shader "AlatauCity/Line"
             #pragma target 3.0
             #include "UnityCG.cginc"
             float _PixelWidth, _MinWidth, _BuiltAlpha, _PlannedAlpha, _WorkAlpha, _Mode, _LaneGap;
-            float _AlatauYear, _AlatauScenIdx, _AlatauPx;
+            float _AlatauYear, _AlatauScenIdx, _AlatauPx; float4 _AlatauJam; float _AlatauJamClear;
             sampler2D _AlatauTrafficTex;
             struct appdata { float4 vertex : POSITION; float3 normal : NORMAL; float4 color : COLOR; float2 uv : TEXCOORD0; float4 years : TEXCOORD1; float2 extra : TEXCOORD2; };
             struct v2f { float4 pos : SV_POSITION; float4 color : COLOR; float2 uv : TEXCOORD0; float year : TEXCOORD1; float vc : TEXCOORD2; float hw : TEXCOORD3; };
@@ -56,6 +56,13 @@ Shader "AlatauCity/Line"
                 float e = v.extra.x;
                 float2 tuv = float2((fmod(e, 256.0) + 0.5) / 256.0, (floor(e / 256.0) + 0.5) / 128.0);
                 o.vc = _Mode > 0.5 ? tex2Dlod(_AlatauTrafficTex, float4(tuv, 0, 0)).r * 255.0 / 100.0 : 0;
+                if (_Mode > 0.5 && o.vc > 0.005)
+                {
+                    // situational centre: a queue around the incident (red), then green once the detour is open
+                    float jf = 1.0 - smoothstep(_AlatauJam.z * 0.35, _AlatauJam.z, distance(c.xz, _AlatauJam.xy));
+                    o.vc = lerp(o.vc, max(o.vc, 1.35), saturate(_AlatauJam.w) * jf);
+                    o.vc = lerp(o.vc, min(o.vc, 0.22), saturate(_AlatauJamClear) * jf);
+                }
                 return o;
             }
 

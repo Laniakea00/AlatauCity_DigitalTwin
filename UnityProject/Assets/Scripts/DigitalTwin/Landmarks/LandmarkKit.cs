@@ -94,7 +94,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             Prism(fp, center.y - size.y * 0.5f, center.y + size.y * 0.5f, wall, wallMat, prm, top, topMat, center.y - size.y * 0.5f > 0.5f);
         }
         /// <summary>Box between two points (a beam, a rail, a mast) with a square cross-section w × h.</summary>
-        public void Beam(Vector3 p0, Vector3 p1, float w, float h, Color32 col, int mat)
+        public void Beam(Vector3 p0, Vector3 p1, float w, float h, Color32 col, int mat, float prm = 3f)
         {
             var dir = p1 - p0; float L = dir.magnitude; if (L < 1e-3f) return; dir /= L;
             var side = Vector3.Cross(dir, Mathf.Abs(dir.y) > 0.95f ? Vector3.right : Vector3.up).normalized * (w * 0.5f);
@@ -103,10 +103,10 @@ namespace AlatauCity.DigitalTwin.Landmarks
             for (int i = 0; i < 4; i++)
             {
                 int j = (i + 1) % 4; var o = (q0[i] + q0[j]) * 0.5f - p0;
-                Quad(q0[i], q0[j], q1[j], q1[i], o, col, mat, 3f, new Vector2(0, 0), new Vector2(w, 0), new Vector2(w, L), new Vector2(0, L));
+                Quad(q0[i], q0[j], q1[j], q1[i], o, col, mat, prm, new Vector2(0, 0), new Vector2(w, 0), new Vector2(w, L), new Vector2(0, L));
             }
-            Quad(q0[0], q0[1], q0[2], q0[3], -dir, col, mat, 3f, Vector2.zero, Vector2.right, Vector2.one, Vector2.up);
-            Quad(q1[0], q1[1], q1[2], q1[3], dir, col, mat, 3f, Vector2.zero, Vector2.right, Vector2.one, Vector2.up);
+            Quad(q0[0], q0[1], q0[2], q0[3], -dir, col, mat, prm, Vector2.zero, Vector2.right, Vector2.one, Vector2.up);
+            Quad(q1[0], q1[1], q1[2], q1[3], dir, col, mat, prm, Vector2.zero, Vector2.right, Vector2.one, Vector2.up);
         }
         /// <summary>Vertical cylinder (smooth sides), optional cone / dome top.</summary>
         public void Cylinder(Vector3 baseC, float r, float h, int seg, Color32 col, int mat, float prm, Color32 top, int topMat, float coneH = 0f)
@@ -131,11 +131,41 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 Tri(tc, p0, p1, Vector3.up + (p0 + p1 - 2 * baseC).normalized * (coneH > 0 ? 0.5f : 0f), top, topMat, prm, new Vector2(tc.x, tc.z), new Vector2(p0.x, p0.z), new Vector2(p1.x, p1.z));
             }
         }
+        /// <summary>A tube between two points (octagon, radius r0 → r1): fuselages, pipes, masts lying down.</summary>
+        public void Tube(Vector3 p0, Vector3 p1, float r0, float r1, int seg, Color32 col, int mat, bool caps = true)
+        {
+            var dir = (p1 - p0).normalized; var a = Vector3.Cross(dir, Mathf.Abs(dir.y) > 0.9f ? Vector3.right : Vector3.up).normalized; var b = Vector3.Cross(dir, a);
+            float L = (p1 - p0).magnitude;
+            for (int s = 0; s < seg; s++)
+            {
+                float t0 = s * 2 * Mathf.PI / seg, t1 = (s + 1) * 2 * Mathf.PI / seg;
+                Vector3 d0 = a * Mathf.Cos(t0) + b * Mathf.Sin(t0), d1 = a * Mathf.Cos(t1) + b * Mathf.Sin(t1);
+                var q0 = p0 + d0 * r0; var q1 = p0 + d1 * r0; var q2 = p1 + d1 * r1; var q3 = p1 + d0 * r1;
+                float u0 = r0 * t0, u1 = r0 * t1;
+                Quad(q0, q1, q2, q3, (d0 + d1) * 0.5f, col, mat, 3f, new Vector2(u0, 0), new Vector2(u1, 0), new Vector2(u1, L), new Vector2(u0, L));
+                if (caps)
+                {
+                    if (r0 > 0.01f) Tri(p0, q1, q0, -dir, col, mat, 3f, Vector2.zero, Vector2.right, Vector2.up);
+                    if (r1 > 0.01f) Tri(p1, q3, q2, dir, col, mat, 3f, Vector2.zero, Vector2.right, Vector2.up);
+                }
+            }
+        }
+        /// <summary>A flat slab between four points in a plane (wings, tail planes), thickness t along 'up'.</summary>
+        public void Slab(Vector3 a, Vector3 b, Vector3 c, Vector3 d, float t, Color32 col, int mat)
+        {
+            var n = Vector3.Cross(b - a, d - a).normalized; var o = n * (t * 0.5f);
+            Quad(a + o, b + o, c + o, d + o, n, col, mat, 3f, Vector2.zero, Vector2.right, Vector2.one, Vector2.up);
+            Quad(d - o, c - o, b - o, a - o, -n, col, mat, 3f, Vector2.zero, Vector2.right, Vector2.one, Vector2.up);
+            Vector3[] q = { a, b, c, d };
+            for (int i = 0; i < 4; i++) { var p = q[i]; var r = q[(i + 1) % 4]; var e = ((p + r) * 0.5f - (a + c) * 0.5f).normalized; Quad(p - o, r - o, r + o, p + o, e, col, mat, 3f, Vector2.zero, Vector2.right, Vector2.one, Vector2.up); }
+        }
+        /// <summary>Material parameter that marks a tree (AlatauLandmark plants it only when the site is landscaped).</summary>
+        public const float TreeTag = -7f;
         /// <summary>A low-poly tree: trunk + faceted crown.</summary>
         public void Tree(Vector3 p, float h, Color32 leaf, float seed)
         {
             float r = h * 0.32f; var trunk = LM.C("#5b4a3a");
-            Beam(p, p + Vector3.up * (h * 0.45f), 0.35f, 0.35f, trunk, LM.Solid);
+            Beam(p, p + Vector3.up * (h * 0.45f), 0.35f, 0.35f, trunk, LM.Solid, TreeTag);   // TreeTag: planted at the end of construction
             var cc = p + Vector3.up * (h * 0.62f);
             int seg = 6; float rot = seed * 37f;
             for (int s = 0; s < seg; s++)
@@ -144,8 +174,8 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 var e0 = cc + new Vector3(Mathf.Cos(a0) * r, 0, Mathf.Sin(a0) * r); var e1 = cc + new Vector3(Mathf.Cos(a1) * r, 0, Mathf.Sin(a1) * r);
                 var top = cc + Vector3.up * (h * 0.40f); var bot = cc - Vector3.up * (h * 0.22f);
                 var o = ((e0 + e1) * 0.5f - cc);
-                Tri(top, e0, e1, o + Vector3.up * r, leaf, LM.Plant, 3f, new Vector2(top.x, top.z), new Vector2(e0.x, e0.z), new Vector2(e1.x, e1.z));
-                Tri(bot, e1, e0, o - Vector3.up * r, leaf, LM.Plant, 3f, new Vector2(bot.x, bot.z), new Vector2(e1.x, e1.z), new Vector2(e0.x, e0.z));
+                Tri(top, e0, e1, o + Vector3.up * r, leaf, LM.Plant, TreeTag, new Vector2(top.x, top.z), new Vector2(e0.x, e0.z), new Vector2(e1.x, e1.z));
+                Tri(bot, e1, e0, o - Vector3.up * r, leaf, LM.Plant, TreeTag, new Vector2(bot.x, bot.z), new Vector2(e1.x, e1.z), new Vector2(e0.x, e0.z));
             }
         }
 
