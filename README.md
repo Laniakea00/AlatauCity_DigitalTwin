@@ -5,10 +5,13 @@
 Подробное описание проекта — [README_RU.md](README_RU.md), [startup.md](startup.md), [context.md](context.md), ТЗ и прогресс — в [docs/](docs/).
 
 ## Как открыть (первый раз)
-1. Unity **6000.0.84f1** (Built-in RP). В Unity Hub: *Add project from disk* → папка `UnityProject`.
-2. После импорта: меню **Alatau City → Rebuild Scene**. Команда собирает `Assets/Generated` (рельеф, здания по годам, ~830 МБ) из `Assets/CityData`; эта папка в git не хранится.
-3. Открыть сцену `Assets/Scenes/AlatauCity.unity` → Play.
-4. Сборка под Windows: **Alatau City → Build Windows**.
+1. Unity **6000.0.84f1** (Built-in RP). В Unity Hub: *Add project from disk* → папка `UnityProject` (именно в склонированном репозитории, а не старая копия из архива).
+2. Дальше всё само (`Assets/Editor/AlatauProjectSetup.cs`): при открытии проект проверяет версию Unity, собирает город `Assets/Generated` из `Assets/CityData`, если его нет (несколько минут, ~830 МБ, в git не хранится), фото-текстуры материалов, открывает сцену `Assets/Scenes/AlatauCity.unity`, ставит качество **Ultra** и окно Game **Full HD 1920×1080, Play Maximized**. Повторить вручную: меню **Alatau City → Привести проект к эталону**.
+3. Play.
+4. Сборка под Windows: **Alatau City → Build Windows**; без интерфейса (сервер сборки):
+   `Unity.exe -batchmode -quit -projectPath UnityProject -executeMethod AlatauCity.EditorTools.AlatauBuild.BuildWindowsCI -logFile build.log`
+
+Файлы `Assets/Generated` получают одинаковые id на всех машинах (по имени файла), поэтому сцена из git работает у всех. Если после автосборки GitHub Desktop показывает изменённую `AlatauCity.unity` — её можно спокойно откатить (Discard) или закоммитить: она одинаковая.
 
 ## Структура
 - `UnityProject/Assets/Scripts/DigitalTwin` — код двойника (модули, UI, слои, презентация `TwinTour.cs`)
@@ -16,7 +19,8 @@
 - `UnityProject/Assets/Shaders`, `Assets/Resources/Shaders` — шейдеры (здания, земля, объекты)
 - `UnityProject/Assets/CityData` — исходные данные генплана
 - `UnityProject/Tools` — Python-генераторы данных
-- `web/` — веб-версия
+- `web/` — старая веб-версия (three.js)
+- [docs/DEPLOY_WEB.md](docs/DEPLOY_WEB.md) — план вывода двойника на домен
 
 ## Работа в команде
 
@@ -30,7 +34,7 @@
 2. Коллега принимает приглашение, ставит **GitHub Desktop** и через **Unity Hub** — Unity **6000.0.84f1**.
 3. GitHub Desktop → `File → Clone repository` → `AlatauCity_DigitalTwin`.
 4. Unity Hub → `Add project from disk` → папка `UnityProject`. Первый импорт 10–20 минут (собирается `Library/`).
-5. В Unity: **Alatau City → Rebuild Scene** (собирает `Assets/Generated`), затем сцена `Assets/Scenes/AlatauCity.unity` → Play.
+5. Unity при первом открытии сам соберёт город и откроет сцену (см. «Как открыть»), затем Play.
 
 ### Каждый день
 1. Перед работой: GitHub Desktop → **Fetch origin → Pull**.

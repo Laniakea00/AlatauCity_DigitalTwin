@@ -17,16 +17,8 @@ namespace AlatauCity.EditorTools
     {
         const string Data = "Assets/CityData/", Gen = "Assets/Generated/", ScenePath = "Assets/Scenes/AlatauCity.unity";
 
-        static AlatauCityBuilder()
-        {
-            EditorApplication.delayCall += () =>
-            {
-                if (SessionState.GetBool("AlatauAutoChecked", false)) return; SessionState.SetBool("AlatauAutoChecked", true);
-                if (EditorApplication.isPlayingOrWillChangePlaymode) return;
-                if (!File.Exists(ScenePath)) Build();
-                else if (string.IsNullOrEmpty(EditorSceneManager.GetActiveScene().path)) EditorSceneManager.OpenScene(ScenePath);
-            };
-        }
+        // the first-open check (city built, scene open, quality, Game view) lives in AlatauProjectSetup
+        static AlatauCityBuilder() { }
 
         [System.Serializable] class PalEntry { public string name; public float[] rgb; }
         [System.Serializable] class CamEntry { public string name; public float[] pos; public float[] fwd; public float lens; }
@@ -112,6 +104,7 @@ namespace AlatauCity.EditorTools
                 EditorSceneManager.SaveScene(scene, ScenePath);
                 EditorBuildSettings.scenes = new[] { new EditorBuildSettingsScene(ScenePath, true) };
                 AssetDatabase.SaveAssets();
+                AlatauProjectSetup.NormalizeGeneratedGuids();      // the same asset ids on every machine: the scene in git stays valid
                 var sv = SceneView.lastActiveSceneView; if (sv != null) sv.LookAt(mc.target, rot, mc.distance * 0.5f);
                 Debug.Log("[Alatau] Scene built from the QTwin model. Press Play.");
             }
