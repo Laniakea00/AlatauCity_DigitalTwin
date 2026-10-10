@@ -1,8 +1,8 @@
 # Publishes the WebGL build of the twin on GitHub Pages.
 # The build is not stored in git (hundreds of MB): Unity → Alatau City → Build WebGL makes UnityProject/Builds/alatau-webgl.zip,
-# it is attached to a GitHub Release, and this workflow unpacks it and deploys it. web/ in the repo is copied on top
+# it is attached to a GitHub Release, and this workflow unpacks it and deploys it. pages/ in the repo is copied on top
 # (the loading page), so the page can change without a new Unity build.
-# Runs: a published Release with the asset alatau-webgl.zip; a push to main that changes web/; or Actions → "Publish WebGL to Pages"
+# Runs: a published Release with the asset alatau-webgl.zip; a push to main that changes pages/; or Actions → "Publish WebGL to Pages"
 # → Run workflow (empty tag = the latest release).
 # Pages may only deploy from main (environment protection), so a release does not deploy itself: it starts this workflow on main.
 name: Publish WebGL to Pages
@@ -12,7 +12,7 @@ on:
     types: [published]
   push:
     branches: [main]
-    paths: ["web/**"]
+    paths: ["pages/**"]
   workflow_dispatch:
     inputs:
       tag:
@@ -52,7 +52,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          sparse-checkout: web
+          sparse-checkout: pages
       - name: Download the build from the release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -69,7 +69,7 @@ jobs:
                   out = os.path.join("site", name); os.makedirs(os.path.dirname(out), exist_ok=True)
                   with z.open(i) as src, open(out, "wb") as dst: dst.write(src.read())
           PY
-          if [ -d web ]; then cp -r web/. site/; fi
+          if [ -d pages ]; then cp -r pages/. site/; fi
           touch site/.nojekyll
           du -sh site; ls -la site site/Build
       - uses: actions/configure-pages@v5
