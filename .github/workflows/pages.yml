@@ -1,12 +1,18 @@
 # Publishes the WebGL build of the twin on GitHub Pages.
 # The build is not stored in git (hundreds of MB): Unity → Alatau City → Build WebGL makes UnityProject/Builds/alatau-webgl.zip,
-# it is attached to a GitHub Release, and this workflow unpacks it and deploys it.
-# Run: publish a Release with the asset alatau-webgl.zip, or Actions → "Publish WebGL to Pages" → Run workflow (takes the latest release).
+# it is attached to a GitHub Release, and this workflow unpacks it and deploys it. web/ in the repo is copied on top
+# (the loading page), so the page can change without a new Unity build.
+# Runs: a published Release with the asset alatau-webgl.zip; a push to main that changes web/; or Actions → "Publish WebGL to Pages"
+# → Run workflow (empty tag = the latest release).
+# Pages may only deploy from main (environment protection), so a release does not deploy itself: it starts this workflow on main.
 name: Publish WebGL to Pages
 
 on:
   release:
     types: [published]
+  push:
+    branches: [main]
+    paths: ["web/**"]
   workflow_dispatch:
     inputs:
       tag:
@@ -15,24 +21,42 @@ on:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
-  group: pages
+  group: pages-${{ github.event_name == 'release' && 'release' || 'deploy' }}
   cancel-in-progress: true
 
 jobs:
-  deploy:
+  from-release:
+    if: github.event_name == 'release'
     runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Start the deploy on main with this release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: gh workflow run pages.yml -R "$GITHUB_REPOSITORY" --ref main -f tag="$TAG"
+
+  deploy:
+    if: github.event_name != 'release'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: web
       - name: Download the build from the release
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.event.release.tag_name || inputs.tag }}
+          TAG: ${{ inputs.tag }}
         run: |
           if [ -n "$TAG" ]; then gh release download "$TAG" -R "$GITHUB_REPOSITORY" -p alatau-webgl.zip
           else gh release download -R "$GITHUB_REPOSITORY" -p alatau-webgl.zip; fi
@@ -45,6 +69,7 @@ jobs:
                   out = os.path.join("site", name); os.makedirs(os.path.dirname(out), exist_ok=True)
                   with z.open(i) as src, open(out, "wb") as dst: dst.write(src.read())
           PY
+          if [ -d web ]; then cp -r web/. site/; fi
           touch site/.nojekyll
           du -sh site; ls -la site site/Build
       - uses: actions/configure-pages@v5
