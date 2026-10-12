@@ -68,6 +68,12 @@ namespace AlatauCity.EditorTools
                     Debug.Log("[Alatau] Assets/Generated не собран — собираю город (несколько минут)");
                     AlatauCityBuilder.Build();          // builds Assets/Generated and saves the scene; it normalises the ids itself
                 }
+                else if (ReadStamp() != DataStamp())
+                {
+                    // the city data in git changed since this machine built the city (new buildings, moved plants): build it again
+                    Debug.Log("[Alatau] данные города (Assets/CityData) обновились — пересобираю город (несколько минут)");
+                    AlatauCityBuilder.Build();
+                }
 
                 // 4. stable ids (an older build, or a city built before this tool existed)
                 NormalizeGeneratedGuids();
@@ -98,6 +104,25 @@ namespace AlatauCity.EditorTools
             if (!AssetDatabase.IsValidFolder(Gen) || !Directory.Exists(Gen)) return false;
             return File.Exists(Gen + "/Terrain.asset") && File.Exists(Gen + "/Buildings_Existing_buildings.asset") && Directory.GetFiles(Gen, "Buildings_*.asset").Length > 20;
         }
+
+        const string StampPath = Gen + "/city_data.stamp";
+        /// <summary>Fingerprint of the city data the generated city is built from (contents, not dates: the same on every clone).</summary>
+        public static string DataStamp()
+        {
+            using (var md5 = MD5.Create())
+            {
+                foreach (var f in new[] { "Assets/CityData/layer_buildings.bytes", "Assets/CityData/buildings.csv", "Assets/CityData/layer_infrastructure.bytes", "Assets/CityData/terrain_heights.bytes" })
+                {
+                    if (!File.Exists(f)) continue;
+                    var b = File.ReadAllBytes(f); md5.TransformBlock(b, 0, b.Length, null, 0);
+                }
+                md5.TransformFinalBlock(new byte[0], 0, 0);
+                var sb = new StringBuilder(); foreach (var x in md5.Hash) sb.Append(x.ToString("x2")); return sb.ToString();
+            }
+        }
+        static string ReadStamp() => File.Exists(StampPath) ? File.ReadAllText(StampPath).Trim() : "";
+        /// <summary>Written by the city builder after a build.</summary>
+        public static void WriteStamp() { if (Directory.Exists(Gen)) File.WriteAllText(StampPath, DataStamp()); }
 
         static void SetupGameView()
         {

@@ -104,6 +104,7 @@ namespace AlatauCity.EditorTools
                 EditorSceneManager.SaveScene(scene, ScenePath);
                 EditorBuildSettings.scenes = new[] { new EditorBuildSettingsScene(ScenePath, true) };
                 AssetDatabase.SaveAssets();
+                AlatauProjectSetup.WriteStamp();                    // which city data this build is made from (rebuilt automatically when it changes)
                 AlatauProjectSetup.NormalizeGeneratedGuids();      // the same asset ids on every machine: the scene in git stays valid
                 var sv = SceneView.lastActiveSceneView; if (sv != null) sv.LookAt(mc.target, rot, mc.distance * 0.5f);
                 Debug.Log("[Alatau] Scene built from the QTwin model. Press Play.");

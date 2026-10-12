@@ -82,20 +82,19 @@ namespace AlatauCity.DigitalTwin.Landmarks
             {
                 Id = "pepsico", Name = "Завод PepsiCo", Short = "PepsiCo", Company = "PepsiCo Kazakhstan",
                 Purpose = "Производство картофельных чипсов и снеков", Model = "food_pepsico",
-                District = 0, Status = LStatus.Construction, StatusNote = "активная фаза строительства (сводка правительства 26.08.2026)",
-                StartYear = 2025, EndYear = 2027, YearOfficial = true, X = -5050, Z = -16926, Yaw = 129.8f, PadW = 430f, PadD = 300f, Height = 40f, Radius = 215f, ViewYaw = 200f, ViewPitch = 24f,
+                District = 2, Status = LStatus.Construction, StatusNote = "активная фаза строительства (сводка правительства 26.08.2026)",
+                StartYear = 2025, EndYear = 2027, YearOfficial = true, X = 8500, Z = 940, Yaw = -81.7f, PadW = 430f, PadD = 300f, Height = 40f, Radius = 215f, ViewYaw = 200f, ViewPitch = 24f,
                 Source = "Kapital.kz, 24.kz", SourceDate = "20.05.2025 / 26.08.2026"
             }.F("Инвестиции", "≈ $360 млн (81 млрд ₸); первый этап $160 млн").F("Сырьё", "210 тыс. т картофеля в год").F("Рабочие места", "≈ 900")
              .F("Сроки", "1-я очередь — 03.2026, полная мощность — 09.2027").Stage2("новые линии", 2030, 2032));
             L.Add(new Landmark
             {
                 Id = "griffin", Name = "Griffin Logopark Almaty", Short = "Griffin Logopark", Company = "Griffin Partners · кредит ЕАБР",
-                Purpose = "Логопарк класса А у БАКАД и трассы А3", Model = "logistics_griffin",
-                District = 0, Status = LStatus.Construction, StatusNote = "стройка с 07.2026, первый камень — 25.09.2026",
-                StartYear = 2026, EndYear = 2027, YearOfficial = true, X = -5430, Z = -19400, Yaw = 7.9f, PadW = 380f, PadD = 420f, Height = 15f, Radius = 210f, ViewYaw = 200f, ViewPitch = 26f,
+                Purpose = "Логопарк класса А в западном промышленном поясе, у БАКАД", Model = "logistics_griffin",
+                District = 2, Status = LStatus.Construction, StatusNote = "стройка с 07.2026, первый камень — 25.09.2026",
+                StartYear = 2026, EndYear = 2027, YearOfficial = true, X = -5673, Z = 1715, Yaw = 16.6f, PadW = 380f, PadD = 420f, Height = 15f, Radius = 210f, ViewYaw = 200f, ViewPitch = 26f,
                 Source = "ЕАБР, bizmedia.kz", SourceDate = "10.08.2026 / 25.09.2026"
-            }.F("Инвестиции", "$125 млн").F("Склады", "≈ 120 тыс. м²").F("Рабочие места", "≈ 600").F("Сроки", "1-я фаза — I кв. 2027")
-             .F("Примечание", "площадка у БАКАД формально относится к Алматы").Stage2("третий склад", 2031, 2033));
+            }.F("Инвестиции", "$125 млн").F("Склады", "≈ 120 тыс. м²").F("Рабочие места", "≈ 600").F("Сроки", "1-я фаза — I кв. 2027").Stage2("третий склад", 2031, 2033));
 
             // ---------------- Golden: science, education, medicine
             L.Add(new Landmark
@@ -126,18 +125,19 @@ namespace AlatauCity.DigitalTwin.Landmarks
             {
                 Id = "mars", Name = "Завод Mars Petcare", Short = "Mars Petcare", Company = "Mars Petcare Kazakhstan",
                 Purpose = "Производство кормов для домашних животных", Model = "food_mars",
-                District = 1, Status = LStatus.Construction, StatusNote = "работы начаты (сводка 26.08.2026)",
-                StartYear = 2026, EndYear = 2028, YearOfficial = false, X = -6209, Z = -3488, Yaw = 21.9f, PadW = 430f, PadD = 300f, Height = 42f, Radius = 215f, ViewYaw = 200f, ViewPitch = 24f,
+                District = 2, Status = LStatus.Construction, StatusNote = "работы начаты (сводка 26.08.2026)",
+                StartYear = 2026, EndYear = 2028, YearOfficial = false, X = 8806, Z = 1370, Yaw = -81.7f, PadW = 430f, PadD = 300f, Height = 42f, Radius = 215f, ViewYaw = 200f, ViewPitch = 24f,
                 Source = "DigitalBusiness.kz, 24.kz", SourceDate = "20.02.2026 / 26.08.2026"
             }.F("Инвестиции", "≈ $180–185 млн (в соцсетях — $160 млн)").F("Сроки", "не объявлены (в демо — 2028)").Stage2("второй цех", 2032, 2034));
 
-            // ---------------- Growing: export industry and logistics along the highway and the Zhetygen railway
+            // ---------------- Growing: export industry and logistics — in two industrial belts on the sides of the city (east along the
+            // railway, west by the airport and BAKAD); PepsiCo, Mars Petcare and Griffin belong here too (plants and warehouses, not the business gate)
             L.Add(new Landmark
             {
                 Id = "sunny_paper", Name = "Sunny Paper", Short = "Sunny Paper", Company = "Sunny Paper",
                 Purpose = "Бумажное производство", Model = "paper",
                 District = 2, Status = LStatus.Construction, StatusNote = "активная фаза (сводка 26.08.2026)",
-                StartYear = 2026, EndYear = 2028, YearOfficial = false, X = 3098, Z = 1606, Yaw = 93.7f, PadW = 440f, PadD = 280f, Height = 62f, Radius = 210f, ViewYaw = 200f, ViewPitch = 24f,
+                StartYear = 2026, EndYear = 2028, YearOfficial = false, X = 7540, Z = 1468, Yaw = -81.7f, PadW = 440f, PadD = 280f, Height = 62f, Radius = 210f, ViewYaw = 200f, ViewPitch = 24f,
                 Source = "24.kz", SourceDate = "26.08.2026"
             }.F("Параметры", "не раскрыты").F("Сроки", "не объявлены (в демо — 2028)").Stage2("вторая бумагоделательная линия", 2033, 2036));
             L.Add(new Landmark
@@ -145,7 +145,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 Id = "danaflex", Name = "DanaFlex", Short = "DanaFlex", Company = "DanaFlex",
                 Purpose = "Гибкая упаковка", Model = "packaging",
                 District = 2, Status = LStatus.Construction, StatusNote = "работы начаты (сводка 26.08.2026)",
-                StartYear = 2026, EndYear = 2027, YearOfficial = false, X = 5715, Z = 4313, Yaw = 91.6f, PadW = 300f, PadD = 200f, Height = 18f, Radius = 150f, ViewYaw = 200f, ViewPitch = 26f,
+                StartYear = 2026, EndYear = 2027, YearOfficial = false, X = 6668, Z = 651, Yaw = -81.7f, PadW = 300f, PadD = 200f, Height = 18f, Radius = 150f, ViewYaw = 200f, ViewPitch = 26f,
                 Source = "24.kz", SourceDate = "26.08.2026"
             }.F("Параметры", "не раскрыты").F("Сроки", "не объявлены (в демо — 2027)"));
             L.Add(new Landmark
@@ -153,7 +153,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 Id = "gtrans", Name = "G-Trans Service", Short = "G-Trans", Company = "G-Trans Service",
                 Purpose = "Логистика и сервис грузового транспорта", Model = "logistics_gtrans",
                 District = 2, Status = LStatus.Construction, StatusNote = "работы начаты (сводка 26.08.2026)",
-                StartYear = 2026, EndYear = 2027, YearOfficial = false, X = 5837, Z = 4660, Yaw = 111.4f, PadW = 290f, PadD = 220f, Height = 15f, Radius = 150f, ViewYaw = 200f, ViewPitch = 26f,
+                StartYear = 2026, EndYear = 2027, YearOfficial = false, X = 7882, Z = 945, Yaw = -81.7f, PadW = 290f, PadD = 220f, Height = 15f, Radius = 150f, ViewYaw = 200f, ViewPitch = 26f,
                 Source = "24.kz", SourceDate = "26.08.2026"
             }.F("Параметры", "не раскрыты").F("Сроки", "не объявлены (в демо — 2027)"));
             L.Add(new Landmark
@@ -178,7 +178,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 Id = "gtes", Name = "ГТЭС Doosan 2 × 250 МВт", Short = "ГТЭС Doosan", Company = "Doosan Enerbility · KEPCO · GGGI",
                 Purpose = "Газотурбинная электростанция с переходом на водород (ГЧП)", Model = "power",
                 District = 2, Status = LStatus.Agreement, StatusNote = "14.09.2026 — переговоры, окончательных соглашений нет",
-                StartYear = 2028, EndYear = 2031, YearOfficial = false, X = 4200, Z = 900, Yaw = 10f, PadW = 340f, PadD = 240f, Height = 62f, Radius = 175f, ViewYaw = 210f, ViewPitch = 22f,
+                StartYear = 2028, EndYear = 2031, YearOfficial = false, X = 8185, Z = 979, Yaw = -81.7f, PadW = 340f, PadD = 240f, Height = 62f, Radius = 175f, ViewYaw = 210f, ViewPitch = 22f,
                 Source = "bes.media, Kapital.kz", SourceDate = "14.09.2026"
             }.F("Мощность", "2 × 250 МВт").F("Сроки", "не объявлены (в демо — 2031)").Stage2("перевод турбин на водород", 2035, 2039));
 

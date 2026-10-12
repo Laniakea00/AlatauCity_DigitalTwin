@@ -21,6 +21,8 @@ namespace AlatauCity.DigitalTwin.Landmarks
         readonly List<Vector2> uv0 = new List<Vector2>(), uv1 = new List<Vector2>();
         readonly List<int> t = new List<int>();
         public int VertexCount => v.Count;
+        /// <summary>Sets the colour alpha of the vertices from 'start' to the end (AlatauLandmark: alpha = 1 − landscaping stage).</summary>
+        public void AlphaFrom(int start, byte a) { for (int i = start; i < c.Count; i++) { var q = c[i]; q.a = a; c[i] = q; } }
 
         // ------------------------------------------------------------------ primitives
         /// <summary>Quad a-b-c-d (any winding); it faces along 'outward'. uv = facade metres for each corner.</summary>

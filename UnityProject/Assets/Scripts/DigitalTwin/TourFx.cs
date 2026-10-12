@@ -96,6 +96,7 @@ namespace AlatauCity.DigitalTwin
                 if (b != null && (id == null || b.District == id) && cat.Is(b) && !Landmarks.LandmarkSystem.IsHiddenBid(b.Bid))
                 { cat.Count++; if (cat.Biggest == null || b.GfaM2 > cat.Biggest.GfaM2) cat.Biggest = b; }
             shown.Add(cat);
+            UI.StoryCard.Light(cat.Name, cat.Count);                                  // the legend on the step's dashboard
             TintLayer.Disable();                                                     // film look stays on (no analysis greying)
             TintLayer.Apply(b =>
             {
@@ -123,8 +124,17 @@ namespace AlatauCity.DigitalTwin
             var list = new List<BuildingInfo>();
             foreach (var b in db.Buildings) if (b != null && (id == null || b.District == id) && cat.Is(b) && !Landmarks.LandmarkSystem.IsHiddenBid(b.Bid)) list.Add(b);
             list.Sort((x, y) => y.GfaM2.CompareTo(x.GfaM2));
+            // a few beams per category, spread out (the biggest first, none closer than 450 m to another): a constellation, not a fence
+            var pick = new List<BuildingInfo>();
+            foreach (var b in list)
+            {
+                if (pick.Count >= 10) break;
+                bool near = false; foreach (var q in pick) if ((q.X - b.X) * (q.X - b.X) + (q.Z - b.Z) * (q.Z - b.Z) < 450f * 450f) { near = true; break; }
+                if (!near) pick.Add(b);
+            }
+            list = pick;
             var V = new List<Vector3>(); var U = new List<Vector2>(); var U2 = new List<Vector2>(); var T = new List<int>();
-            int n = Mathf.Min(list.Count, 60);
+            int n = list.Count;
             for (int i = 0; i < n; i++)
             {
                 var b = list[i]; float top = b.GroundM + Mathf.Max(b.HeightM, 6f), h = 240f + 140f * (1f - i / (float)n), w = 30f;
@@ -275,7 +285,7 @@ namespace AlatauCity.DigitalTwin
             if (!flooding || water == null) return;
             fT += dt;
             float up = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(fT / fRiseT)), down = fT > fProtectAt ? Mathf.SmoothStep(0f, 1f, Mathf.Clamp01((fT - fProtectAt) / 5f)) : 0f;
-            fLevel = fBase + fRise * up - (fRise - 0.5f) * down;
+            fLevel = fBase + fRise * up - (fRise + 0.6f) * down;            // the measures bring the water back below the old shore line
             water.transform.position = new Vector3(water.transform.position.x, fLevel, water.transform.position.z);
             if (Mathf.Abs(fLevel - fTint) < 0.08f) return;
             fTint = fLevel;
@@ -288,15 +298,16 @@ namespace AlatauCity.DigitalTwin
             TintLayer.Apply(b =>
             {
                 if (b.District != id || b.Source == "existing_osm" && false) return new Color(0, 0, 0, 0);
-                if (b.GroundM < fLevel) { wet++; if (b.Kind == "house" || b.Kind.StartsWith("res")) people += b.GfaM2 / 30f; return new Color(1f, 0.28f, 0.20f, 0.92f); }
+                // once the twin's measures work, every building of the risk zone is shown saved (green), none is left under water
                 if (saved && b.GroundM < peak) return new Color(0.22f, 0.82f, 0.42f, 0.85f);
+                if (!saved && b.GroundM < fLevel) { wet++; if (b.Kind == "house" || b.Kind.StartsWith("res")) people += b.GfaM2 / 30f; return new Color(1f, 0.28f, 0.20f, 0.92f); }
                 return new Color(0, 0, 0, 0);
             });
             int at = 0; float atP = 0; foreach (var b in db.Buildings) if (b != null && b.District == id && b.GroundM < peak) { at++; if (b.Kind == "house" || b.Kind.StartsWith("res")) atP += b.GfaM2 / 30f; }
             if (!saved)
                 Callout("Капшагай: подъём воды", new[] { ("+" + Loc.N1(fLevel - fBase) + " м", "уровень воды", new Color(0.45f, 0.75f, 1f)), (Loc.N0(wet), "зданий в зоне затопления", new Color(1f, 0.38f, 0.30f)), ("≈ " + Loc.N0(people / 1000f) + " тыс.", "жителей под угрозой", new Color(1f, 0.38f, 0.30f)) }, "Модель двойника: рельеф, уровни воды, отметки зданий");
             else
-                Callout("Решение двойника принято", new[] { ("+" + Loc.N1(fLevel - fBase) + " м", "уровень после мер", new Color(0.45f, 0.75f, 1f)), (Loc.N0(at - wet), "зданий спасено", new Color(0.30f, 0.85f, 0.45f)), ("≈ " + Loc.N0((atP - people) / 1000f) + " тыс.", "жителей вне опасности", new Color(0.30f, 0.85f, 0.45f)) }, "Дамба на берегу и регулируемый сброс воды — за 48 часов до пика");
+                Callout("Решение двойника принято", new[] { ("норма", "уровень после мер", new Color(0.45f, 0.75f, 1f)), (Loc.N0(at), "зданий спасено", new Color(0.30f, 0.85f, 0.45f)), ("≈ " + Loc.N0(atP / 1000f) + " тыс.", "жителей вне опасности", new Color(0.30f, 0.85f, 0.45f)) }, "Дамба на берегу и регулируемый сброс воды — за 48 часов до пика");
         }
 
         // ------------------------------------------------------------------ evening: the sun goes down, the resorts light up

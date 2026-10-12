@@ -73,20 +73,33 @@ namespace AlatauCity.DigitalTwin.Data
         {
             Ready = false; Error = null;
             string dir = Path.Combine(Application.streamingAssetsPath, "twin");
+            if (TwinFiles.NeedsDownload)
+            {
+                // WebGL: no threads and no file system — download the files, then parse on the main thread
+                var host = new GameObject("Twin data (download)"); UnityEngine.Object.DontDestroyOnLoad(host);
+                host.AddComponent<Loader>().StartCoroutine(TwinFiles.Download(err =>
+                {
+                    try { LoadAll(dir); Ready = true; } catch (Exception e) { Error = (err != null ? err + "; " : "") + e.Message; }
+                    Finish();
+                }));
+                return;
+            }
             var ctx = System.Threading.SynchronizationContext.Current;
             Task.Run(() =>
             {
                 try { LoadAll(dir); Ready = true; }
                 catch (Exception e) { Error = e.Message; }
-                ctx?.Post(_ =>
-                {
-                    if (Error != null) Debug.LogError("[Alatau] twin data: " + Error);
-                    else { Debug.Log($"[Alatau] twin data {Version}: {Roads.Length} road edges, {Facilities.Length} facilities, {Networks.Count} networks"); OnReady?.Invoke(); }
-                }, null);
+                ctx?.Post(_ => Finish(), null);
             });
         }
+        class Loader : MonoBehaviour { }
+        static void Finish()
+        {
+            if (Error != null) Debug.LogError("[Alatau] twin data: " + Error);
+            else { Debug.Log($"[Alatau] twin data {Version}: {Roads.Length} road edges, {Facilities.Length} facilities, {Networks.Count} networks"); OnReady?.Invoke(); }
+        }
 
-        static object Read(string dir, string name) => Parse(File.ReadAllText(Path.Combine(dir, name + ".json")));
+        static object Read(string dir, string name) => Parse(TwinFiles.Text(name + ".json"));
 
         static void LoadAll(string dir)
         {

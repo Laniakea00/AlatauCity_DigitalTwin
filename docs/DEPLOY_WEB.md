@@ -40,3 +40,39 @@
 1. Домен или поддомен (например `twin.qtwin.kz`) и доступ к DNS.
 2. Решение: сервис (A1) или свой GPU-сервер (A2).
 3. Для A2 — сервер с видеокартой NVIDIA и публичным IP.
+
+## WebGL на GitHub Pages (пробный вариант)
+
+1. Unity → **Alatau City → Build WebGL**: сборка в `UnityProject/Builds/WebGL` и архив `UnityProject/Builds/alatau-webgl.zip`. Сжатие gzip с распаковкой в браузере: GitHub Pages не умеет отдавать заголовок `Content-Encoding`.
+2. Сборка не хранится в git: файлы больше 100 МБ git не принимает. Архив прикладывается к GitHub Release, а workflow `.github/workflows/pages.yml` распаковывает его и публикует на Pages.
+3. Один раз в настройках репозитория: **Settings → Pages → Source: GitHub Actions**. Для приватного репозитория Pages работает только на GitHub Pro или Team.
+4. Новая версия: **Releases → Draft a new release** → тег (например `web-2026-10-10`) → прикрепить `alatau-webgl.zip` → Publish. Workflow запустится сам. Pages разрешает публикацию только из ветки main, поэтому релиз не публикует сайт напрямую, а запускает тот же workflow на main со своим тегом.
+5. Страница загрузки (заставка, проценты, сообщения об ошибках) — шаблон `UnityProject/Assets/WebGLTemplates/Alatau/index.html`. Копия с готовыми именами файлов лежит в `pages/index.html` и кладётся поверх сборки. Поменяли шаблон → `python tools/render_web_template.py` → commit и push: сайт обновится сам, без новой сборки Unity и без загрузки архива.
+6. Вручную: **Actions → Publish WebGL to Pages → Run workflow** (пустой тег = последний релиз).
+7. Адрес: `https://laniakea00.github.io/AlatauCity_DigitalTwin/`. Сайт открыт всем, у кого есть ссылка, даже при приватном репозитории.
+
+Ограничения Pages: сайт до 1 ГБ, мягкий лимит трафика 100 ГБ в месяц, своих заголовков сервера задать нельзя.
+
+Загрузка в браузере: страница сама качает файлы сборки кусками по 2 МБ (запросы `Range`) в 4 потока. Оборванный или зависший кусок перекачивается отдельно; без этого обрыв связи на 140-МБ файле начинал загрузку с нуля. Скачанное сохраняется в Cache Storage браузера с привязкой к ETag: повторное открытие занимает секунды, новая сборка скачивается заново. Сервер должен поддерживать `Range` (GitHub Pages и nginx поддерживают); если нет, страница отдаёт загрузку штатному загрузчику Unity.
+
+Первый замер (10.10.2026, Казахстан): около 90–120 КБ/с, то есть порядка 20–25 минут на первое открытие. Перед показом открыть ссылку заранее на том же компьютере и в том же браузере. Для постоянной работы нужен свой сервер в Казахстане.
+
+## WebGL на своём домене (nginx)
+
+Сборку из `Builds/WebGL` скопировать на сервер. Если отдавать `.gz` с заголовком, браузер распакует его сам, без медленной распаковки в JS:
+
+```nginx
+location /alatau/ {
+    alias /var/www/alatau/;
+}
+# файлы Unity *.gz: браузер распаковывает сам
+location ~ ^/alatau/(?<f>.+\.gz)$ {
+    alias /var/www/alatau/$f;
+    gzip off;
+    types { }
+    default_type application/octet-stream;
+    add_header Content-Encoding gzip always;
+    add_header Cache-Control "public, max-age=604800" always;
+}
+```
+Для `.wasm.gz` можно добавить `default_type application/wasm` — так загрузка быстрее; без этого сборка тоже работает.

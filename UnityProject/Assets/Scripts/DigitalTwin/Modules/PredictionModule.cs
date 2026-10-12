@@ -358,7 +358,7 @@ namespace AlatauCity.DigitalTwin.Modules
         {
             try
             {
-                var j = Parse(File.ReadAllText(Path.Combine(Application.streamingAssetsPath, "twin", "risk.json")));
+                var j = Parse(TwinFiles.Text("risk.json"));
                 var sc = G(j, "scenarios"); floodCm = new[] { Ints(G(G(sc, "flood_1pct"), "depth_cm")), Ints(G(G(sc, "flood_ext"), "depth_cm")) };
             }
             catch (System.Exception e) { Debug.LogError("[Alatau] risk.json: " + e.Message); }

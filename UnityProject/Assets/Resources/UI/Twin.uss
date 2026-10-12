@@ -575,3 +575,27 @@
 .bc-si { flex-direction: row; align-items: center; margin-right: 12px; margin-bottom: 2px; }
 .bc-si Label { font-size: 10px; color: #a3a3a3; white-space: nowrap; }
 .bc-sdot { width: 7px; height: 7px; border-radius: 4px; margin-right: 5px; }
+/* situation centre: the twin's own line under the sources (matching → confirmed) */
+.sit-sys { font-size: 12px; color: #ffb35a; margin-top: 8px; height: 18px; -unity-font-definition: url("Fonts/Geologica-Medium.ttf"); }
+.sit-sys.ok { color: #4fd17a; }
+/* ---- presentation: the step dashboard (right column, above the caption) */
+.story { position: absolute; right: 12px; bottom: 230px; width: 372px; padding: 12px 14px 12px 14px; border-radius: 12px;
+    background-color: rgba(14, 14, 14, 0.94); border-width: 1px; border-color: #343434; }
+.compact .story { width: 330px; }
+.story-eye { font-size: 10px; letter-spacing: 1.4px; color: #9a9a9a; -unity-font-definition: url("Fonts/Geologica-Medium.ttf"); margin-bottom: 4px; }
+.story-head { font-size: 16px; color: #f4f4f4; -unity-font-definition: url("Fonts/Geologica-Light.ttf"); margin-bottom: 8px; white-space: normal; }
+.story-kpis { flex-direction: row; margin: 0 -3px 2px -3px; }
+.story-kpi { flex-basis: 0; flex-grow: 1; min-width: 0; margin: 0 3px; padding: 7px 9px 8px 9px; border-radius: 6px; background-color: #1b1b1b; }
+.story-v { font-size: 20px; -unity-font-definition: url("Fonts/Geologica-Light.ttf"); letter-spacing: -0.4px; }
+.story-l { font-size: 10px; color: #8f8f8f; margin-top: 1px; white-space: normal; }
+.story-rows { margin-top: 8px; }
+.story-row { margin-top: 5px; }
+.story-row.dim { opacity: 0.32; }
+.story-rtop { flex-direction: row; align-items: center; }
+.story-chip { width: 9px; height: 9px; border-radius: 2px; margin-right: 8px; flex-shrink: 0; }
+.story-rn { font-size: 12px; color: #dcdcdc; flex-grow: 1; flex-shrink: 1; }
+.story-rv { font-size: 12px; color: #ffffff; -unity-font-definition: url("Fonts/Geologica-Medium.ttf"); -unity-text-align: middle-right; margin-left: 8px; }
+.story-bar { height: 4px; border-radius: 2px; background-color: #262626; margin: 3px 0 0 17px; overflow: hidden; }
+.story-fill { height: 4px; border-radius: 2px; }
+.story-note { font-size: 10px; color: #7d7d7d; margin-top: 8px; white-space: normal; }
+.tour-nocard .card { display: none; }

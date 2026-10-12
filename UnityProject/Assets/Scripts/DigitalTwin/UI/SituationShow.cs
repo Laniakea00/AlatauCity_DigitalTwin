@@ -7,7 +7,8 @@ using AlatauCity.DigitalTwin.Modules;
 namespace AlatauCity.DigitalTwin.UI
 {
     /// <summary>The situational-centre step of the presentation, one incident from alarm to solution:
-    /// 1) the incident pulses on the map; 2) data streams run into it from the sources (cameras, sensors, 112, navigators, residents);
+    /// 1) the incident pulses on the map; 2) data flows from points all over the city (cameras, traffic detectors, 112 calls, navigators,
+    ///    residents' reports) into the twin — the panel on the left; the twin matches them and confirms the incident;
     /// 3) a one-card briefing (what, where, forecast); 4) a big red «Решить» (the presenter clicks, or it presses itself);
     /// 5) the solution plays out step by step and the map switches to "decision taken"; a small money line: damage without / with the twin.</summary>
     public class SituationShow : VisualElement
@@ -15,7 +16,9 @@ namespace AlatauCity.DigitalTwin.UI
         readonly SituationData.Incident inc; readonly SituationModule mod;
         float t; bool decided; float decT; Vector2 flown;
         readonly VisualElement sources, brief, info, steps, money; readonly Button solve; readonly List<VisualElement> srcRows = new List<VisualElement>(); readonly List<Label> srcCounts = new List<Label>();
-        readonly Label status;
+        readonly Label status, sysLine;
+        // where the data comes from: points of the city around the incident (offset from it, metres), per source
+        readonly List<(int k, Vector2 off, float ph)> pts = new List<(int, Vector2, float)>();
         static readonly (string name, Color c, int rate)[] Src =
         {
             ("Камеры · видеоаналитика", new Color(0.45f, 0.70f, 1f), 38), ("Детекторы трафика", new Color(0.36f, 0.86f, 0.74f), 61), ("Вызов 112", new Color(1f, 0.38f, 0.30f), 3),
@@ -31,7 +34,7 @@ namespace AlatauCity.DigitalTwin.UI
             generateVisualContent += Draw;
 
             sources = new VisualElement { pickingMode = PickingMode.Ignore }; sources.AddToClassList("sit-sources"); Add(sources);
-            var st = new Label("ИСТОЧНИКИ ДАННЫХ · В РЕАЛЬНОМ ВРЕМЕНИ") { pickingMode = PickingMode.Ignore }; st.AddToClassList("sit-h"); sources.Add(st);
+            var st = new Label("ДАННЫЕ ИЗ ГОРОДА → qTWIN") { pickingMode = PickingMode.Ignore }; st.AddToClassList("sit-h"); sources.Add(st);
             foreach (var (n, c, _) in Src)
             {
                 var r = new VisualElement { pickingMode = PickingMode.Ignore }; r.AddToClassList("sit-src");
@@ -40,6 +43,23 @@ namespace AlatauCity.DigitalTwin.UI
                 var cnt = new Label("0") { pickingMode = PickingMode.Ignore }; cnt.AddToClassList("sit-cnt"); r.Add(cnt); srcCounts.Add(cnt);
                 r.style.opacity = 0; sources.Add(r); srcRows.Add(r);
             }
+
+            sysLine = new Label("") { pickingMode = PickingMode.Ignore }; sysLine.AddToClassList("sit-sys"); sources.Add(sysLine);
+            int[] per = { 5, 5, 3, 7, 3 };
+            var rnd = new System.Random(i.Id.GetHashCode());
+            // sensors stand in the city: a point is kept only if new buildings of the city stand within 250 m of it
+            var near = new List<Vector2>(); var db = CityDatabase.Instance;
+            if (db != null) foreach (var b in db.Buildings)
+                    if (b != null && b.Source != "existing_osm" && CityStats.DistrictIndex(b.District) >= 0 && (new Vector2(b.X, b.Z) - i.P).sqrMagnitude < 2300f * 2300f) near.Add(new Vector2(b.X, b.Z));
+            bool InCity(Vector2 w) { foreach (var q in near) if ((q - w).sqrMagnitude < 250f * 250f) return true; return near.Count == 0; }
+            for (int k = 0; k < Src.Length; k++)
+                for (int j = 0, tries = 0; j < per[k] && tries < 60; tries++)
+                {
+                    float a = (float)(rnd.NextDouble() * Mathf.PI * 2), r = 300f + (float)rnd.NextDouble() * 1500f;
+                    var off = new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * r;
+                    if (!InCity(i.P + off)) continue;
+                    pts.Add((k, off, (float)rnd.NextDouble())); j++;
+                }
 
             brief = new VisualElement { pickingMode = PickingMode.Ignore }; brief.AddToClassList("sit-brief"); brief.style.opacity = 0; Add(brief);
             var bt = new Label("ИНЦИДЕНТ · " + DateTime.Now.ToString("HH:mm")) { pickingMode = PickingMode.Ignore }; bt.AddToClassList("sit-h"); bt.style.color = new Color(1f, 0.45f, 0.38f); brief.Add(bt);
@@ -92,6 +112,8 @@ namespace AlatauCity.DigitalTwin.UI
                 float a = Mathf.Clamp01((t - 1.2f - k * 0.45f) / 0.5f); srcRows[k].style.opacity = a;
                 if (a > 0) srcCounts[k].text = Loc.N0(Mathf.FloorToInt((t - 1.2f - k * 0.45f) * Src[k].rate * (decided ? 0.6f : 1f)));
             }
+            sysLine.text = t < 3.2f ? "" : t < 5.4f ? "сопоставляю 5 источников…" : decided ? "решение передано службам" : "ДТП подтверждено · прогноз готов";
+            sysLine.EnableInClassList("ok", t >= 5.4f);
             brief.style.opacity = Mathf.Clamp01((t - 5.5f) / 0.7f);
             if (t > 8f && !decided) { solve.style.display = DisplayStyle.Flex; solve.style.opacity = Mathf.Clamp01((t - 8f) / 0.5f); float s = 1f + 0.05f * Mathf.Sin(t * 6f); solve.style.scale = new Scale(new Vector3(s, s, 1)); }
             if (t > 14f && !decided) Solve();                                         // the presenter did not click: the twin shows it anyway
@@ -147,21 +169,37 @@ namespace AlatauCity.DigitalTwin.UI
             }
             p.fillColor = col; p.BeginPath(); p.Arc(q, 8f, 0, 360); p.Fill();
             p.fillColor = Color.white; p.BeginPath(); p.Arc(q, 3f, 0, 360); p.Fill();
-            // data streams from the source rows to the incident
-            for (int k = 0; k < srcRows.Count; k++)
+            // data flows from points of the city into the twin (the panel): each source has its sensors scattered around the incident,
+            // packets run from them along an arc into the source's row; the counters grow as they arrive
+            var cam = Camera.main; var cur = SituationModule.Find(inc.Id) ?? inc;
+            // never under the panels: the caption, the briefing, the sources and the step dashboard
+            var covers = new List<Rect>();
+            var root = panel?.visualTree;
+            if (root != null)
+                foreach (var cls in new[] { "tour", "sit-brief", "sit-sources", "story" })
+                    root.Query(className: cls).ForEach(e => { if (e.resolvedStyle.display != DisplayStyle.None && e.worldBound.width > 0) { var r0 = e.worldBound; var a0 = this.WorldToLocal(r0.min); var a1 = this.WorldToLocal(r0.max); covers.Add(Rect.MinMaxRect(a0.x - 10, a0.y - 10, a1.x + 10, a1.y + 10)); } });
+            foreach (var (k, off, ph) in pts)
             {
-                float a = Mathf.Clamp01((t - 1.4f - k * 0.45f) / 0.6f); if (a <= 0) continue;
+                float a = Mathf.Clamp01((t - 1.0f - k * 0.45f) / 0.6f); if (a <= 0 || cam == null) continue;
                 var r = srcRows[k]; var wb = r.worldBound; if (wb.width <= 0) continue;
-                var s0 = this.WorldToLocal(new Vector2(wb.xMax + 4f, wb.center.y));
-                var c1 = s0 + new Vector2((q.x - s0.x) * 0.45f, 0); var c2 = q + new Vector2(-(q.x - s0.x) * 0.25f, (s0.y - q.y) * 0.3f);
+                var wp = new Vector3(cur.P.x + off.x, 0, cur.P.y + off.y); wp.y = CityGround.HeightAt(wp.x, wp.z) + 8f;
+                var sp = cam.WorldToScreenPoint(wp); if (sp.z < 0) continue;
+                var s0 = this.WorldToLocal(RuntimePanelUtils.ScreenToPanel(panel, new Vector2(sp.x, Screen.height - sp.y)));
+                if (covers.Exists(rc => rc.Contains(s0))) continue;
+                var e = this.WorldToLocal(new Vector2(wb.xMax + 4f, wb.center.y));
                 var c = Src[k].c;
-                p.strokeColor = new Color(c.r, c.g, c.b, 0.6f * a); p.lineWidth = 2.2f; p.BeginPath(); p.MoveTo(s0); p.BezierCurveTo(c1, c2, q); p.Stroke();
-                // packets running along the curve
-                for (int j = 0; j < 4; j++)
+                // the sensor on the map: a dot in the source's colour with a soft pulse
+                float pu = (t * 0.9f + ph) % 1f;
+                p.strokeColor = new Color(c.r, c.g, c.b, (1f - pu) * 0.8f * a); p.lineWidth = 2f; p.BeginPath(); p.Arc(s0, 6f + pu * 20f, 0, 360); p.Stroke();
+                p.fillColor = new Color(c.r, c.g, c.b, a); p.BeginPath(); p.Arc(s0, 6f, 0, 360); p.Fill();
+                p.fillColor = new Color(1f, 1f, 1f, a); p.BeginPath(); p.Arc(s0, 2.2f, 0, 360); p.Fill();
+                var c1 = s0 + new Vector2(0, -Mathf.Min(160f, Mathf.Abs(s0.x - e.x) * 0.35f)); var c2 = e + new Vector2(Mathf.Min(220f, Mathf.Abs(s0.x - e.x) * 0.45f), 0);
+                p.strokeColor = new Color(c.r, c.g, c.b, (decided ? 0.30f : 0.62f) * a); p.lineWidth = 2.2f; p.BeginPath(); p.MoveTo(s0); p.BezierCurveTo(c1, c2, e); p.Stroke();
+                for (int j = 0; j < 3; j++)
                 {
-                    float u = ((t * 0.55f + j * 0.25f + k * 0.11f) % 1f);
-                    var pt = Bez(s0, c1, c2, q, u);
-                    p.fillColor = new Color(c.r, c.g, c.b, a * (decided ? 0.5f : 1f)); p.BeginPath(); p.Arc(pt, 4f, 0, 360); p.Fill();
+                    float u = ((t * 0.42f + ph + j / 3f) % 1f);
+                    var pt = Bez(s0, c1, c2, e, u);
+                    p.fillColor = new Color(c.r, c.g, c.b, a * (decided ? 0.45f : 1f) * Mathf.Clamp01(u * 6f)); p.BeginPath(); p.Arc(pt, 4.6f, 0, 360); p.Fill();
                 }
             }
         }

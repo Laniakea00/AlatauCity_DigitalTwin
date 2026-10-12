@@ -17,6 +17,7 @@ Shader "AlatauCity/Landmark"
         _Land ("Landscaping done", Range(0, 1)) = 1
         _Glow ("Hand-over light sweep (0..1, <0 off)", Float) = -1
         _H ("Object height (m)", Float) = 100
+        _Park ("Landscaped grounds (staged by vertex alpha)", Range(0, 1)) = 0
     }
     SubShader
     {
@@ -28,7 +29,7 @@ Shader "AlatauCity/Landmark"
         #pragma surface surf Soft fullforwardshadows vertex:vert addshadow noambient
         #pragma target 3.5
         #include "Assets/Shaders/AlatauFilm.cginc"
-        float _Reveal, _Build, _Ghost, _Hi, _Facade, _Land, _Glow, _H;
+        float _Reveal, _Build, _Ghost, _Hi, _Facade, _Land, _Glow, _H, _Park;
         struct Input { float4 color : COLOR; float2 fac; float2 mat; float ly; float3 worldPos; float3 worldNormal; float4 screenPos; };
         void vert(inout appdata_full v, out Input o)
         {
@@ -57,7 +58,14 @@ Shader "AlatauCity/Landmark"
             int id = (int)round(IN.mat.x);
             bool tree = IN.mat.y < -6.5;                                   // LandmarkKit.TreeTag: planted at the end of construction
             float prm = tree ? 3.0 : max(IN.mat.y, 0.05);
-            if (tree && _Build > 0.5) clip(_Land * 1.15 - AHash2(floor(IN.worldPos.xz / 4.0)));
+            // staged landscaping: vertex alpha = 1 - stage; a part with a later stage starts later and finishes by _Land = 1.
+            // (objects without stages carry alpha 1 → stage 0 → exactly _Land as before)
+            float stg = 1.0 - IN.color.a, st0 = stg * 0.75;
+            float land = saturate((_Land - st0) / max(1.0 - st0, 0.05));
+            if (_Park > 0.5) clip(_Land - st0 + 0.015);                    // grounds not started yet: the old terrain shows through
+            if (tree && _Build > 0.5) clip(land * 1.15 - AHash2(floor(IN.worldPos.xz / 4.0)));
+            // photo materials (film look): paving slabs and lawn grass, sampled before any branch
+            AMat mPave = AlatauMat(IN.worldPos.xz, 7.0), mGrass = AlatauMat(IN.worldPos.xz, 8.0);
             float3 a = IN.color.rgb; float3 emit = 0; float spec = 0;
             float film = step(0.5, _AlatauFilm);
             float3 rdir = reflect(-view, n);
@@ -110,6 +118,7 @@ Shader "AlatauCity/Landmark"
                 float2 t = abs(frac(uv / 1.2) - 0.5); float2 tw = fw / 1.2;
                 float joint = 1.0 - saturate((0.47 - max(t.x, t.y)) / max(max(tw.x, tw.y), 1e-4) + 0.5);
                 a *= (1.0 - 0.10 * joint * saturate(1.3 - max(tw.x, tw.y) * 3.0)) * (0.95 + 0.08 * grain);
+                if (n.y > 0.6) a *= lerp(float3(1, 1, 1), mPave.pattern * lerp(1.0, mPave.ao, 0.5), 0.75 * film);
             }
             else if (id == 5)
             {
@@ -119,6 +128,7 @@ Shader "AlatauCity/Landmark"
             {
                 float g2 = ANoise(IN.worldPos.xz * 0.11 + 4.0);
                 a *= 0.78 + 0.30 * grain + 0.12 * g2;
+                if (!tree && n.y > 0.6) a *= lerp(float3(1, 1, 1), mGrass.pattern * lerp(1.0, mGrass.ao, 0.6), 0.85 * film);
             }
             else if (id == 7)
             {
@@ -143,12 +153,12 @@ Shader "AlatauCity/Landmark"
             //  · the ground of the plot stays an earth site with tyre tracks until paving and planting (_Land)
             if (_Build > 0.5)
             {
-                bool ground = IN.ly < 1.2 && n.y > 0.6;
+                bool ground = (IN.ly < 1.2 || _Park > 0.5) && n.y > 0.6 && !tree;
                 bool raised = !ground && IN.ly >= 1.2 && (id == 4 || (id == 6 && !tree) || id == 7);
                 if (raised)
                 {
                     // terraces and roof gardens above the ground: a bare concrete slab until they are paved and planted (never soil in the air)
-                    float l2 = saturate(_Land * 1.5 - 0.5);
+                    float l2 = saturate(land * 1.5 - 0.5);
                     float3 slabC = float3(0.64, 0.63, 0.60) * (0.92 + 0.10 * grain);
                     a = lerp(slabC, a, l2); emit *= l2; spec *= l2;
                 }
@@ -156,7 +166,7 @@ Shader "AlatauCity/Landmark"
                 {
                     float tracks = smoothstep(0.35, 0.5, abs(frac(dot(IN.worldPos.xz, float2(0.083, 0.052))) - 0.5)) * 0.08;
                     float3 soil = float3(0.50, 0.42, 0.32) * (0.82 + 0.30 * grain + 0.10 * ANoise(IN.worldPos.xz * 0.05)) - tracks;
-                    float l = ground || id == 4 ? _Land : saturate(_Land * 1.5 - 0.5);
+                    float l = ground || id == 4 ? land : saturate(land * 1.5 - 0.5);
                     a = lerp(soil, a, l); emit *= l; spec *= l;
                 }
                 else if (!tree && IN.ly > _Facade && IN.ly > 1.2)

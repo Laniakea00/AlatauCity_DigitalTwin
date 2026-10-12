@@ -366,7 +366,7 @@ namespace AlatauCity.DigitalTwin.Modules
             center = DistrictCenter(2); people = 0; damageBln = 0; bids = new List<int>();
             if (flood1 == null)
             {
-                try { var j = Parse(File.ReadAllText(Path.Combine(Application.streamingAssetsPath, "twin", "risk.json"))); flood1 = Ints(G(G(G(j, "scenarios"), "flood_1pct"), "depth_cm")); }
+                try { var j = Parse(TwinFiles.Text("risk.json")); flood1 = Ints(G(G(G(j, "scenarios"), "flood_1pct"), "depth_cm")); }
                 catch (Exception e) { Debug.LogError("[Alatau] risk.json: " + e.Message); flood1 = new int[0]; }
             }
             var db = CityDatabase.Instance; if (db == null) return; double sx = 0, sz = 0, sw = 0;

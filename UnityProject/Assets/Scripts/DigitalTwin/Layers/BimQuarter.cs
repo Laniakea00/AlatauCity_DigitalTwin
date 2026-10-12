@@ -40,7 +40,7 @@ namespace AlatauCity.DigitalTwin
             string dir = Path.Combine(Application.streamingAssetsPath, "twin");
             try
             {
-                var j = Parse(File.ReadAllText(Path.Combine(dir, "gate_q1.json")));
+                var j = Parse(TwinFiles.Text("gate_q1.json"));
                 Day0 = DateTime.Parse(S(G(j, "day0"))); StatusDay = I(G(j, "status_day")); EndDay = I(G(j, "end_day")); Note = S(G(G(j, "about"), "note"));
                 var st = A(G(j, "stages")); stages = new Stage[st.Count];
                 for (int i = 0; i < st.Count; i++)
@@ -56,7 +56,7 @@ namespace AlatauCity.DigitalTwin
                     var e = A(el[i]);
                     elements[i] = new Element { Guid = S(e[0]), Name = S(e[1]), Cls = S(e[2]), Complex = S(e[3]), Storey = I(e[4]), Stage = I(e[5]), Plan = I(e[6]), Fact = I(e[7]), Volume = F(e[8]) };
                 }
-                BuildMesh(File.ReadAllBytes(Path.Combine(dir, "gate_q1.bytes")));
+                BuildMesh(TwinFiles.Bytes("gate_q1.bytes"));
                 Day = StatusDay;
                 Debug.Log($"[Alatau] BIM Gate Q1: {elements.Length} elements, {stages.Length} stages, from {Day0:dd.MM.yyyy}");
             }

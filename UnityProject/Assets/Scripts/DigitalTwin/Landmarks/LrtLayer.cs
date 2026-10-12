@@ -264,7 +264,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
         void BuildGlow()
         {
             var sh = Shader.Find("AlatauCity/Glow"); if (sh == null) return;
-            glowMat = new Material(sh) { name = "LRT glow" }; glowMat.SetColor("_Color", new Color(0.62f, 0.30f, 1f) * 0.55f);   // dimmed: additive over the light ground must stay violet, not burn to white
+            glowMat = new Material(sh) { name = "LRT glow" }; glowMat.SetColor("_Color", new Color(0.62f, 0.30f, 1f) * 0.85f);   // additive over the light ground: strong enough to read from the whole-city view, still violet
             glow = new GameObject("LRT glow"); glow.transform.SetParent(transform, false);
             var V = new List<Vector3>(); var U = new List<Vector2>(); var T = new List<int>();
             const float W = 220f;
