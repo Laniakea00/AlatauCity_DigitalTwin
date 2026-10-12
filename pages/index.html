@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Alatau City · Digital Twin</title>
+  <meta name="description" content="Цифровой двойник города Alatau: 3D-модель, дороги, ЛРТ, ключевые объекты и этапы развития до 2050 года.">
+  <style>
+    :root { --bg:#0a0e13; --panel:rgba(14,20,27,.92); --line:#1f2a35; --text:#e8eef3; --muted:#8a99a8; --accent:#2ec4b6; --err:#ff6b6b; }
+    * { box-sizing:border-box; }
+    html, body { margin:0; height:100%; background:var(--bg); color:var(--text); overflow:hidden;
+      font:15px/1.45 -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+    #unity-canvas { position:fixed; inset:0; width:100vw; height:100vh; display:block; background:var(--bg); outline:none; }
+    #overlay { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; padding:16px;
+      background:radial-gradient(ellipse at 50% 40%, #12202a 0%, var(--bg) 70%); transition:opacity .6s; }
+    #overlay.hide { opacity:0; pointer-events:none; }
+    .card { width:min(440px, 100%); background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:28px 28px 22px; }
+    .brand { font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--accent); margin:0 0 6px; }
+    h1 { font-size:26px; font-weight:600; margin:0 0 4px; }
+    .sub { color:var(--muted); margin:0 0 22px; }
+    .bar { height:6px; background:#18232d; border-radius:3px; overflow:hidden; }
+    .bar > i { display:block; height:100%; width:0; background:var(--accent); transition:width .3s; }
+    .row { display:flex; justify-content:space-between; margin-top:10px; font-size:13px; color:var(--muted); font-variant-numeric:tabular-nums; }
+    .note { margin:18px 0 0; font-size:13px; color:var(--muted); }
+    .warn { margin:14px 0 0; padding:10px 12px; border-radius:8px; font-size:13px; background:#2a2412; color:#f3d98b; display:none; }
+    .error { margin:14px 0 0; padding:10px 12px; border-radius:8px; font-size:13px; background:#2b1416; color:var(--err); display:none; white-space:pre-wrap; }
+    #fs { position:fixed; right:16px; bottom:16px; display:none; padding:8px 12px; border-radius:8px; border:1px solid var(--line);
+      background:var(--panel); color:var(--text); font:inherit; font-size:13px; cursor:pointer; opacity:.75; }
+    #fs:hover { opacity:1; }
+    #toast { position:fixed; left:50%; top:16px; transform:translateX(-50%); max-width:calc(100% - 32px); display:none;
+      padding:8px 14px; border-radius:8px; background:var(--panel); border:1px solid var(--line); font-size:13px; }
+  </style>
+</head>
+<body>
+  <canvas id="unity-canvas" tabindex="-1"></canvas>
+  <div id="overlay">
+    <div class="card">
+      <p class="brand">qTwin</p>
+      <h1>Alatau City</h1>
+      <p class="sub">Цифровой двойник города</p>
+      <div class="bar"><i id="bar"></i></div>
+      <div class="row"><span id="stage">Загрузка</span><span id="pct">0%</span></div>
+      <p class="note">Первое открытие — около 140&nbsp;МБ, дальше двойник берётся из кэша браузера. Лучше всего работает в Chrome или Edge на компьютере.</p>
+      <div class="warn" id="warn"></div>
+      <div class="error" id="error"></div>
+    </div>
+  </div>
+  <button id="fs" type="button" title="Во весь экран">⛶ Во весь экран</button>
+  <div id="toast"></div>
+  <script>
+    var canvas = document.getElementById("unity-canvas");
+    var $ = function (id) { return document.getElementById(id); };
+
+    function show(el, text) { el.textContent = text; el.style.display = "block"; }
+    function fail(text) { $("stage").textContent = "Ошибка"; show($("error"), text); }
+
+    // non-fatal Unity messages: a short toast; errors: kept on the loading card
+    function unityShowBanner(msg, type) {
+      if (type == "error") { fail(msg); return; }
+      var t = $("toast"); t.textContent = msg; t.style.display = "block";
+      clearTimeout(t._h); t._h = setTimeout(function () { t.style.display = "none"; }, 5000);
+    }
+
+    var mobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    if (mobile) show($("warn"), "На телефоне двойник может не загрузиться: ему нужно 1–4 ГБ памяти. Откройте ссылку на компьютере.");
+    var gl2 = (function () { try { return !!document.createElement("canvas").getContext("webgl2"); } catch (e) { return false; } })();
+
+    var buildUrl = "Build";
+    var config = {
+      arguments: [],
+      dataUrl: buildUrl + "/WebGL.data.unityweb",
+      frameworkUrl: buildUrl + "/WebGL.framework.js.unityweb",
+      codeUrl: buildUrl + "/WebGL.wasm.unityweb",
+      streamingAssetsUrl: "StreamingAssets",
+      companyName: "qTwin",
+      productName: "Alatau City · Digital Twin",
+      productVersion: "1.0",
+      showBanner: unityShowBanner,
+      // full-window canvas: on high-DPI screens cap the render resolution, the city is GPU-heavy
+      devicePixelRatio: Math.min(window.devicePixelRatio || 1, 1.5),
+    };
+
+    // ---- download: the build files in 2 MB pieces, 4 at a time. A dropped or stalled piece is retried on its own
+    // (a single 140 MB request restarts from zero after any network hiccup). Done files are kept in the browser's
+    // Cache Storage, keyed by the server's ETag: the next visit starts in seconds and a new build is fetched again.
+    var CHUNK = 2 << 20, PARALLEL = 4, STALL_MS = 20000, CACHE = "alatau-build";
+    var MB = function (b) { return (b / 1048576).toFixed(0); };
+    function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+    async function head(url) {
+      for (var a = 0; ; a++) {
+        try {
+          var r = await fetch(url, { method: "HEAD", cache: "no-store" });
+          if (!r.ok) throw new Error("HTTP " + r.status);
+          return { size: +r.headers.get("content-length"), tag: r.headers.get("etag") || r.headers.get("last-modified") || "",
+                   ranges: (r.headers.get("accept-ranges") || "").indexOf("bytes") >= 0 };
+        } catch (e) { if (a >= 3) throw e; await sleep(1000 * (a + 1)); }
+      }
+    }
+
+    // one piece; onBytes(delta) reports progress, a failed attempt takes its bytes back
+    async function piece(url, from, to, onBytes) {
+      for (var a = 0; ; a++) {
+        var got = 0, ctl = new AbortController(), timer = null;
+        var arm = function () { clearTimeout(timer); timer = setTimeout(function () { ctl.abort(); }, STALL_MS); };
+        try {
+          arm();
+          var r = await fetch(url, { headers: { Range: "bytes=" + from + "-" + to }, cache: "no-store", signal: ctl.signal });
+          if (r.status != 206) throw new Error("HTTP " + r.status);
+          var rd = r.body.getReader(), parts = [];
+          for (;;) {
+            var x = await rd.read(); if (x.done) break;
+            arm(); parts.push(x.value); got += x.value.length; onBytes(x.value.length);
+          }
+          clearTimeout(timer);
+          if (got != to - from + 1) throw new Error("short piece");
+          return new Blob(parts);
+        } catch (e) {
+          clearTimeout(timer); onBytes(-got);
+          if (a >= 12) throw e;
+          $("stage").textContent = "Связь прервалась, докачиваю…";
+          await sleep(Math.min(1000 * Math.pow(2, a), 15000));
+        }
+      }
+    }
+
+    // returns { name: blob URL } for the given build files, or null if the server cannot serve ranges (then Unity loads them itself)
+    async function download(files, onProgress) {
+      var cache = null; try { cache = await caches.open(CACHE); } catch (e) {}
+      var info = {}, out = {}, total = 0, done = 0, jobs = [];
+      for (var k in files) {
+        var abs = new URL(files[k], location.href).href, h = null;
+        try { h = await head(abs); } catch (e) {}
+        var hit = cache ? await cache.match(abs) : null;
+        if (hit && (!h || hit.headers.get("x-build-tag") == h.tag)) { out[k] = URL.createObjectURL(await hit.blob()); continue; }  // cached (or offline)
+        if (!h || !h.ranges || !h.size) return null;
+        info[k] = { url: abs, size: h.size, tag: h.tag, parts: [] }; total += h.size;
+        for (var s = 0, i = 0; s < h.size; s += CHUNK, i++) jobs.push({ k: k, i: i, from: s, to: Math.min(s + CHUNK, h.size) - 1 });
+      }
+      onProgress(0, total);
+      var next = 0;
+      async function worker() {
+        while (next < jobs.length) {
+          var j = jobs[next++];
+          info[j.k].parts[j.i] = await piece(info[j.k].url, j.from, j.to, function (d) { done += d; onProgress(done, total); });
+        }
+      }
+      var ws = []; for (var w = 0; w < PARALLEL; w++) ws.push(worker());
+      await Promise.all(ws);
+      for (var k2 in info) {
+        var f = info[k2], blob = new Blob(f.parts, { type: "application/octet-stream" });
+        if (cache) try { await cache.put(f.url, new Response(blob, { headers: { "x-build-tag": f.tag, "content-length": String(f.size) } })); } catch (e) {}
+        out[k2] = URL.createObjectURL(blob);
+      }
+      return out;
+    }
+
+    async function start() {
+      var files = { dataUrl: config.dataUrl, frameworkUrl: config.frameworkUrl };
+      if (config.codeUrl) files.codeUrl = config.codeUrl;
+      try {
+        var urls = await download(files, function (d, t) {
+          var p = t ? d / t : 1;
+          $("bar").style.width = Math.round(p * 90) + "%";
+          $("pct").textContent = Math.round(p * 90) + "%";
+          $("stage").textContent = "Загрузка · " + MB(d) + " из " + MB(t) + " МБ";
+        });
+        if (urls) { for (var k in urls) config[k] = urls[k]; }
+      } catch (e) { fail("Не удалось скачать файлы двойника: " + e.message + "\n\nПроверьте интернет и обновите страницу — уже скачанное не пропадёт."); return; }
+      // our files are blob URLs already kept in Cache Storage: Unity must not cache them again
+      config.cacheControl = function (url) { return /^blob:/.test(url) ? "no-store" : "must-revalidate"; };
+
+      var script = document.createElement("script");
+      script.src = buildUrl + "/WebGL.loader.js";
+      script.onerror = function () { fail("Не удалось загрузить файлы двойника. Проверьте интернет и обновите страницу."); };
+      script.onload = function () {
+        $("stage").textContent = "Запуск города…";
+        createUnityInstance(canvas, config, function (p) {
+          var pct = Math.max(90, Math.round(90 + p * 10));
+          $("bar").style.width = pct + "%"; $("pct").textContent = pct + "%";
+        }).then(function (unity) {
+          $("bar").style.width = "100%"; $("pct").textContent = "100%";
+          $("overlay").classList.add("hide");
+          setTimeout(function () { $("overlay").style.display = "none"; }, 700);
+          var fs = $("fs"); fs.style.display = "block";
+          fs.onclick = function () { unity.SetFullscreen(1); };
+          canvas.focus();
+        }).catch(function (message) {
+          fail(String(message) + "\n\nЧасто помогает: закрыть лишние вкладки, открыть в Chrome или Edge на компьютере и обновить страницу.");
+        });
+      };
+      document.body.appendChild(script);
+    }
+
+    if (!gl2) fail("Браузер не поддерживает WebGL 2. Откройте ссылку в свежем Chrome или Edge на компьютере и проверьте, что аппаратное ускорение включено.");
+    else start();
+  </script>
+</body>
+</html>
