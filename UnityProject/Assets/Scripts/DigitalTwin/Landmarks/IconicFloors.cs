@@ -68,7 +68,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
 
         // ------------------------------------------------------------------ construction phases of one floor
         public const int PNone = 0, PFrame = 1, PFacade = 2, PServices = 3, PPartitions = 4, PFinishes = 5, PFitOut = 6, PReady = 7;
-        public static readonly string[] PhaseName = { "не начат", "каркас", "фасад", "инженерные сети", "перегородки", "отделка", "мебель и оборудование", "готов" };
+        public static readonly string[] PhaseName = { "не начат", "каркас", "фасад", "инженерные сети", "перегородки", "отделка", "оснащение", "готов" };
         /// <summary>Short status of a floor in a phase (for the passport chip).</summary>
         public static readonly string[] PhaseNow = { "этаж ещё не начат", "бетонируют каркас", "монтируют фасад", "прокладывают инженерные сети", "ставят перегородки", "идёт отделка", "завозят мебель и оборудование", "этаж готов" };
         public static readonly Color[] PhaseColor =

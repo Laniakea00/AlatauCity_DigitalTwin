@@ -699,8 +699,8 @@
 .ii-step { flex-direction: row; align-items: center; padding: 4px 0 4px 0; border-bottom-width: 1px; border-bottom-color: var(--line); }
 .ii-dot { width: 8px; height: 8px; border-radius: 4px; margin-right: 8px; border-width: 1px; border-color: var(--line2); flex-shrink: 0; }
 .ii-dot.now { border-color: var(--text); }
-.ii-sn { flex-grow: 1; font-size: 12px; }
-.ii-sw { font-size: 11px; color: var(--text2); white-space: nowrap; }
+.ii-sn { flex-grow: 1; flex-shrink: 1; min-width: 0; font-size: 12px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.ii-sw { font-size: 11px; color: var(--text2); white-space: nowrap; margin-left: 6px; flex-shrink: 0; }
 .ii-sw.warn { color: var(--warn); }
 .ii-legend { flex-direction: row; flex-wrap: wrap; margin-top: 8px; }
 .ii-legend .legend-item { margin-right: 10px; }

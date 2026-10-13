@@ -103,6 +103,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
         public void ExitNow()
         {
             if (!active) return;
+            RestoreLens();
             active = false; leaving = false; walk = false; tr = -1f; cutNow = -1f;
             LandmarkSystem.CutId = null; LandmarkSystem.CutAt = -1f;
             if (floorGo != null) floorGo.SetActive(false); if (ceilGo != null) ceilGo.SetActive(false);
@@ -132,19 +133,20 @@ namespace AlatauCity.DigitalTwin.Landmarks
             if (walk)
             {
                 eye = WalkStart();
-                var d = model.TransformDirection(Vector3.left); wyaw = Mathf.Atan2(d.x, d.z) * Mathf.Rad2Deg; wpitch = 4f;
+                var d = model.TransformDirection(Vector3.right); wyaw = Mathf.Atan2(d.x, d.z) * Mathf.Rad2Deg; wpitch = 6f;
             }
             if (ceilGo != null) ceilGo.SetActive(walk);
             Begin(1.4f, cutNow, CutFor());
             Refresh(true);
         }
+        /// <summary>A few steps in from the west windows, on the axis of the core: the whole floor lies ahead.</summary>
         Vector3 WalkStart()
         {
-            var c = IconicFloors.Centre(floor, out _);
-            float yb = IconicShape.FloorY(floor);
-            // between the lifts and the west windows, looking out
-            for (float x = c.x; x > c.x - 20f; x -= 0.5f) if (IconicFloors.Walkable(floor, x, IconicShape.Cz + 0.3f)) return new Vector3(x, yb + 1.62f, IconicShape.Cz + 0.3f);
-            return new Vector3(c.x - 4f, yb + 1.62f, IconicShape.Cz);
+            float yb = IconicShape.FloorY(floor), w = IconicShape.RawWidth(yb + IconicShape.Fh), x0 = IconicShape.Xr - w;
+            foreach (float dz in new[] { 2.2f, -2.2f, 5f, -5f, 0f })
+                for (float x = x0 + 2.4f; x < IconicShape.Xr - 8f; x += 0.5f)
+                    if (IconicFloors.Walkable(floor, x, IconicShape.Cz + dz) && IconicFloors.Walkable(floor, x + 1.5f, IconicShape.Cz + dz)) return new Vector3(x, yb + 1.62f, IconicShape.Cz + dz);
+            var c = IconicFloors.Centre(floor, out _); return new Vector3(c.x - 4f, yb + 1.62f, IconicShape.Cz);
         }
         float CutFor() => walk ? IconicShape.FloorY(floor) + IconicShape.Fh + 0.05f : IconicShape.FloorY(floor) + 1.6f;
         void Pivot() { var c = IconicFloors.Centre(floor, out float size); pivot = model.TransformPoint(c + Vector3.up * 1.0f); odist = Mathf.Clamp(odist, 6f, 400f); }
@@ -248,10 +250,16 @@ namespace AlatauCity.DigitalTwin.Landmarks
             cutNow = cut; LandmarkSystem.CutId = Id; LandmarkSystem.CutAt = cut;
             cam.transform.SetPositionAndRotation(pos, rot);
             cam.nearClipPlane = walk ? 0.12f : 0.6f; cam.farClipPlane = 60000f;
+            // a wider lens at eye level (a room, not a map), back to the map's lens outside
+            if (fov0 < 0f) fov0 = cam.fieldOfView;
+            cam.fieldOfView = Mathf.MoveTowards(cam.fieldOfView, walk && !leaving ? 64f : fov0, Time.unscaledDeltaTime * 30f);
             if (!leaving) Refresh(false);
         }
+        float fov0 = -1f;
+        void RestoreLens() { if (cam != null && fov0 > 0f) cam.fieldOfView = fov0; fov0 = -1f; }
         void FinishLeave()
         {
+            RestoreLens();
             active = false; leaving = false; cutNow = -1f; LandmarkSystem.CutId = null; LandmarkSystem.CutAt = -1f;
             if (floorGo != null) floorGo.SetActive(false); if (ceilGo != null) ceilGo.SetActive(false);
             TwinUI.Instance?.RefreshCard();
