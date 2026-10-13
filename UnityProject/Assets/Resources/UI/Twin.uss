@@ -724,7 +724,7 @@
 .mon-stem { width: 2px; height: 30px; background-color: rgba(255, 255, 255, 0.9); }
 .mon-zone { position: absolute; top: 12px; left: 50%; translate: -50% 0; padding: 6px 12px 6px 12px; border-radius: 8px; background-color: rgba(16, 16, 16, 0.92); border-width: 1px; border-color: var(--line2); }
 .mon-zone Label { font-size: 13px; }
-.mon-hud { position: absolute; left: 356px; bottom: 14px; font-size: 10px; color: rgba(255, 255, 255, 0.8); letter-spacing: 0.8px; background-color: rgba(0, 0, 0, 0.5); padding: 3px 8px 3px 8px; border-radius: 4px; }
+.mon-hud { position: absolute; left: 356px; bottom: 62px; font-size: 10px; color: rgba(255, 255, 255, 0.8); letter-spacing: 0.8px; background-color: rgba(0, 0, 0, 0.5); padding: 3px 8px 3px 8px; border-radius: 4px; }
 .mon-col { position: absolute; top: 12px; bottom: 12px; overflow: hidden; }
 .mon-left { left: 12px; width: 330px; }
 .mon-right { right: 12px; width: 410px; }
@@ -770,4 +770,6 @@
 .mon-feed-top Label { font-size: 10px; color: rgba(255, 255, 255, 0.92); }
 .mon-tools { position: absolute; bottom: 12px; left: 50%; translate: -50% 0; flex-direction: row; padding: 4px; border-radius: 10px; background-color: rgba(16, 16, 16, 0.94); border-width: 1px; border-color: var(--line); }
 .mon-tool { width: 34px; height: 34px; align-items: center; justify-content: center; border-radius: 7px; }
+.mon-ai { align-items: flex-start; }
+.mon-ai .dot { margin-top: 4px; margin-right: 6px; flex-shrink: 0; }
 .mon-tool.on { background-color: var(--panel3); border-bottom-width: 2px; border-bottom-color: var(--info); }

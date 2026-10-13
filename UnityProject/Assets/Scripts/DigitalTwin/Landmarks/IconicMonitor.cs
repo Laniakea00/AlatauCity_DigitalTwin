@@ -145,7 +145,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             int lag = framesPlan - frames;
             // pace of the frame: days per floor since the frame started, actual vs plan
             float y0 = IconicFloors.YearAt(l, 0.08f), daysNow = (IconicFloors.YearAt(l, p) - y0) * 365f;
-            float pace = daysNow / Mathf.Max(frames, 1), pacePlan = (IconicFloors.YearAt(l, pp) - y0) * 365f / Mathf.Max(framesPlan, 1);
+            float pace = daysNow / Mathf.Max(frames, 1), pacePlan = daysNow / Mathf.Max(framesPlan, 1);       // the same days: the plan had more floors done
             float catchUp = IconicFloors.YearAt(l, Mathf.Min(p + PlanLead * 2.6f, 0.95f));
 
             overlay = new VisualElement(); overlay.AddToClassList("mon-dim");
@@ -229,9 +229,9 @@ namespace AlatauCity.DigitalTwin.Landmarks
             var fid = new Label("   CAM-07 · REC") { pickingMode = PickingMode.Ignore }; ftop.Add(fid);
             var fsp = new VisualElement { pickingMode = PickingMode.Ignore }; fsp.style.flexGrow = 1; ftop.Add(fsp);
             feedClock = new Label { pickingMode = PickingMode.Ignore }; ftop.Add(feedClock);
-            var ai = new VisualElement(); ai.AddToClassList("mon-row"); ai.style.marginTop = 6; ai.Add(Widgets.Dot(new Color(0.20f, 0.78f, 0.35f), true));
+            var ai = new VisualElement(); ai.AddToClassList("mon-row"); ai.AddToClassList("mon-ai"); ai.style.marginTop = 8; ai.Add(Widgets.Dot(new Color(0.20f, 0.78f, 0.35f), true));
             var ail = new Label("ИИ-видеоаналитика: 12 человек в зоне · все в касках и жилетах"); ail.AddToClassList("note"); ail.style.whiteSpace = WhiteSpace.Normal; ai.Add(ail); c4.Add(ai);
-            var ai2 = new VisualElement(); ai2.AddToClassList("mon-row"); ai2.Add(Widgets.Dot(new Color(0.96f, 0.65f, 0.14f), true));
+            var ai2 = new VisualElement(); ai2.AddToClassList("mon-row"); ai2.AddToClassList("mon-ai"); ai2.style.marginTop = 4; ai2.Add(Widgets.Dot(new Color(0.96f, 0.65f, 0.14f), true));
             var ail2 = new Label("09:42 — работа у края плиты без страховки, прораб уведомлён · закрыто"); ail2.AddToClassList("note"); ail2.style.whiteSpace = WhiteSpace.Normal; ai2.Add(ail2); c4.Add(ai2);
 
             // tools at the bottom, as on the platform (measure, layers, compare, cameras …)
@@ -239,7 +239,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             foreach (var ic in new[] { "locate_fixed", "layers", "box", "scan_eye", "video", "radar", "compass", "rotate_ccw" })
             { var b = new VisualElement { pickingMode = PickingMode.Ignore }; b.AddToClassList("mon-tool"); if (ic == "scan_eye") b.AddToClassList("on"); b.Add(TwinUI.Icon(ic, 16)); tools.Add(b); }
 
-            mid.panel.visualTree.Add(overlay);
+            (mid.parent ?? mid).Add(overlay);                 // the root of the interface: it carries the style sheet, the window covers the header too
         }
         static string Floors(int n) { int m = n % 100, d = n % 10; return m >= 11 && m <= 14 ? "этажей" : d == 1 ? "этаж" : d >= 2 && d <= 4 ? "этажа" : "этажей"; }
         static VisualElement Card(VisualElement parent) { var c = new VisualElement(); c.AddToClassList("mon-card"); parent.Add(c); return c; }
@@ -298,7 +298,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             for (float y = 0; y < r.height; y += 3f) { g.BeginPath(); g.MoveTo(new Vector2(0, y)); g.LineTo(new Vector2(r.width, y)); g.Stroke(); }
             if (Mathf.Repeat(phase, 1.2f) < 0.7f) { g.fillColor = new Color(1f, 0.23f, 0.18f); g.BeginPath(); g.Arc(new Vector2(12f, 13f), 4f, 0f, 360f); g.Fill(); }
             var rnd = new System.Random(7);
-            for (int i = 0; i < 4; i++)
+            for (int i = 0; i < 3; i++)
             {
                 float bx = 0.15f + (float)rnd.NextDouble() * 0.65f, by = 0.45f + (float)rnd.NextDouble() * 0.3f, bw = 0.05f + (float)rnd.NextDouble() * 0.03f;
                 float dx = Mathf.Sin(phase * 0.3f + i * 1.9f) * 0.03f;

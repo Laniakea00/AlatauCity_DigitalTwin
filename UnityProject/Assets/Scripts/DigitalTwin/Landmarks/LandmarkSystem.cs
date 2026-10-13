@@ -265,6 +265,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
         /// <summary>0 = not started, (0,1) = under construction, 1 = complete in the shown year.</summary>
         public static float Progress(Landmark l, float y)
         {
+            if (l == null) return 0f;
             // works run through the start year: progress grows continuously from the end of the year before (no jump when the year turns)
             float s0 = l.StartYear - 1f;
             if (y <= s0) return 0f;

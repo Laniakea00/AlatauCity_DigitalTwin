@@ -86,6 +86,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             EnsureObjects(); Rebuild(p, true); Pivot();
             Begin(2.6f, H(L) + 30f, CutFor());
             ShowPanel(true); Refresh(true);
+            TwinUI.Instance?.RefreshCard();                     // the passport gives its place to the floor panel
         }
         /// <summary>Back out to the city: the camera rises to a view of the whole tower while the cut runs back up.</summary>
         public void Exit()
@@ -280,6 +281,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             if (keys && (Input.GetKeyDown(KeyCode.PageUp) || Input.GetKeyDown(KeyCode.RightBracket))) { SetFloor(NextFloor(+1)); }
             if (keys && (Input.GetKeyDown(KeyCode.PageDown) || Input.GetKeyDown(KeyCode.LeftBracket))) { SetFloor(NextFloor(-1)); }
             if (keys && Input.GetKeyDown(KeyCode.V)) ToggleWalk();
+            if (keys && Input.GetKeyDown(KeyCode.M)) { IconicMonitor.Instance?.Show(); return; }
             // mouse: drag turns (orbit around the floor / look around), the wheel brings the camera nearer
             bool over = MapCamera.BlockInput;
             if ((Input.GetMouseButtonDown(0) || Input.GetMouseButtonDown(1)) && !over) { dragging = true; lastMouse = Input.mousePosition; clickPos = Input.mousePosition; }
@@ -350,7 +352,10 @@ namespace AlatauCity.DigitalTwin.Landmarks
         {
             var ui = TwinUI.Instance; var mid = ui != null ? ui.Middle : null;
             if (mid == null) return;
-            if (panel == null) { panel = new VisualElement(); panel.AddToClassList("ii-card"); ui.BlockWhileHovered(panel); }
+            if (panel == null)
+            {
+                panel = new VisualElement(); panel.AddToClassList("ii-card"); ui.BlockWhileHovered(panel);
+            }
             if (panel.parent != mid) mid.Add(panel);
             panel.style.display = on ? DisplayStyle.Flex : DisplayStyle.None;
             mid.EnableInClassList("ii-on", on);
@@ -424,7 +429,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             var wb = Widgets.Btn(walk ? "Вид сверху" : "Пройтись по этажу", ToggleWalk, "small"); if (walk) wb.AddToClassList("active"); btns.Add(wb);
             btns.Add(Widgets.Btn("Наружу", Exit, "small", "ghost"));
             var hint = new Label(walk ? "W A S D — идти · перетаскивание — оглядеться · PgUp / PgDn — этажи · Esc — вид сверху"
-                                      : "перетаскивание — повернуть · колесо — ближе · двойной клик по полу — встать там · PgUp / PgDn — этажи · Esc — наружу");
+                                      : "перетаскивание — повернуть · колесо — ближе · двойной клик по полу — встать там · PgUp / PgDn — этажи · M — мониторинг · Esc — наружу");
             hint.AddToClassList("note"); hint.style.marginTop = 6; hint.style.whiteSpace = WhiteSpace.Normal; panel.Add(hint);
         }
         static string Cap(string s) => string.IsNullOrEmpty(s) ? s : char.ToUpper(s[0]) + s.Substring(1);
