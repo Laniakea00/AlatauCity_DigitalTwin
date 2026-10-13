@@ -11,6 +11,8 @@ namespace AlatauCity.DigitalTwin.Landmarks
     {
         public static void Fill(VisualElement card, Landmark l)
         {
+            // inside the tower its own panel (IconicInterior) takes the passport's place
+            if (IconicInterior.Active && l.Id == "iconic") { card.style.display = DisplayStyle.None; return; }
             card.style.display = DisplayStyle.Flex; card.Clear(); card.AddToClassList("lm-card");
             var sys = LandmarkSystem.Instance;
             var head = new VisualElement(); head.AddToClassList("head");
@@ -65,6 +67,13 @@ namespace AlatauCity.DigitalTwin.Landmarks
             }
 
             var btns = new VisualElement(); btns.AddToClassList("lm-btns");
+            if (l.Id == "iconic" && IconicInterior.Instance != null)
+            {
+                // into the tower: the floor plan as it is being built in the shown year
+                bool can = IconicInterior.Instance.CanEnter(out _);
+                btns.Add(Widgets.Btn(can ? "Внутрь башни" : "Внутрь башни · " + (l.StartYear + 1), () => IconicInterior.Instance.Enter(), "small", "primary"));
+            }
+            if (!l.IsLrt) btns.Add(Widgets.Btn("Ближе", () => sys?.CloseUp(l), "small"));
             if (!l.IsLrt)
             {
                 var ob = Widgets.Btn(LandmarkSystem.OrbitOn ? "Облёт: вкл" : "Облёт: выкл", () => { sys?.ToggleOrbit(); Fill(card, l); }, "small");

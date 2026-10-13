@@ -679,3 +679,29 @@
 .lang-opt { font-size: 12px; color: var(--muted); padding: 5px 9px 5px 9px; min-width: 30px; -unity-text-align: middle-center; border-radius: 6px; -unity-font-definition: url("Fonts/Geologica-Medium.ttf"); }
 .lang-opt:hover { color: var(--text); }
 .lang-opt.on { color: var(--text); background-color: var(--panel3); }
+
+/* ---------- inside Iconic Complex (IconicInterior): floor panel in place of the passport ---------- */
+.ii-card { position: absolute; right: 12px; top: 12px; width: 392px; max-height: 88%; background-color: var(--panel); border-width: 1px; border-color: var(--line);
+    border-radius: 10px; padding: 12px 14px 12px 14px; overflow: hidden; }
+.compact .ii-card { width: 350px; }
+.tour-on .ii-card { max-height: 64%; }
+.ii-card .head { flex-direction: row; align-items: center; margin-bottom: 4px; }
+.ii-card .head .t { font-size: 15px; -unity-font-definition: url("Fonts/Geologica-Medium.ttf"); flex-grow: 1; }
+.ii-card .id { color: var(--muted); font-size: 11px; margin-bottom: 8px; }
+.ii-body { flex-direction: row; margin-top: 2px; }
+.ii-stack { width: 112px; flex-shrink: 0; margin-right: 12px; padding: 2px 0 2px 0; }
+.ii-row { height: 5px; margin-bottom: 1px; flex-direction: row; justify-content: flex-end; align-items: center; }
+.ii-bar { height: 5px; border-radius: 1px; }
+.ii-row:hover .ii-bar { border-width: 1px; border-color: var(--text); }
+.ii-row.cur .ii-bar { height: 7px; border-width: 1px; border-color: var(--sel); }
+.ii-cur { font-size: 10px; color: var(--sel); margin-right: 5px; height: 14px; -unity-text-align: middle-right; -unity-font-definition: url("Fonts/Geologica-Medium.ttf"); }
+.ii-right { flex-grow: 1; flex-shrink: 1; min-width: 0; }
+.ii-step { flex-direction: row; align-items: center; padding: 4px 0 4px 0; border-bottom-width: 1px; border-bottom-color: var(--line); }
+.ii-dot { width: 8px; height: 8px; border-radius: 4px; margin-right: 8px; border-width: 1px; border-color: var(--line2); flex-shrink: 0; }
+.ii-dot.now { border-color: var(--text); }
+.ii-sn { flex-grow: 1; font-size: 12px; }
+.ii-sw { font-size: 11px; color: var(--text2); white-space: nowrap; }
+.ii-sw.warn { color: var(--warn); }
+.ii-legend { flex-direction: row; flex-wrap: wrap; margin-top: 8px; }
+.ii-legend .legend-item { margin-right: 10px; }
+.ii-on .story { visibility: hidden; }

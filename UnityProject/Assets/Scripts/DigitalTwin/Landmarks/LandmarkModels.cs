@@ -105,13 +105,9 @@ namespace AlatauCity.DigitalTwin.Landmarks
             k.Prism(LandmarkKit.RoundRect(-4f, 7f, 46f, 22f, 9f, 4), 21f, 22.2f, GlassBlue, LM.Glass, 1.2f, GlassBlue, LM.Glass);
 
             // ---- main tower: one vertical face (east, +x) with a white spine, the other leans in to a blade-shaped crown
-            float xr = 66f, cz0 = 34f, W0 = 60f, D0 = 44f, H = 272f, roof = 252f, fh = 4.3f;
-            List<Vector2> Ring(float y)
-            {
-                float f = Mathf.Clamp01(y / roof);
-                float w = W0 * (1f - 0.74f * Mathf.Pow(f, 1.25f)), d = D0 * (1f - 0.28f * f);
-                return LandmarkKit.Chamfer(xr - w * 0.5f, cz0, Mathf.Max(w, 5f), d, Mathf.Min(5f, w * 0.18f));
-            }
+            // (the footprint is shared with the interior floors: IconicShape)
+            float xr = IconicShape.Xr, cz0 = IconicShape.Cz, W0 = IconicShape.W0, D0 = IconicShape.D0, H = 272f, roof = IconicShape.Roof, fh = IconicShape.Fh;
+            List<Vector2> Ring(float y) => IconicShape.Ring(y);
             var prev = Ring(0.3f); float yp = 0.3f;
             for (float y = 0.3f + fh; y <= roof + 0.01f; y += fh)
             {

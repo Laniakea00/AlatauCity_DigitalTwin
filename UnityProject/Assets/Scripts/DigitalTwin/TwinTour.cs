@@ -205,7 +205,7 @@ namespace AlatauCity.DigitalTwin
                     float p = IconicP(); var l = LS?.Get("iconic"); float H = l != null ? l.Height : 272f;
                     float frame = Mathf.Clamp01((p - 0.08f) / 0.62f), facade = Mathf.Clamp01((p - 0.25f) / 0.65f);
                     var s = new Story { Eyebrow = "Iconic Complex · " + TwinState.Year, Head = p >= 0.999f ? "Башня сдана, квартал благоустроен" : "Башня растёт — квартал вокруг меняется вместе с ней",
-                        Note = "SOM · Caspian Group · благоустройство квартала — сценарий двойника" };
+                        Note = "SOM · Caspian Group · благоустройство квартала — сценарий двойника · I или двойной клик по башне — заглянуть внутрь" };
                     s.K("272 м", "56 этажей", Color.white).K("276 800 м²", "площадь комплекса", CInfo).K("> $800 млн", "инвестиции", COk);
                     s.R("Каркас", Mathf.RoundToInt(frame * H) + " м", new Color(0.98f, 0.62f, 0.20f), frame);
                     s.R("Фасад", Mathf.RoundToInt(facade * 100f) + " %", CInfo, facade);
@@ -418,7 +418,7 @@ namespace AlatauCity.DigitalTwin
             if (Input.GetKeyDown(KeyCode.F6) && !MapCamera.Typing) { ToggleVideo(); return; }
             NavTick();
             if (!running) return;
-            if (Input.GetKeyDown(KeyCode.Escape)) { if (free) NavMap(Overview); else Stop(); return; }
+            if (Input.GetKeyDown(KeyCode.Escape) && !Landmarks.IconicInterior.EscTaken) { if (free) NavMap(Overview); else Stop(); return; }
             if (Input.GetKeyDown(KeyCode.Space)) { paused = !paused; Caption(); if (voice != null && video) { if (paused) voice.Pause(); else voice.UnPause(); } }
             if (Input.GetKeyDown(KeyCode.RightArrow)) { Next(); return; }
             if (Input.GetKeyDown(KeyCode.LeftArrow)) { Go(idx - 1); return; }
