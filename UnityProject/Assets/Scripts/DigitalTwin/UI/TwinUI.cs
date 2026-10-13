@@ -16,7 +16,7 @@ namespace AlatauCity.DigitalTwin.UI
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         static void Boot() { if (FindFirstObjectByType<TwinUI>() == null) new GameObject("Twin UI").AddComponent<TwinUI>(); }
 
-        UIDocument doc; VisualElement root, leftPanel, rightPanel, popup, districtPopup, card, scene, scenarioBtn, sitePill, rail, bellBadge;
+        UIDocument doc; VisualElement root, leftPanel, rightPanel, popup, districtPopup, langPopup, card, scene, scenarioBtn, sitePill, rail, bellBadge;
         Label yearLabel, scenarioName, siteName, clockLabel, dockYear; Button playBtn; VisualElement playIcon; TwinSlider slider;
         readonly Dictionary<string, VisualElement> railBtns = new Dictionary<string, VisualElement>();
         readonly HashSet<VisualElement> hovered = new HashSet<VisualElement>();
@@ -109,6 +109,7 @@ namespace AlatauCity.DigitalTwin.UI
 
             popup = BuildPopup(); root.Add(popup); Chrome(popup);
             districtPopup = BuildDistrictPopup(); root.Add(districtPopup); Chrome(districtPopup);
+            langPopup = BuildLangPopup(); root.Add(langPopup); Chrome(langPopup);
 
             active = null; OnModule(TwinState.Module); OnScenario(TwinState.Scenario); OnYear(TwinState.Year); OnSelection(TwinState.Selected); OnDistrict(TwinState.District);
         }
@@ -148,14 +149,10 @@ namespace AlatauCity.DigitalTwin.UI
             Notifier.Instance?.BindBadge(bellBadge as Label);
             h.Add(HeadIcon("compass", "Навигатор по презентации · F4", TwinTour.ToggleNav));
             h.Add(HeadIcon("presentation", Loc.T("tour") + " · F5", TwinTour.Toggle));
-            // language: RU · EN · KZ (UiTranslator translates every text on screen; remembered between runs)
-            var lang = new VisualElement(); lang.AddToClassList("lang-sw");
-            foreach (var (code, name) in new[] { ("ru", "RU"), ("en", "EN"), ("kz", "KZ") })
-            {
-                var lb = new Label(name); lb.AddToClassList("lang-opt"); lb.EnableInClassList("on", Loc.Language == code);
-                lb.AddManipulator(new Clickable(() => TwinState.SetLanguage(code))); lang.Add(lb);
-            }
-            h.Add(lang);
+            // language: one globe button with the current code; the menu lists the three languages (UiTranslator translates the screen)
+            var lang = new VisualElement(); lang.AddToClassList("hicon"); lang.AddToClassList("lang-btn"); lang.Add(Icon("globe", 17));
+            var lc = new Label(Loc.Language == "kz" ? "KZ" : Loc.Language == "en" ? "EN" : "RU") { pickingMode = PickingMode.Ignore }; lc.AddToClassList("lang-code"); lang.Add(lc);
+            lang.tooltip = "Язык интерфейса"; lang.AddManipulator(new Clickable(() => TogglePopup(langPopup, lang))); h.Add(lang);
             var user = new VisualElement { pickingMode = PickingMode.Ignore }; user.AddToClassList("user");
             var av = new Label("QT") { pickingMode = PickingMode.Ignore }; av.AddToClassList("avatar"); user.Add(av);
             var uc = new VisualElement { pickingMode = PickingMode.Ignore }; uc.AddToClassList("pcol");
@@ -244,6 +241,20 @@ namespace AlatauCity.DigitalTwin.UI
             }
             return p;
         }
+        /// <summary>The language menu: each language under its own name (marked no-tr, so the translator leaves the names as they are).</summary>
+        VisualElement BuildLangPopup()
+        {
+            var p = new VisualElement(); p.AddToClassList("popup"); p.AddToClassList("lang-pop"); p.AddToClassList("no-tr"); p.style.display = DisplayStyle.None; p.style.width = 190;
+            foreach (var (code, name, tag) in new[] { ("kz", "Қазақша", "KZ"), ("ru", "Русский", "RU"), ("en", "English", "EN") })
+            {
+                var c = code; var item = new VisualElement(); item.AddToClassList("popup-item"); item.AddToClassList("row"); item.EnableInClassList("active", Loc.Language == code);
+                var n = new Label(name) { pickingMode = PickingMode.Ignore }; n.AddToClassList("name"); item.Add(n);
+                var t = new Label(tag) { pickingMode = PickingMode.Ignore }; t.AddToClassList("lang-tag"); item.Add(t);
+                item.AddManipulator(new Clickable(() => { HidePopups(); TwinState.SetLanguage(c); }));
+                p.Add(item);
+            }
+            return p;
+        }
         VisualElement BuildDistrictPopup()
         {
             var p = new VisualElement(); p.AddToClassList("popup"); p.style.display = DisplayStyle.None; p.style.width = 260;
@@ -313,7 +324,20 @@ namespace AlatauCity.DigitalTwin.UI
             float w = root.resolvedStyle.width, pw = p.resolvedStyle.width > 10 ? p.resolvedStyle.width : 340;
             p.style.left = Mathf.Clamp(anchor.worldBound.center.x - pw / 2, 8, w - pw - 8);
         }
-        void HidePopups() { if (popup != null) popup.style.display = DisplayStyle.None; if (districtPopup != null) districtPopup.style.display = DisplayStyle.None; }
+        /// <summary>The language menu, open under its button (the video shows it).</summary>
+        public void OpenLangMenu()
+        {
+            if (langPopup == null || root == null) return;
+            HidePopups(); langPopup.style.display = DisplayStyle.Flex; PlaceLangMenu();
+            langPopup.schedule.Execute(PlaceLangMenu).ExecuteLater(1);     // a rebuilt header has its layout one frame later
+        }
+        void PlaceLangMenu()
+        {
+            var btn = root?.Q(className: "lang-btn"); if (btn == null || langPopup == null) return;
+            float w = root.resolvedStyle.width, pw = 190f, cx = btn.worldBound.width > 1f ? btn.worldBound.center.x : w - 260f;
+            langPopup.style.left = Mathf.Clamp(cx - pw / 2, 8, w - pw - 8);
+        }
+        public void HidePopups() { if (popup != null) popup.style.display = DisplayStyle.None; if (districtPopup != null) districtPopup.style.display = DisplayStyle.None; if (langPopup != null) langPopup.style.display = DisplayStyle.None; }
 
         // ------------------------------------------------------------------ passport card
         VisualElement middleEl;

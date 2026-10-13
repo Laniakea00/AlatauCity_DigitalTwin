@@ -27,7 +27,7 @@ namespace AlatauCity.DigitalTwin.UI
             bubble = new VisualElement { pickingMode = PickingMode.Ignore }; bubble.AddToClassList("aiw-bubble"); Add(bubble);
             var who = new Label("ВОПРОС ИИ-АССИСТЕНТУ") { pickingMode = PickingMode.Ignore }; who.AddToClassList("aiw-bh"); bubble.Add(who);
             var line = new VisualElement { pickingMode = PickingMode.Ignore }; line.style.flexDirection = FlexDirection.Row; bubble.Add(line);
-            q = new Label("") { pickingMode = PickingMode.Ignore }; q.AddToClassList("aiw-q"); line.Add(q);
+            q = new Label("") { pickingMode = PickingMode.Ignore }; q.AddToClassList("aiw-q"); q.AddToClassList("no-tr"); line.Add(q);   // typed already translated
             cursor = new Label("|") { pickingMode = PickingMode.Ignore }; cursor.AddToClassList("aiw-q"); cursor.AddToClassList("aiw-cursor"); line.Add(cursor);
 
             chipRow = new VisualElement { pickingMode = PickingMode.Ignore }; chipRow.AddToClassList("aiw-chips"); bubble.Add(chipRow);
@@ -70,9 +70,10 @@ namespace AlatauCity.DigitalTwin.UI
         {
             if (panel == null) return;
             float dt = Mathf.Min(Time.unscaledDeltaTime, 0.05f) * Time.timeScale; if (TourFx.Paused) dt = 0; t += dt;   // follows the video mode speed-up
-            // 1. typing
-            int n = Mathf.Clamp(Mathf.FloorToInt((t - 0.6f) / 0.075f), 0, Question.Length); q.text = Question.Substring(0, n);
-            cursor.style.opacity = n < Question.Length || t < 4.5f ? (Mathf.Repeat(t, 0.9f) < 0.5f ? 1f : 0f) : 0f;
+            // 1. typing: the question in the language of the screen, typed in the same time whatever its length
+            var qs = UiTranslator.Tr(Question);
+            int n = Mathf.Clamp(Mathf.FloorToInt((t - 0.6f) / (0.075f * Question.Length / Mathf.Max(qs.Length, 1))), 0, qs.Length); q.text = qs.Substring(0, n);
+            cursor.style.opacity = n < qs.Length || t < 4.5f ? (Mathf.Repeat(t, 0.9f) < 0.5f ? 1f : 0f) : 0f;
             // 2. the assistant works: chips with a spinner, then a check
             for (int i = 0; i < chips.Count; i++)
             {

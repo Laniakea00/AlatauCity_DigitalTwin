@@ -444,7 +444,7 @@
 .tour-zone { font-size: 11px; letter-spacing: 1.2px; -unity-font-definition: url("Fonts/Geologica-Medium.ttf"); color: var(--text); }
 .tour-count { font-size: 11px; color: var(--muted); }
 .tour-segs { flex-direction: row; margin-bottom: 10px; }
-.tour-seg { flex-grow: 1; flex-basis: 0; margin-right: 4px; padding-top: 5px; border-top-width: 3px; border-top-color: #2c2c2c; }
+.tour-seg { flex-grow: 1; flex-basis: auto; margin-right: 4px; padding-top: 5px; border-top-width: 3px; border-top-color: #2c2c2c; }   /* longer names (Growing, Summary) get more room */
 .tour-seg Label { font-size: 10px; color: #6e6e6e; -unity-text-align: middle-center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tour-seg.done { border-top-color: #6a6a6a; }
 .tour-seg.done Label { color: #9a9a9a; }
@@ -674,8 +674,10 @@
 .tnav-on .toast-host, .tnav-on.tour-on .toast-host { top: 62px; }
 .tnav-on .tour-callout { top: 62px; }
 
-/* language switch in the header (RU · EN · KZ) */
-.lang-sw { flex-direction: row; align-items: center; margin: 0 6px 0 8px; padding: 2px; border-radius: 8px; border-width: 1px; border-color: var(--line2); }
-.lang-opt { font-size: 12px; color: var(--muted); padding: 5px 9px 5px 9px; min-width: 30px; -unity-text-align: middle-center; border-radius: 6px; -unity-font-definition: url("Fonts/Geologica-Medium.ttf"); }
-.lang-opt:hover { color: var(--text); }
-.lang-opt.on { color: var(--text); background-color: var(--panel3); }
+/* language: a globe button with the current code in the header, the menu under it */
+.lang-btn { flex-direction: row; width: auto; padding: 0 9px 0 9px; }
+.lang-code { font-size: 11px; color: var(--muted); margin-left: 5px; -unity-font-definition: url("Fonts/Geologica-Medium.ttf"); }
+.lang-btn:hover .lang-code { color: var(--text); }
+.lang-pop .popup-item.row { flex-direction: row; align-items: center; justify-content: space-between; }
+.lang-pop .popup-item .name { white-space: nowrap; flex-shrink: 0; }
+.lang-tag { font-size: 11px; color: var(--muted); }

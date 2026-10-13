@@ -69,6 +69,7 @@ Shader "Hidden/AlatauCity/FilmPost"
     float4 fragApply(v2f i) : SV_Target
     {
         float4 c = tex2D(_MainTex, i.uv); float ao = tex2D(_AoTex, i.uv).r;
+        c = clamp(c, 0.0, 16.0);      // a broken or extreme pixel (a sun glint on glass) must not spread into a white disc by blur and bloom
         // shade a little towards a cool tone instead of plain black
         c.rgb *= lerp(float3(0.52, 0.56, 0.66), float3(1, 1, 1), ao) * lerp(0.86, 1.0, ao);
         return c;
@@ -95,7 +96,7 @@ Shader "Hidden/AlatauCity/FilmPost"
 
     float4 fragBright(v2f i) : SV_Target
     {
-        float3 c = tex2D(_MainTex, i.uv).rgb;
+        float3 c = clamp(tex2D(_MainTex, i.uv).rgb, 0.0, 16.0);
         float l = max(c.r, max(c.g, c.b));
         return float4(c * saturate((l - _BloomP.x) / max(l, 1e-3)) , 1);
     }
