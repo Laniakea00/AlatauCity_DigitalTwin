@@ -93,11 +93,12 @@ namespace AlatauCity.DigitalTwin
             Physics.SyncTransforms();
             // street trees and road corridors, sorted into cells
             var rng = new System.Random(2050); int rows = 0;
-            foreach (var e in TwinData.Roads)
+            for (int ei = 0; ei < TwinData.Roads.Length; ei++)
             {
+                var e = TwinData.Roads[ei];
                 if (e.Geom == null || e.Geom.Length < 2) continue;
                 FilmRoads.Dims(e.Cls, out float half, out float walk, out _, out _);
-                bool planted = walk > 0f; float next = Spacing * (float)rng.NextDouble(), off = half + walk * 0.55f;
+                bool planted = walk > 0f && !FilmRoads.Dropped(ei); float next = Spacing * (float)rng.NextDouble(), off = half + walk * 0.55f;
                 for (int i = 1; i < e.Geom.Length; i++)
                 {
                     Vector2 a = e.Geom[i - 1], b = e.Geom[i]; float len = (b - a).magnitude; if (len < 0.01f) continue;
@@ -119,6 +120,14 @@ namespace AlatauCity.DigitalTwin
                     next -= len; rows++;
                 }
             }
+            // the clean road geometry (rebuilt motorways, interchange ramps) keeps trees off its ribbons too
+            foreach (var (P, half) in FilmRoads.CleanLines())
+                for (int i = 1; i < P.Count; i++)
+                {
+                    var sg = new Seg { a = P[i - 1], b = P[i], half = half + 2f };
+                    for (int cz = C(Mathf.Min(sg.a.y, sg.b.y) - sg.half); cz <= C(Mathf.Max(sg.a.y, sg.b.y) + sg.half); cz++) for (int cx = C(Mathf.Min(sg.a.x, sg.b.x) - sg.half); cx <= C(Mathf.Max(sg.a.x, sg.b.x) + sg.half); cx++)
+                    { long k = Key(cx, cz); if (!corridors.TryGetValue(k, out var l)) corridors[k] = l = new List<Seg>(); l.Add(sg); }
+                }
             // house plots: every generated house gets a hedge round a plot a little larger than itself, with a gap for the gate,
             // and a tree or two in the garden. The house rectangles are read from the building meshes (the lowest corners of each house).
             int plots = 0; var uv2 = new List<Vector2>(); var corner = new Dictionary<int, List<Vector3>>();
@@ -236,7 +245,7 @@ namespace AlatauCity.DigitalTwin
                 {
                     if (tmpM[3].Count >= 1023) break;
                     if (Land(hd.x, hd.y, out float yr) == 3) continue;
-                    if (Landmarks.LandmarkSystem.OnPlot(hd.x, hd.y)) continue;
+                    if (Landmarks.LandmarkSystem.OnPlot(hd.x, hd.y) || FilmRoads.InInterchange(hd.x, hd.y)) continue;
                     if (segs != null) { bool onRoad = false; var q = new Vector2(hd.x, hd.y); foreach (var sg in segs) if (DistToSeg(q, sg.a, sg.b) < sg.half - 1f) { onRoad = true; break; } if (onRoad) continue; }
                     if (!Physics.Raycast(new Vector3(hd.x, 6000f, hd.y), Vector3.down, out var hit, 9000f, ~0, QueryTriggerInteraction.Ignore)) continue;
                     if (!isGround.TryGetValue(hit.collider, out bool ground)) isGround[hit.collider] = ground = hit.collider.name.StartsWith("Terrain");
@@ -252,6 +261,7 @@ namespace AlatauCity.DigitalTwin
                 int land = Land(x, z, out float yr);
                 // groves in the parks (denser where the noise is high), a few trees in the yards, a rare one in the steppe
                 float p = land == 1 ? 0.25f + 0.6f * Mathf.PerlinNoise(x * 0.012f + 31f, z * 0.012f + 7f) : land == 0 ? 0.11f : land == 2 ? 0.004f : 0f;
+                if (land != 3 && FilmRoads.InInterchange(x, z)) p = 0.02f;                  // the verge between the ramps: a rare tree
                 if (pick > p) continue;
                 if (segs != null) { bool onRoad = false; var q = new Vector2(x, z); foreach (var sg in segs) if (DistToSeg(q, sg.a, sg.b) < sg.half) { onRoad = true; break; } if (onRoad) continue; }
                 Try(x, z, land == 1 ? (kind < 0.58f ? 0 : kind < 0.82f ? 2 : 1) : (kind < 0.8f ? 0 : 1), yr, size);

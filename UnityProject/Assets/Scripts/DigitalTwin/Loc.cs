@@ -3,11 +3,14 @@ using System.Globalization;
 
 namespace AlatauCity.DigitalTwin
 {
-    /// <summary>UI strings. RU is the default; EN complete; KZ falls back to RU until the Kazakh copy is approved.</summary>
+    /// <summary>UI strings. RU is the source; EN and KZ come from Resources/Loc/strings.json (UiTranslator), En / Kz below are fallbacks.</summary>
     public static class Loc
     {
         public static string Language = "ru";
-        public static readonly CultureInfo Ru = CultureInfo.GetCultureInfo("ru-RU");
+        /// <summary>Number and date format of the current language (the name is historical: it was Russian only).</summary>
+        public static CultureInfo Ru => Language == "en" ? EnC : Language == "kz" ? KzC : RuC;
+        static readonly CultureInfo RuC = CultureInfo.GetCultureInfo("ru-RU"), EnC = CultureInfo.GetCultureInfo("en-US"), KzC = Kk();
+        static CultureInfo Kk() { try { return CultureInfo.GetCultureInfo("kk-KZ"); } catch { return CultureInfo.GetCultureInfo("ru-RU"); } }
         public static string N0(double v) => v.ToString("N0", Ru);
         public static string N1(double v) => v.ToString("N1", Ru);
         public static string K(double v) => N0(v / 1000.0);                 // thousands
@@ -17,9 +20,13 @@ namespace AlatauCity.DigitalTwin
 
         public static string T(string key)
         {
+            if (!RuD.TryGetValue(key, out var r)) return Language == "en" && En.TryGetValue(key, out var e0) ? e0 : key;
+            if (Language == "ru") return r;
+            var t = UiTranslator.Tr(r);                                    // Resources/Loc/strings.json holds every phrase below in EN and KZ
+            if (t != r) return t;
             if (Language == "en" && En.TryGetValue(key, out var e)) return e;
             if (Language == "kz" && Kz.TryGetValue(key, out var k)) return k;
-            return RuD.TryGetValue(key, out var r) ? r : key;
+            return r;
         }
 
         static readonly Dictionary<string, string> RuD = new Dictionary<string, string>

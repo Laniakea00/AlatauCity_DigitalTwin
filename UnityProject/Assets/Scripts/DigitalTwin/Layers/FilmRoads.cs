@@ -143,6 +143,7 @@ namespace AlatauCity.DigitalTwin
         /// streets get a kerb radius. Short, curving motorway strokes are ramps (cloverleaf loops, slips) and get a one-lane width.</summary>
         static List<Stroke> Strokes()
         {
+            var film = FilmStrokes(); if (film != null) return film;
             var R = TwinData.Roads; int n = R.Length;
             var adj = new Dictionary<int, List<int>>();
             for (int i = 0; i < n; i++)
@@ -284,6 +285,52 @@ namespace AlatauCity.DigitalTwin
             }
             return res;
         }
+        // ---------------------------------------------------------------- clean geometry (Tools/build_film_roads.py)
+        // Motorways as one smooth dual carriageway per corridor, the nine interchanges as standard cloverleafs, the plan's doubled
+        // lines, ramp scribbles and U-turn hairpins removed. k: 0 two-way road, 1 one carriageway of a dual road, 2 ramp.
+        [System.Serializable] class FrStroke { public string c; public int k, a, b; public int[] y; public float[] g; }
+        [System.Serializable] class FrData { public FrStroke[] s; public int[] drop; }
+        static FrData frCache; static bool frTried; static HashSet<int> frDrop;
+        static FrData LoadFilm()
+        {
+            if (frTried) return frCache; frTried = true;
+            var ta = Resources.Load<TextAsset>("Landmarks/film_roads"); if (ta == null) return null;
+            try { frCache = JsonUtility.FromJson<FrData>(ta.text); } catch (System.Exception e) { Debug.LogWarning("[Alatau] film roads: " + e.Message); frCache = null; }
+            if (frCache != null && (frCache.s == null || frCache.s.Length == 0)) frCache = null;
+            if (frCache != null) frDrop = new HashSet<int>(frCache.drop ?? new int[0]);
+            return frCache;
+        }
+        /// <summary>A plan edge that the clean geometry no longer draws (a motorway piece or a ramp scribble): no street trees along it.</summary>
+        public static bool Dropped(int edge) { LoadFilm(); return frDrop != null && frDrop.Contains(edge); }
+        /// <summary>Motorway carriageways and interchange ramps of the clean geometry with their half widths (empty without it).</summary>
+        public static IEnumerable<(List<Vector2> P, float half)> CleanLines()
+        {
+            var fr = LoadFilm(); if (fr == null) yield break;
+            foreach (var f in fr.s)
+            {
+                if (f.g == null || f.g.Length < 4 || (f.c != "highway" && f.c != "ring" && f.k != 2)) continue;
+                var pts = new List<Vector2>(f.g.Length / 2); for (int i = 0; i + 1 < f.g.Length; i += 2) pts.Add(new Vector2(f.g[i], f.g[i + 1]));
+                yield return (pts, f.k == 2 ? 4f : 6f);
+            }
+        }
+        static List<Stroke> FilmStrokes()
+        {
+            var fr = LoadFilm(); if (fr == null) return null;
+            var res = new List<Stroke>(fr.s.Length);
+            foreach (var f in fr.s)
+            {
+                if (f.g == null || f.g.Length < 4) continue;
+                var pts = new List<Vector2>(f.g.Length / 2); for (int i = 0; i + 1 < f.g.Length; i += 2) pts.Add(new Vector2(f.g[i], f.g[i + 1]));
+                var cls = f.c == "highway" ? TwinData.RoadClass.Highway : f.c == "ring" ? TwinData.RoadClass.Ring : f.c == "main" ? TwinData.RoadClass.Main : TwinData.RoadClass.Street;
+                var yv = f.y != null && f.y.Length >= 4 ? new Vector4(f.y[0], f.y[1], f.y[2], f.y[3]) : new Vector4(2025, 2025, 2025, 2025);
+                float L = 0; for (int i = 1; i < pts.Count; i++) L += (pts[i] - pts[i - 1]).magnitude;
+                // junction ids: plan nodes; strokes cut by the cleaning have -1 and get a private id (no patch)
+                res.Add(new Stroke { Cls = cls, Years = yv, A = f.a >= 0 ? f.a : -1000000 - res.Count * 2, B = f.b >= 0 ? f.b : -1000001 - res.Count * 2,
+                    P = pts, Len = L, Ramp = f.k == 2, OneWay = f.k == 1, Fixed = true });
+            }
+            return res;
+        }
+
         [System.Serializable] class IcPath { public int[] y; public float[] g; }
         [System.Serializable] class IcData { public int[] edges; public IcPath[] paths; }
         static IcData icCache;
@@ -294,10 +341,19 @@ namespace AlatauCity.DigitalTwin
             try { icCache = JsonUtility.FromJson<IcData>(ta.text); } catch (System.Exception e) { Debug.LogWarning("[Alatau] interchanges: " + e.Message); }
             return icCache;
         }
+        static Vector4[] icZones; static int icCount = -1;
+        /// <summary>Inside a motorway interchange: the land between the ramps is a verge with a few trees, not a park or yards.</summary>
+        public static bool InInterchange(float x, float z)
+        {
+            if (icCount < 0) PublishZones();
+            for (int i = 0; i < icCount; i++) { var c = icZones[i]; float dx = x - c.x, dz = z - c.y; if (dx * dx + dz * dz < c.z * c.z) return true; }
+            return false;
+        }
         /// <summary>Interchange zones (x, z, radius): the ground inside is a mown verge, not city yards (AlatauGround reads _AlatauIcZones).</summary>
         public static void PublishZones()
         {
-            var ta = Resources.Load<TextAsset>("Landmarks/interchanges"); var v = new Vector4[32]; int n = 0;
+            var ta = Resources.Load<TextAsset>("Landmarks/film_roads"); if (ta == null) ta = Resources.Load<TextAsset>("Landmarks/interchanges");
+            var v = new Vector4[32]; int n = 0;
             if (ta != null)
             {
                 // "zones":[[x,z,r,y],...] — JsonUtility cannot read nested arrays, so a tiny parse
@@ -319,6 +375,7 @@ namespace AlatauCity.DigitalTwin
                 }
             }
             Shader.SetGlobalVectorArray("_AlatauIcZones", v); Shader.SetGlobalFloat("_AlatauIcCount", n);
+            icZones = v; icCount = n;
         }
 
         static List<Vector2> Resample(List<Vector2> p, float step)

@@ -14,7 +14,7 @@ namespace AlatauCity.DigitalTwin
     /// is framed and highlighted on the map, its real projects are shown close up (fly-in, orbit, passport) and the twin's functions are
     /// shown where they matter for that district (construction, LRT, forecast, situational centre, networks, risks). The functions keep
     /// working on the whole map; the tour only picks the context. Space — pause, ← → — steps, Esc — exit.</summary>
-    public class TwinTour : MonoBehaviour
+    public partial class TwinTour : MonoBehaviour
     {
         public static TwinTour Instance;
         public static bool Running => Instance != null && Instance.running;
@@ -326,15 +326,16 @@ namespace AlatauCity.DigitalTwin
         void Begin()
         {
             if (!TwinData.Ready || !CityStats.Ready) { Debug.LogWarning("[Alatau] tour: data not ready"); return; }
-            Build(); running = true; paused = false; Go(0);
+            Build(); running = true; paused = false; free = false; Go(0);
         }
         public void Stop()
         {
-            running = false; video = false; Time.timeScale = 1f; Notifier.TourToasts = false; SmartCityModule.TourHide(); if (voice != null) voice.Stop(); box?.RemoveFromClassList("video"); CityTimeline.StopGrowth(); if (box != null) box.style.display = DisplayStyle.None; story?.Hide(); TwinUI.Instance?.Middle?.RemoveFromClassList("tour-nocard"); host?.RemoveFromClassList("tour-on"); TwinUI.Instance?.Middle?.RemoveFromClassList("tour-on"); TwinUI.Instance?.Middle?.RemoveFromClassList("tour-gfa"); ReleaseCard();
+            running = false; video = false; free = false; Time.timeScale = 1f; Notifier.TourToasts = false; SmartCityModule.TourHide(); if (voice != null) voice.Stop(); box?.RemoveFromClassList("video"); CityTimeline.StopGrowth(); if (box != null) box.style.display = DisplayStyle.None; story?.Hide(); TwinUI.Instance?.Middle?.RemoveFromClassList("tour-nocard"); host?.RemoveFromClassList("tour-on"); TwinUI.Instance?.Middle?.RemoveFromClassList("tour-on"); TwinUI.Instance?.Middle?.RemoveFromClassList("tour-gfa"); ReleaseCard();
             if (TwinState.Scenario != Scenario.Base) TwinState.Scenario = Scenario.Base;
             TwinState.SetDistrict(-1);
             TourFx.Instance?.Reset(); LrtLayer.Showcase = false;
             TwinState.SetModule("overview");             // panels built for the presentation (one district only) are rebuilt for normal work
+            NavRefresh();
         }
         void Go(int i)
         {
@@ -352,6 +353,7 @@ namespace AlatauCity.DigitalTwin
             try { s.Enter?.Invoke(); } catch (Exception e) { Debug.LogWarning("[Alatau] tour step " + idx + ": " + e.Message); }
             Caption();
             if (story != null) { if (s.Story != null) story.Show(s.Story); else story.Hide(); }
+            NavRefresh();
         }
         void Caption()
         {
@@ -359,7 +361,7 @@ namespace AlatauCity.DigitalTwin
             int seg = s.Seg;
             lZone.text = SegTitle[seg].ToUpperInvariant();
             zoneDot.style.backgroundColor = s.Zone >= 0 ? CityStats.DistrictColors[s.Zone] : seg == 5 ? LrtC : Brand;
-            lStep.text = $"{idx + 1} / {steps.Count}";
+            lStep.text = free ? $"шаг {idx + 1} из {steps.Count}" : $"{idx + 1} / {steps.Count}";
             int k = 0; foreach (var c in segs.Children()) { c.EnableInClassList("on", k == seg); c.EnableInClassList("done", k < seg); k++; }
             try { lStepName.text = s.Title != null ? s.Title() : ""; } catch { lStepName.text = ""; }
             bPause.text = paused ? "Продолжить" : "Пауза";
@@ -408,14 +410,15 @@ namespace AlatauCity.DigitalTwin
         }
         void ReleaseCard() { var card = TwinUI.Instance?.Middle?.Q(className: "card"); if (card != null) card.style.maxHeight = StyleKeyword.Null; }
         void JumpZone(int z) { int i = steps.FindIndex(s => s.Zone == z); if (i >= 0) Go(i); }
-        void Next() { if (idx >= steps.Count - 1) Stop(); else Go(idx + 1); }
+        void Next() { if (idx >= steps.Count - 1) { if (!free) Stop(); } else Go(idx + 1); }
 
         void Update()
         {
             if (Input.GetKeyDown(KeyCode.F5) && !MapCamera.Typing) { Toggle(); return; }
             if (Input.GetKeyDown(KeyCode.F6) && !MapCamera.Typing) { ToggleVideo(); return; }
+            NavTick();
             if (!running) return;
-            if (Input.GetKeyDown(KeyCode.Escape)) { Stop(); return; }
+            if (Input.GetKeyDown(KeyCode.Escape)) { if (free) NavMap(Overview); else Stop(); return; }
             if (Input.GetKeyDown(KeyCode.Space)) { paused = !paused; Caption(); if (voice != null && video) { if (paused) voice.Pause(); else voice.UnPause(); } }
             if (Input.GetKeyDown(KeyCode.RightArrow)) { Next(); return; }
             if (Input.GetKeyDown(KeyCode.LeftArrow)) { Go(idx - 1); return; }
@@ -425,7 +428,7 @@ namespace AlatauCity.DigitalTwin
             if (box == null || box.parent == null) Caption();
             var s = steps[idx];
             TourFx.Paused = paused;
-            if (!paused)
+            if (!paused && !(free && t >= s.EndT))                      // navigator: a step holds on its last frame, it does not move on
             {
                 t += Time.deltaTime;
                 if (s.Grow)
@@ -445,7 +448,7 @@ namespace AlatauCity.DigitalTwin
                 }
                 if (t > 0.6f && t - Time.deltaTime <= 0.6f) Caption();     // modules refresh their summaries after the first frames
                 if (s.Shots != null) foreach (var (st, act) in s.Shots) if (t >= st && t - Time.deltaTime < st) { try { act(); } catch (Exception e) { Debug.LogWarning("[Alatau] tour shot: " + e.Message); } }
-                if (t >= s.EndT) { if (video && idx == steps.Count - 1) { paused = true; TourFx.Paused = true; videoDone = true; } else { Next(); return; } }   // the video holds its last frame
+                if (t >= s.EndT) { if (free) t = s.EndT; else if (video && idx == steps.Count - 1) { paused = true; TourFx.Paused = true; videoDone = true; } else { Next(); return; } }   // the video holds its last frame
             }
             if (bar != null) bar.style.width = Length.Percent(100f * Mathf.Clamp01(t / s.EndT));
             if (story != null)

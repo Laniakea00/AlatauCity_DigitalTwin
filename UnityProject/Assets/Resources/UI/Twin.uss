@@ -445,7 +445,7 @@
 .tour-count { font-size: 11px; color: var(--muted); }
 .tour-segs { flex-direction: row; margin-bottom: 10px; }
 .tour-seg { flex-grow: 1; flex-basis: 0; margin-right: 4px; padding-top: 5px; border-top-width: 3px; border-top-color: #2c2c2c; }
-.tour-seg Label { font-size: 10px; color: #6e6e6e; -unity-text-align: middle-center; }
+.tour-seg Label { font-size: 10px; color: #6e6e6e; -unity-text-align: middle-center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tour-seg.done { border-top-color: #6a6a6a; }
 .tour-seg.done Label { color: #9a9a9a; }
 .tour-seg.on { border-top-color: var(--brand); }
@@ -646,3 +646,36 @@
 .lm-cap-line { color: #c9c9c9; margin-top: 2px; }
 .eco-h { font-size: 12px; color: #9a9a9a; -unity-font-definition: url("Fonts/Geologica-Medium.ttf"); }
 .story-row.clickable:hover { background-color: #1d1d1d; }
+
+/* presentation mode 2: the navigator (TwinTourNav) — a bar at the top of the map and the list of steps, districts and objects under it */
+.tnav { position: absolute; top: 10px; left: 50%; translate: -50% 0; flex-direction: row; align-items: center; padding: 6px 6px 6px 12px;
+    background-color: var(--panel); border-width: 1px; border-color: var(--line2); border-radius: 12px; }
+.tnav .btn { margin-left: 6px; }
+.tnav-ic { margin-right: 8px; -unity-background-image-tint-color: #ffffff; }
+.tnav-now { font-size: 13px; color: var(--text); -unity-font-definition: url("Fonts/Geologica-Medium.ttf"); max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-right: 6px; }
+.tnav-pop { position: absolute; top: 58px; left: 50%; translate: -50% 0; width: 460px; max-height: 72%; padding: 8px 6px 8px 8px;
+    background-color: var(--panel-solid); border-width: 1px; border-color: var(--line2); border-radius: 12px; }
+.tnav-scroll { flex-grow: 1; flex-shrink: 1; }
+.tnav-scroll .unity-scroller--vertical { width: 6px; border-width: 0; background-color: rgba(0, 0, 0, 0); margin-left: 4px; }
+.tnav-scroll .unity-scroller--vertical .unity-base-slider__dragger { background-color: var(--line2); border-radius: 3px; width: 4px; border-width: 0; left: 1px; }
+.tnav-scroll .unity-scroller--vertical .unity-base-slider__tracker { background-color: rgba(0, 0, 0, 0); border-width: 0; }
+.tnav-scroll .unity-scroller__low-button, .tnav-scroll .unity-scroller__high-button { display: none; }
+.tnav-head { flex-direction: row; align-items: center; margin: 10px 0 4px 6px; }
+.tnav-head Label { font-size: 10px; letter-spacing: 1.2px; color: var(--muted); -unity-font-definition: url("Fonts/Geologica-Medium.ttf"); }
+.tnav-dot { width: 7px; height: 7px; border-radius: 4px; margin-right: 8px; flex-shrink: 0; }
+.tnav-chips { flex-direction: row; flex-wrap: wrap; margin: 2px 0 2px 2px; }
+.tnav-chips .btn { margin: 2px 4px 2px 0; }
+.tnav-item { flex-direction: row; align-items: center; padding: 7px 10px 7px 10px; border-radius: 6px; border-left-width: 2px; border-left-color: rgba(0, 0, 0, 0); }
+.tnav-item:hover { background-color: var(--panel2); }
+.tnav-item.on { background-color: var(--panel2); border-left-color: var(--brand); }
+.tnav-n { width: 22px; font-size: 11px; color: var(--muted); }
+.tnav-t { font-size: 13px; color: #e6e6e6; flex-shrink: 1; }
+.tnav-item.on .tnav-t { -unity-font-definition: url("Fonts/Geologica-Medium.ttf"); color: var(--text); }
+.tnav-on .toast-host, .tnav-on.tour-on .toast-host { top: 62px; }
+.tnav-on .tour-callout { top: 62px; }
+
+/* language switch in the header (RU · EN · KZ) */
+.lang-sw { flex-direction: row; align-items: center; margin: 0 6px 0 8px; padding: 2px; border-radius: 8px; border-width: 1px; border-color: var(--line2); }
+.lang-opt { font-size: 12px; color: var(--muted); padding: 5px 9px 5px 9px; min-width: 30px; -unity-text-align: middle-center; border-radius: 6px; -unity-font-definition: url("Fonts/Geologica-Medium.ttf"); }
+.lang-opt:hover { color: var(--text); }
+.lang-opt.on { color: var(--text); background-color: var(--panel3); }

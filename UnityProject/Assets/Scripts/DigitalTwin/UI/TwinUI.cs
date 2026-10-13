@@ -146,7 +146,16 @@ namespace AlatauCity.DigitalTwin.UI
             VisualElement bell = null; bell = HeadIcon("bell", "Уведомления · Smart City, iKomek 109", () => Notifier.Instance?.TogglePanel(bell));
             bellBadge = new Label("") { pickingMode = PickingMode.Ignore }; bellBadge.AddToClassList("hbadge"); bell.Add(bellBadge); h.Add(bell);
             Notifier.Instance?.BindBadge(bellBadge as Label);
-            h.Add(HeadIcon("presentation", Loc.T("tour"), TwinTour.Toggle));
+            h.Add(HeadIcon("compass", "Навигатор по презентации · F4", TwinTour.ToggleNav));
+            h.Add(HeadIcon("presentation", Loc.T("tour") + " · F5", TwinTour.Toggle));
+            // language: RU · EN · KZ (UiTranslator translates every text on screen; remembered between runs)
+            var lang = new VisualElement(); lang.AddToClassList("lang-sw");
+            foreach (var (code, name) in new[] { ("ru", "RU"), ("en", "EN"), ("kz", "KZ") })
+            {
+                var lb = new Label(name); lb.AddToClassList("lang-opt"); lb.EnableInClassList("on", Loc.Language == code);
+                lb.AddManipulator(new Clickable(() => TwinState.SetLanguage(code))); lang.Add(lb);
+            }
+            h.Add(lang);
             var user = new VisualElement { pickingMode = PickingMode.Ignore }; user.AddToClassList("user");
             var av = new Label("QT") { pickingMode = PickingMode.Ignore }; av.AddToClassList("avatar"); user.Add(av);
             var uc = new VisualElement { pickingMode = PickingMode.Ignore }; uc.AddToClassList("pcol");
@@ -196,6 +205,10 @@ namespace AlatauCity.DigitalTwin.UI
             var tl = new Label(Loc.T("tour")) { pickingMode = PickingMode.Ignore }; tl.AddToClassList("rail-label"); tb.Add(tl);
             var tt = new Label(Loc.T("tour") + " · F5") { pickingMode = PickingMode.Ignore }; tt.AddToClassList("rail-tip"); tb.Add(tt);
             tb.AddManipulator(new Clickable(TwinTour.Toggle)); r.Add(tb);
+            var nb = new VisualElement(); nb.AddToClassList("rail-btn"); nb.Add(Icon("compass", 19));
+            var nl = new Label("Навигатор") { pickingMode = PickingMode.Ignore }; nl.AddToClassList("rail-label"); nb.Add(nl);
+            var nt = new Label("Навигатор по презентации · F4") { pickingMode = PickingMode.Ignore }; nt.AddToClassList("rail-tip"); nb.Add(nt);
+            nb.AddManipulator(new Clickable(TwinTour.ToggleNav)); r.Add(nb);
             return r;
         }
 

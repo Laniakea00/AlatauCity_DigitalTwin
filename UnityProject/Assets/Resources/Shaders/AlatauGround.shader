@@ -254,8 +254,8 @@ Shader "AlatauCity/Ground"
                     f = lerp(f, yard, done * (1.0 - water) * inBlock * (1.0 - green) * (1.0 - open) * (1.0 - noBlock) * (1.0 - icz) * 0.92);      // everywhere the city is built
                     f = lerp(f, verge, icz * done * (1.0 - water) * (1.0 - green));
                     f = lerp(f, verge, town * (1.0 - inBlock));                                   // the whole road corridor is a mown verge
-                    f = lerp(f, paved, town * walk * 0.9);
-                    f *= 1.0 - 0.30 * kerb * town * saturate(1.6 - sw * 2.0);
+                    f = lerp(f, paved, town * walk * 0.9 * (1.0 - icz));                         // no pavements of the plan's old ramp scribbles
+                    f *= 1.0 - 0.30 * kerb * town * saturate(1.6 - sw * 2.0) * (1.0 - icz);
                 }
                 // wet, darker bank and a strip of pale sand where the steppe meets the water
                 f = lerp(f, f * fixed3(0.70, 0.72, 0.70), shore * 0.8);
