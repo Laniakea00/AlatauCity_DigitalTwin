@@ -81,72 +81,141 @@ namespace AlatauCity.DigitalTwin.Landmarks
             for (int i = 0; i < n; i++) k.Cylinder(new Vector3(x0 + i * (r * 2.3f), 0.3f, z0), r, h, 16, col, LM.Metal, 4f, col, LM.Metal, r * 0.5f);
         }
 
-        // ------------------------------------------------------------------ Iconic Complex (SOM): a 272 m wedge tower + an 80 m terraced hotel tower on a terraced podium
+        // ------------------------------------------------------------------ Iconic Complex (SOM): two separate buildings and a garden between them —
+        // the 272 m tower (offices, residences, amenities at the top) wrapped in golden floor plates that project past the glass and turn a
+        // little from floor to floor, its top glowing; the 80 m hotel stepping down to the west in planted terraces with a timber-and-garden
+        // cascade in its middle; two low retail blocks (up to 32 m) with sloping green roofs and a roof pool; the square with an amphitheatre.
+        static readonly Color32 Gold = LM.C("#cf9f45"), GoldLight = LM.C("#f2cf7f"), Bronze = LM.C("#3b3125"), WarmGlass = LM.C("#4d3d2a"),
+            CrownGlass = LM.C("#c99c55"), Timber = LM.C("#b9853f"), Fascia = LM.C("#efe9dc");
         static void Iconic(LandmarkKit k)
         {
             Pad(k, 270f, 200f, 22f, Pave);
-            // podium: three glazed levels with white fascias, stepping back and down toward the public square (south, −z), planted terraces
-            float[,] lv = { { 0.3f, 8.5f, 196f, 126f, 6f, 12f }, { 8.5f, 15f, 164f, 102f, 16f, 22f }, { 15f, 21f, 128f, 82f, 26f, 30f } };
-            for (int i = 0; i < 3; i++)
-            {
-                float y0 = lv[i, 0], y1 = lv[i, 1], w = lv[i, 2], d = lv[i, 3], cx = lv[i, 4], cz = lv[i, 5];
-                k.Prism(LandmarkKit.RoundRect(cx, cz, w, d, 16f, 5), y0, y1 - 1.6f, GlassWarm, LM.Glass, 4.3f, White, -1);
-                k.Prism(LandmarkKit.RoundRect(cx, cz, w + 2.4f, d + 2.4f, 17f, 5), y1 - 1.6f, y1, White, LM.Solid, 1.6f, Stone, LM.Paving);
-                // light line under each fascia (warm white at night)
-                k.Prism(LandmarkKit.RoundRect(cx, cz, w + 2.5f, d + 2.5f, 17f, 5), y1 - 1.75f, y1 - 1.6f, Warm, LM.Light, 1f, Warm, -1);
-                if (i < 2)
-                {
-                    // planted strip on the exposed terrace in front of the next level
-                    float nz = lv[i + 1, 5] - lv[i + 1, 3] * 0.5f, z0 = cz - d * 0.5f + 3f;
-                    k.Prism(LandmarkKit.RoundRect(cx, (z0 + nz) * 0.5f - 1f, w - 14f, Mathf.Max(3f, nz - z0 - 4f), 3f, 2), y1, y1 + 0.6f, Stone, LM.Solid, 3f, Grass, LM.Plant);
-                }
-            }
-            // atrium roof light over the podium
-            k.Prism(LandmarkKit.RoundRect(-4f, 7f, 46f, 22f, 9f, 4), 21f, 22.2f, GlassBlue, LM.Glass, 1.2f, GlassBlue, LM.Glass);
 
-            // ---- main tower: one vertical face (east, +x) with a white spine, the other leans in to a blade-shaped crown
-            // (the footprint is shared with the interior floors: IconicShape)
-            float xr = IconicShape.Xr, cz0 = IconicShape.Cz, W0 = IconicShape.W0, D0 = IconicShape.D0, H = 272f, roof = IconicShape.Roof, fh = IconicShape.Fh;
-            List<Vector2> Ring(float y) => IconicShape.Ring(y);
-            var prev = Ring(0.3f); float yp = 0.3f;
-            for (float y = 0.3f + fh; y <= roof + 0.01f; y += fh)
+            // ---- the tower: glass shell on the shared footprint (IconicShape, the interior floors fit it), a golden plate at every floor
+            float xr = IconicShape.Xr, cz0 = IconicShape.Cz, H = 272f, roof = IconicShape.Roof, fh = IconicShape.Fh, crownFrom = 214f;
+            var prev = IconicShape.Ring(0.3f); float yp = 0.3f; int fl = 0;
+            for (float y = 0.3f + fh; y <= roof + 0.01f; y += fh, fl++)
             {
-                var r = Ring(y); k.Loft(prev, yp, r, y, GlassBlue, LM.Fins, fh); prev = r; yp = y;
+                var r = IconicShape.Ring(y); bool crown = yp >= crownFrom;
+                k.Loft(prev, yp, r, y, crown ? CrownGlass : Bronze, LM.Glass, fh);
+                if (fl > 0) Plate(k, prev, yp, fl, crown);
+                prev = r; yp = y;
             }
-            // crown: the lean continues as a glass blade to a sharp ridge, then the mast
-            float wTop = W0 * (1f - 0.74f), dTop = D0 * 0.72f;
+            Plate(k, prev, yp, fl, true);
+            // crown: the lean continues as a glass blade to a ridge; mast and aircraft light
+            float dTop = IconicShape.D0 * 0.72f;
             var ridge = LandmarkKit.Chamfer(xr - 1.2f, cz0, 2.4f, dTop * 0.55f, 0.5f);
-            k.Loft(prev, yp, ridge, 264f, GlassBlue, LM.Glass, 2.2f);
-            k.Cap(ridge, 264f, true, MetalG, LM.Metal);
+            k.Loft(prev, yp, ridge, 264f, CrownGlass, LM.Glass, 2.2f);
+            k.Cap(ridge, 264f, true, GoldLight, LM.Metal);
             k.Beam(new Vector3(xr - 1.2f, 263f, cz0), new Vector3(xr - 1.2f, H, cz0), 0.9f, 0.9f, MetalG, LM.Steel);
             k.Box(new Vector3(xr - 1.2f, H - 0.4f, cz0), new Vector3(1.4f, 0.8f, 1.4f), 0, Red, LM.Light, 1f, Red, LM.Light);
-            // crown light band and the white spine on the vertical face
-            k.Box(new Vector3(xr - wTop * 0.5f, roof - 0.6f, cz0), new Vector3(wTop + 1.2f, 1.2f, dTop + 1.2f), 0, Warm, LM.Light, 1f, Warm, -1);
-            k.Box(new Vector3(xr + 1.0f, 131f, cz0), new Vector3(2.2f, 262f, 7f), 0, White, LM.Solid, fh, White, LM.Roof);
-            // tower lobby canopy toward the square
-            k.Box(new Vector3(xr - 30f, 9.3f, cz0 - D0 * 0.5f - 8f), new Vector3(26f, 0.8f, 16f), 0, White, LM.Solid, 1f, White, LM.Roof);
+            // lobby canopy toward the square
+            k.Box(new Vector3(xr - 30f, 6.3f, cz0 - IconicShape.D0 * 0.5f - 7f), new Vector3(30f, 0.7f, 14f), 0, Gold, LM.Solid, 1f, Fascia, LM.Roof);
 
-            // ---- hotel and branded residences: 80 m, terraces stepping down to the west like the foothills
-            // it stands ON the podium roof (level 3, top 21 m) between the atrium light and the main tower: no volume inside another
-            float hx = -4f, hz = 40f, hw = 60f, hd = 30f, baseY = 21f, top = 80f; const int NS = 6; float step = (top - baseY) / NS;
+            // ---- the hotel: 80 m, stepping down to the west, two wings with a planted cascade between them
+            const float hx0 = -128f, hx1 = -32f, hz0 = 14f, hz1 = 74f, gap = 10f, top = 80f; const int NS = 18;
+            float step = (top - 0.3f) / NS, gz0 = (hz0 + hz1 - gap) * 0.5f, gz1 = gz0 + gap;
             for (int s = 0; s < NS; s++)
             {
-                float y0 = baseY + s * step, y1 = baseY + (s + 1) * step;
-                float w = hw - s * 7.4f; float cx = hx + (hw - w) * 0.5f;
-                k.Prism(LandmarkKit.RoundRect(cx, hz, w, hd, 5f, 3), y0, y1 - 1.1f, GlassTeal, LM.Glass, 3.6f, White, -1);
-                k.Prism(LandmarkKit.RoundRect(cx, hz, w + 1.6f, hd + 1.6f, 5.5f, 3), y1 - 1.1f, y1, White, LM.Solid, 1.1f, Stone, LM.Paving);
-                // planted terrace on the step that is not covered by the next floor
-                if (s < NS - 1) k.Prism(LandmarkKit.Rect(cx - w * 0.5f + 3.6f, hz, 5.4f, hd - 4f), y1, y1 + 0.7f, Stone, LM.Solid, 1f, Grass, LM.Plant);
+                float y0 = 0.3f + s * step, y1 = y0 + step, x0 = Mathf.Lerp(hx0, hx1 - 12f, s / (NS - 1f));
+                foreach (var (z0, z1) in new[] { (hz0, gz0), (gz1, hz1) })
+                {
+                    k.Prism(LandmarkKit.Rect((x0 + hx1) * 0.5f, (z0 + z1) * 0.5f, hx1 - x0, z1 - z0), y0, y1 - 1.0f, WarmGlass, LM.Glass, 3.4f, Fascia, -1);
+                    k.Prism(LandmarkKit.Rect((x0 + hx1) * 0.5f - 0.6f, (z0 + z1) * 0.5f, hx1 - x0 + 1.2f, z1 - z0 + 1.2f), y1 - 1.0f, y1, Fascia, LM.Solid, 1f, Stone, LM.Paving);
+                    // planted edge of the terrace this step leaves open
+                    if (s < NS - 1)
+                    {
+                        float tx = x0 + 1.6f;
+                        k.Prism(LandmarkKit.Rect(tx, (z0 + z1) * 0.5f, 2.2f, z1 - z0 - 1.5f), y1, y1 + 0.7f, Stone, LM.Solid, 1f, Grass, LM.Plant);
+                        for (float z = z0 + 3f; z < z1 - 2f; z += 6.5f) k.Tree(new Vector3(tx, y1 + 0.7f, z), 2.6f + (s % 3) * 0.5f, (s & 1) == 0 ? Leaf : Leaf2, s * 0.37f + z * 0.05f);
+                    }
+                }
+                // the cascade: a garden that steps down between the wings, framed by timber fins
+                k.Prism(LandmarkKit.Rect((x0 + hx1) * 0.5f - 3f, (gz0 + gz1) * 0.5f, hx1 - x0 - 6f, gap), y0, y0 + 0.8f, Stone, LM.Solid, 1f, Grass, LM.Plant);
+                if (s % 2 == 0) k.Tree(new Vector3((x0 + hx1) * 0.5f, y0 + 0.8f, (gz0 + gz1) * 0.5f), 3.4f, Leaf2, s * 0.21f);
+                for (float x = x0 + 1f; x < hx1 - 3f; x += 2.4f)
+                    foreach (float z in new[] { gz0 + 0.25f, gz1 - 0.25f })
+                        k.Box(new Vector3(x, (y0 + y1) * 0.5f, z), new Vector3(0.18f, step, 0.5f), 0f, Timber, LM.Solid, 20f, Timber, LM.Solid);
             }
-            k.Box(new Vector3(hx + (hw - 20f) * 0.5f, top + 1.6f, hz), new Vector3(16f, 3.2f, 18f), 0, MetalG, LM.Metal, 3f, Roof, LM.Roof);
+            k.Box(new Vector3(hx1 - 6f, top + 1.5f, (hz0 + hz1) * 0.5f), new Vector3(9f, 3f, 20f), 0, MetalG, LM.Metal, 3f, Roof, LM.Roof);
 
-            // ---- the square: reflecting pool, lawns, trees, paths
-            k.Prism(LandmarkKit.RoundRect(-36f, -64f, 92f, 20f, 9f, 3), 0.3f, 0.5f, Stone, LM.Solid, 1f, Water, LM.Water);
-            Lawn(k, 64f, -66f, 70f, 34f, 8f); Lawn(k, -112f, -10f, 26f, 120f, 8f); Lawn(k, 118f, 24f, 22f, 110f, 8f);
-            Trees(k, 36f, -78f, 92f, -56f, 14f, 9f, 1f);
-            Trees(k, -118f, -60f, -108f, 50f, 13f, 9f, 2f);
-            Trees(k, 112f, -24f, 124f, 70f, 13f, 9f, 3f);
-            for (int i = 0; i < 9; i++) k.Box(new Vector3(-80f + i * 11f, 3.2f, -58f), new Vector3(0.35f, 6f, 0.35f), 0, Steel, LM.Steel, 1f, Warm, LM.Light);
+            // ---- two retail blocks with sloping green roofs: the south-east one rises to 32 m next to the tower, a roof pool at its low end
+            Wedge(k, 4f, -92f, 128f, -8f, (x, z) => Mathf.Max(6f, 32f - 0.11f * (x - 4f) - 0.2f * (-8f - z)), 9, 7);
+            k.Prism(LandmarkKit.RoundRect(110f, -76f, 26f, 18f, 3f, 3), 6f, 6.35f, Stone, LM.Solid, 1f, Stone, LM.Paving);
+            k.Prism(LandmarkKit.RoundRect(110f, -76f, 20f, 12f, 2f, 3), 6.35f, 6.45f, Stone, LM.Solid, 1f, Water, LM.Water);
+            // the west one with a ridge rising toward the garden
+            Wedge(k, -132f, -92f, -24f, -8f, (x, z) => Mathf.Max(5f, 12f + 12f * (x + 132f) / 108f - 0.34f * Mathf.Abs(z + 50f)), 9, 8);
+
+            // ---- the garden between the hotel and the tower, and north of the tower: lawns, paths and trees
+            Lawn(k, -14f, 46f, 32f, 92f, 6f); Lawn(k, 36f, 80f, 60f, 26f, 6f);
+            Trees(k, -26f, 4f, -2f, 92f, 6.5f, 8.5f, 4f);
+            Trees(k, 10f, 70f, 64f, 92f, 7f, 8f, 5f);
+            Trees(k, 76f, 6f, 120f, 92f, 9f, 9f, 6f);
+            // the square: an amphitheatre between the retail blocks, its steps going down to the south
+            for (int i = 0; i < 6; i++)
+            {
+                float r0 = 8f + i * 2.2f, r1 = r0 + 2.2f, h = 0.3f + (6 - i) * 0.45f;
+                for (int a = 0; a < 12; a++)
+                {
+                    float t0 = Mathf.Lerp(40f, 140f, a / 12f) * Mathf.Deg2Rad, t1 = Mathf.Lerp(40f, 140f, (a + 1f) / 12f) * Mathf.Deg2Rad;
+                    var q = new List<Vector2> { new Vector2(-10f + Mathf.Cos(t0) * r0, -30f + Mathf.Sin(t0) * r0), new Vector2(-10f + Mathf.Cos(t1) * r0, -30f + Mathf.Sin(t1) * r0),
+                                                new Vector2(-10f + Mathf.Cos(t1) * r1, -30f + Mathf.Sin(t1) * r1), new Vector2(-10f + Mathf.Cos(t0) * r1, -30f + Mathf.Sin(t0) * r1) };
+                    k.Prism(q, 0.3f, h, Stone, LM.Solid, 0.45f, Pave, LM.Paving);
+                }
+            }
+            for (int i = 0; i < 9; i++) k.Box(new Vector3(-6f + i * 10f, 3.2f, 2f), new Vector3(0.35f, 6f, 0.35f), 0, Steel, LM.Steel, 1f, Warm, LM.Light);
+        }
+        /// <summary>A golden floor plate: a ring between the glass line and a footprint 1.4 m larger, turned a little (the "sliced" facade).</summary>
+        static void Plate(LandmarkKit k, List<Vector2> glass, float y, int fl, bool crown)
+        {
+            float th = 1.4f * Mathf.Sin(y / 34f) + ((fl & 1) == 0 ? 0.35f : -0.35f);
+            Vector2 c = Vector2.zero; foreach (var p in glass) c += p; c /= glass.Count;
+            var outer = new List<Vector2>(glass.Count);
+            float a = th * Mathf.Deg2Rad, ca = Mathf.Cos(a), sa = Mathf.Sin(a);
+            foreach (var p in glass)
+            {
+                var d = p - c; float L = d.magnitude; var g = L > 0.01f ? d * ((L + 1.4f) / L) : d;
+                outer.Add(c + new Vector2(g.x * ca - g.y * sa, g.x * sa + g.y * ca));
+            }
+            float y0 = y - 0.42f, y1 = y + 0.12f;
+            var col = crown ? GoldLight : Gold; int mat = crown ? LM.Light : LM.Solid;
+            k.Prism(outer, y0, y1, col, mat, 0.6f, col, -1);
+            for (int i = 0; i < glass.Count; i++)
+            {
+                int j = (i + 1) % glass.Count;
+                Vector3 gi = new Vector3(glass[i].x, y1, glass[i].y), gj = new Vector3(glass[j].x, y1, glass[j].y), oi = new Vector3(outer[i].x, y1, outer[i].y), oj = new Vector3(outer[j].x, y1, outer[j].y);
+                k.Quad(gi, gj, oj, oi, Vector3.up, Gold, LM.Solid, 0.6f, glass[i], glass[j], outer[j], outer[i]);
+                gi.y = gj.y = oi.y = oj.y = y0;
+                k.Quad(gi, gj, oj, oi, Vector3.down, Gold, LM.Solid, 0.6f, glass[i], glass[j], outer[j], outer[i]);
+            }
+        }
+        /// <summary>A low block on the rectangle (x0, z0)–(x1, z1) whose roof follows H(x, z): glass walls under a golden fascia, a planted roof with paths.</summary>
+        static void Wedge(LandmarkKit k, float x0, float z0, float x1, float z1, System.Func<float, float, float> Hf, int nx, int nz)
+        {
+            var corners = new[] { new Vector2(x0, z0), new Vector2(x1, z0), new Vector2(x1, z1), new Vector2(x0, z1) };
+            var ce = new Vector2((x0 + x1) * 0.5f, (z0 + z1) * 0.5f);
+            for (int e = 0; e < 4; e++)
+            {
+                var a = corners[e]; var b = corners[(e + 1) % 4]; int n = e % 2 == 0 ? nx : nz;
+                var mid = (a + b) * 0.5f; var o = new Vector3(mid.x - ce.x, 0f, mid.y - ce.y);
+                for (int i = 0; i < n; i++)
+                {
+                    var p = Vector2.Lerp(a, b, i / (float)n); var q = Vector2.Lerp(a, b, (i + 1f) / n);
+                    float hp = Hf(p.x, p.y), hq = Hf(q.x, q.y), u0 = (p - a).magnitude, u1 = (q - a).magnitude;
+                    k.Quad(new Vector3(p.x, 0.3f, p.y), new Vector3(q.x, 0.3f, q.y), new Vector3(q.x, hq - 1.4f, q.y), new Vector3(p.x, hp - 1.4f, p.y), o, WarmGlass, LM.Glass, 4.3f,
+                           new Vector2(u0, 0.3f), new Vector2(u1, 0.3f), new Vector2(u1, hq - 1.4f), new Vector2(u0, hp - 1.4f));
+                    k.Quad(new Vector3(p.x, hp - 1.4f, p.y), new Vector3(q.x, hq - 1.4f, q.y), new Vector3(q.x, hq, q.y), new Vector3(p.x, hp, p.y), o, Gold, LM.Solid, 1.4f,
+                           new Vector2(u0, hp - 1.4f), new Vector2(u1, hq - 1.4f), new Vector2(u1, hq), new Vector2(u0, hp));
+                }
+            }
+            for (int i = 0; i < nx; i++)
+                for (int j = 0; j < nz; j++)
+                {
+                    float xa = Mathf.Lerp(x0, x1, i / (float)nx), xb = Mathf.Lerp(x0, x1, (i + 1f) / nx), za = Mathf.Lerp(z0, z1, j / (float)nz), zb = Mathf.Lerp(z0, z1, (j + 1f) / nz);
+                    bool path = (i + j) % 4 == 0;
+                    k.Quad(new Vector3(xa, Hf(xa, za), za), new Vector3(xb, Hf(xb, za), za), new Vector3(xb, Hf(xb, zb), zb), new Vector3(xa, Hf(xa, zb), zb), Vector3.up,
+                           path ? Pave : Grass, path ? LM.Paving : LM.Plant, 1f, new Vector2(xa, za), new Vector2(xb, za), new Vector2(xb, zb), new Vector2(xa, zb));
+                }
         }
 
         // ------------------------------------------------------------------ airliner (≈ A320): fuselage along +z, nose at +z

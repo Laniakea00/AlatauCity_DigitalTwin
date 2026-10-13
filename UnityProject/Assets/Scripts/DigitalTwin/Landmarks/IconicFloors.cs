@@ -32,7 +32,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
     /// for one floor at a time. Illustrative layout (a typical SOM-style supertall plan), not design documentation.</summary>
     public static class IconicFloors
     {
-        public enum Use { Lobby, Retail, FoodHall, Conference, Office, Technical, Residence, Restaurant, Lounge, Crown }
+        public enum Use { Lobby, Retail, FoodHall, Conference, Office, Technical, Residence, Club, Restaurant, Lounge, Crown }
 
         public static Use UseOf(int i)
         {
@@ -40,11 +40,13 @@ namespace AlatauCity.DigitalTwin.Landmarks
             if (i <= 2) return Use.Retail;
             if (i == 3) return Use.FoodHall;
             if (i == 4) return Use.Conference;
-            if (i == 19 || i == 38) return Use.Technical;
-            if (i <= 37) return Use.Office;
-            if (i <= 53) return Use.Residence;
-            if (i == 54) return Use.Restaurant;
-            if (i == 55) return Use.Lounge;
+            // by the SOM section: offices low (57 600 m²), residences in the middle (40 300 m²), amenities at the top
+            if (i == 19 || i == 45) return Use.Technical;
+            if (i <= 18) return Use.Office;
+            if (i <= 44) return Use.Residence;
+            if (i <= 51) return Use.Club;
+            if (i <= 53) return Use.Restaurant;
+            if (i <= 55) return Use.Lounge;
             return Use.Crown;
         }
         public static string Name(int i) => i >= 56 ? "Корона, уровень " + (i - 55) : "Этаж " + (i + 1);
@@ -60,6 +62,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 case Use.Office: return "Офисы класса А";
                 case Use.Technical: return "Технический этаж и зона безопасности";
                 case Use.Residence: return "Премиальные резиденции";
+                case Use.Club: return "Клуб резидентов: спа и фитнес";
                 case Use.Restaurant: return "Ресторан на высоте";
                 case Use.Lounge: return "Смотровой лаунж";
                 default: return "Техническое пространство короны";
@@ -617,6 +620,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 case Use.Office: Office(P); break;
                 case Use.Technical: Technical(P); break;
                 case Use.Residence: Residences(P); break;
+                case Use.Club: Club(P); break;
                 case Use.Restaurant: Restaurant(P); break;
                 case Use.Lounge: Lounge(P); break;
                 default: Crown(P); break;
@@ -947,6 +951,30 @@ namespace AlatauCity.DigitalTwin.Landmarks
                     P.Furniture.Add(k => { RoundTable(k, xx, zz, y, 0.5f, 0.75f, Porcelain); for (int c = 0; c < 3; c++) { float a = c * 120f; var o = Quaternion.Euler(0, a, 0) * new Vector3(0, 0, 0.82f); Chair(k, xx + o.x, zz + o.z, y, a + 180f, Leather); } });
                 }
             P.Detail = $"{tables * 3} мест · открытая кухня · бар у лифтов";
+        }
+        /// <summary>Amenities of the residents: a spa pool by the west windows, a gym with rows of machines, a lounge with sofas.</summary>
+        static void Club(Plan P)
+        {
+            P.Finish = Oak; float y = P.yb;
+            float px1 = P.cx0 - 3f, px0 = Mathf.Max(P.X0 + 1.5f, px1 - 14f), pz0 = IconicShape.Cz - 3.5f, pz1 = IconicShape.Cz + 3.5f;
+            bool pool = px1 - px0 > 6f && P.Free(px0, pz0, px1, pz1, 0.6f, 1.2f);
+            if (pool)
+            {
+                P.Reserve(px0 - 1.5f, pz0 - 1.5f, px1 + 1.5f, pz1 + 1.5f);
+                P.Fixtures.Add(k => { B(k, (px0 + px1) * 0.5f, IconicShape.Cz, px1 - px0 + 2.4f, pz1 - pz0 + 2.4f, y, y + 0.05f, Stone, LM.Paving); B(k, (px0 + px1) * 0.5f, IconicShape.Cz, px1 - px0, pz1 - pz0, y + 0.05f, y + 0.12f, LM.C("#2f7f9f"), LM.Water); });
+            }
+            int machines = 0;
+            for (float x = P.X0 + 2.5f; x < P.cx0 - 3f; x += 2.2f)
+            {
+                float z = P.Z1 - 3.2f; if (!P.Free(x - 0.5f, z - 1f, x + 0.5f, z + 1f, 0.4f, 1f)) continue; float xx = x; machines++;
+                P.Furniture.Add(k => { B(k, xx, z, 0.8f, 1.9f, y, y + 0.25f, Leather); B(k, xx, z - 0.8f, 0.8f, 0.1f, y + 0.25f, y + 1.3f, Steel, LM.Steel); B(k, xx, z - 0.8f, 0.6f, 0.05f, y + 1.1f, y + 1.45f, Screen); });
+            }
+            for (float x = P.X0 + 4f; x < P.cx0 - 4f; x += 6f)
+            {
+                float z = P.Z0 + 4f; if (!P.Free(x - 1.5f, z - 1.5f, x + 1.5f, z + 1.5f, 0.4f, 1f)) continue; float xx = x;
+                P.Furniture.Add(k => { Sofa(k, xx, z - 0.9f, y, 2.2f, 0f, SofaWarm); B(k, xx, z + 0.2f, 1.0f, 0.6f, y, y + 0.38f, OakDark); Planter(k, xx + 2f, z, y, 0.7f, 1.8f, xx * 0.2f); });
+            }
+            P.Detail = (pool ? "бассейн · " : "") + machines + " тренажёров · лаунж для резидентов";
         }
         static void Lounge(Plan P)
         {

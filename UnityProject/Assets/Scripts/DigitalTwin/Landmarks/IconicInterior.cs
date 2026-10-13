@@ -52,7 +52,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
         /// <summary>The floor worth showing first: where the fit-out is going on, else the highest finished structure; a typical office floor once handed over.</summary>
         static int FirstFloor(Landmark l, float p)
         {
-            if (p >= 0.999f) return 28;
+            if (p >= 0.999f) return 12;
             int best = -1;
             for (int i = IconicShape.Levels - 1; i >= 0; i--)
             {
@@ -125,6 +125,13 @@ namespace AlatauCity.DigitalTwin.Landmarks
             Pivot();
             Begin(0.7f, cutNow, CutFor());
             Refresh(true);
+        }
+        /// <summary>Shows floor i from above (the monitoring window looks at the working floor).</summary>
+        public void FocusFloor(int i)
+        {
+            if (!active || leaving) return;
+            if (walk) ToggleWalk();
+            if (i != floor) SetFloor(i);
         }
         public void ToggleWalk()
         {
@@ -267,6 +274,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
 
         void HandleInput()
         {
+            if (IconicMonitor.Open || IconicMonitor.ClosedFrame >= Time.frameCount - 1) { dragging = false; return; }   // the monitoring window has the input
             bool keys = !MapCamera.Typing; float dt = Time.unscaledDeltaTime;
             if (keys && Input.GetKeyDown(KeyCode.Escape)) { escFrame = Time.frameCount; if (walk) ToggleWalk(); else Exit(); return; }
             if (keys && (Input.GetKeyDown(KeyCode.PageUp) || Input.GetKeyDown(KeyCode.RightBracket))) { SetFloor(NextFloor(+1)); }
@@ -410,6 +418,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             foreach (int s in new[] { 1, 2, 3, 5, 7 }) leg.Add(Widgets.LegendItem(IconicFloors.PhaseColor[s], IconicFloors.PhaseName[s]));
 
             var btns = new VisualElement(); btns.AddToClassList("lm-btns"); panel.Add(btns);
+            var mon = Widgets.Btn("Мониторинг строительства", () => IconicMonitor.Instance?.Show(), "small", "primary"); mon.style.width = Length.Percent(100); btns.Add(mon);
             btns.Add(Widgets.Btn("Этаж выше", () => SetFloor(NextFloor(+1)), "small"));
             btns.Add(Widgets.Btn("Этаж ниже", () => SetFloor(NextFloor(-1)), "small"));
             var wb = Widgets.Btn(walk ? "Вид сверху" : "Пройтись по этажу", ToggleWalk, "small"); if (walk) wb.AddToClassList("active"); btns.Add(wb);

@@ -72,6 +72,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 // into the tower: the floor plan as it is being built in the shown year
                 bool can = IconicInterior.Instance.CanEnter(out _);
                 btns.Add(Widgets.Btn(can ? "Внутрь башни" : "Внутрь башни · " + (l.StartYear + 1), () => IconicInterior.Instance.Enter(), "small", "primary"));
+                btns.Add(Widgets.Btn("Мониторинг строительства", () => IconicMonitor.Instance?.Show(), "small"));
             }
             if (!l.IsLrt) btns.Add(Widgets.Btn("Ближе", () => sys?.CloseUp(l), "small"));
             if (!l.IsLrt)
