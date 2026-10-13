@@ -26,7 +26,7 @@ namespace AlatauCity.DigitalTwin
         {
             ["brand"] = "qTwin", ["city"] = "Alatau City", ["subtitle"] = "цифровой двойник · демо-сценарий",
             ["tab_objects"] = "Инвестпроекты", ["tab_overview"] = "Обзор", ["tab_construction"] = "Стройка", ["tab_prediction"] = "Прогноз", ["tab_infra"] = "Инфраструктура",
-            ["tab_situation"] = "Ситуационный центр", ["tab_ai"] = "ИИ-управление",
+            ["tab_situation"] = "Ситуационный центр", ["tab_ai"] = "ИИ-управление", ["tab_smart"] = "Smart City", ["tab_economy"] = "Экономика",
             ["scenario"] = "Сценарий", ["year"] = "Год",
             ["sc_base"] = "Базовый (генплан)", ["sc_fast"] = "Ускоренный", ["sc_slow"] = "Отставание", ["sc_infra"] = "Приоритет инфраструктуры",
             ["sc_base_d"] = "Годы ввода из сценария застройки QTwin", ["sc_fast_d"] = "Темп +25 %: всё вводится на четверть быстрее",
@@ -225,7 +225,7 @@ namespace AlatauCity.DigitalTwin
         {
             ["subtitle"] = "digital twin · demo scenario",
             ["tab_objects"] = "Investment projects", ["tab_overview"] = "Overview", ["tab_construction"] = "Construction", ["tab_prediction"] = "Prediction", ["tab_infra"] = "Infrastructure",
-            ["tab_situation"] = "Situational Center", ["tab_ai"] = "AI Control",
+            ["tab_situation"] = "Situational Center", ["tab_ai"] = "AI Control", ["tab_smart"] = "Smart City", ["tab_economy"] = "Economy",
             ["scenario"] = "Scenario", ["year"] = "Year",
             ["sc_base"] = "Base (master plan)", ["sc_fast"] = "Accelerated", ["sc_slow"] = "Delayed", ["sc_infra"] = "Infrastructure first",
             ["sc_base_d"] = "Completion years from the QTwin build-out scenario", ["sc_fast_d"] = "Pace +25 %: everything lands a quarter earlier",
@@ -262,7 +262,7 @@ namespace AlatauCity.DigitalTwin
         static readonly Dictionary<string, string> Kz = new Dictionary<string, string>
         {
             ["subtitle"] = "цифрлық егіз · демо-сценарий", ["tab_objects"] = "Инвестжобалар", ["tab_overview"] = "Шолу", ["tab_construction"] = "Құрылыс", ["tab_prediction"] = "Болжам",
-            ["tab_infra"] = "Инфрақұрылым", ["tab_situation"] = "Ситуациялық орталық", ["tab_ai"] = "ЖИ-басқару", ["scenario"] = "Сценарий", ["year"] = "Жыл",
+            ["tab_infra"] = "Инфрақұрылым", ["tab_situation"] = "Ситуациялық орталық", ["tab_ai"] = "ЖИ-басқару", ["tab_smart"] = "Smart City", ["tab_economy"] = "Экономика", ["scenario"] = "Сценарий", ["year"] = "Жыл",
             ["play"] = "Іске қосу", ["pause"] = "Кідірту", ["demo_badge"] = "Демо-сценарий · деректер модельденген",
             ["kpi_residents"] = "тұрғын", ["kpi_gfa"] = "енгізілді, млн м²", ["kpi_jobs"] = "жұмыс орны", ["kpi_ready"] = "қала дайындығы",
             ["thous"] = "мың", ["districts"] = "Аудандар", ["col_district"] = "Аудан", ["col_res"] = "тұрғын, мың", ["col_target"] = "2050 мақсаты", ["back_city"] = "← Бүкіл қала",

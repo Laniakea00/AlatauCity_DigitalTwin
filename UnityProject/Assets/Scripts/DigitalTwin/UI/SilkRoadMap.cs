@@ -115,7 +115,7 @@ namespace AlatauCity.DigitalTwin.UI
         void Tick()
         {
             if (panel == null) return;
-            float dt = Mathf.Min(UnityEngine.Time.unscaledDeltaTime, 0.05f);
+            float dt = Mathf.Min(UnityEngine.Time.unscaledDeltaTime, 0.05f) * UnityEngine.Time.timeScale;
             if (!TourFx.Paused) t += dt;
             if (hiding) { hideT += dt; style.opacity = Mathf.Clamp01(1f - hideT / 0.8f); if (hideT > 0.85f) RemoveFromHierarchy(); MarkDirtyRepaint(); return; }
             style.opacity = Mathf.Clamp01(t / 1.0f);

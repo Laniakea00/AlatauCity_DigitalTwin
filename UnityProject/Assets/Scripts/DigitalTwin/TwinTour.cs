@@ -31,6 +31,8 @@ namespace AlatauCity.DigitalTwin
             public bool Gfa;                                  // the «growth by use» chart is shown only in the steps about the whole city's growth
             public Func<Story> Story;                         // the step's dashboard (right column, above the caption); null = none
             public bool NoCard;                               // the dashboard replaces the passport of the selected object
+            public float Speed = 1f, End = -1f;               // video mode: the step plays faster (Time.timeScale) and ends at End (step time)
+            public float EndT => End > 0f ? End : Dur;
         }
         readonly List<Step> steps = new List<Step>();
         bool running, paused; int idx; float t;
@@ -45,6 +47,70 @@ namespace AlatauCity.DigitalTwin
         void Awake() { Instance = this; }
 
         public static void Toggle() { if (Instance == null) return; if (Instance.running) Instance.Stop(); else Instance.Begin(); }
+
+        // ------------------------------------------------------------------ video mode (F6)
+        // The investor video (about 1:50): 12 scenes of the tour cut to the voice-over in Resources/Video (ElevenLabs mp3). The scene
+        // lengths come from the pauses between the paragraphs of the voice-over, so picture and voice stay in step; every scene plays
+        // faster (Time.timeScale) so its content fits. Record the Game view (Unity Recorder, 30 fps) — the voice is recorded with it.
+        public static bool VideoMode => Instance != null && Instance.video;
+        bool video, videoDone; AudioSource voice;
+        /// <summary>The video reached the end of its last scene (the recorder stops on it).</summary>
+        public static bool VideoDone => Instance != null && Instance.video && Instance.videoDone;
+        // (tour step, step seconds the scene needs to show its point)
+        static readonly (int step, float need)[] Cut = { (0, 10f), (1, 26f), (3, 32f), (5, 18f), (7, 14f), (11, 24f), (12, 8f), (13, 14f), (14, 22f), (16, 20f), (17, 22f), (19, 8f) };   // steps 15 (Smart City) and 18 (economy) are not in the 12.10 voice-over
+        // the ElevenLabs voice-over of 12.10.2026 (118.6 s): paragraph starts found by text length on the speech timeline, snapped to pauses
+        static readonly float[] CutBreaks = { 17.1f, 28.12f, 38.85f, 47.64f, 59.61f, 69.45f, 75.12f, 82.0f, 95.87f, 101.99f, 109.04f };
+        static readonly float[] CutFallback = { 15f, 10f, 10f, 8f, 11f, 9f, 6f, 7f, 12f, 6.5f, 6.5f, 9f };
+        public static void ToggleVideo() { if (Instance == null) return; if (Instance.running) Instance.Stop(); else Instance.BeginVideo(); }
+        void BeginVideo()
+        {
+            if (!TwinData.Ready || !CityStats.Ready) { Debug.LogWarning("[Alatau] video: data not ready"); return; }
+            Build();
+            AudioClip clip = null; try { clip = Resources.LoadAll<AudioClip>("Video").FirstOrDefault(); } catch (Exception e) { Debug.LogWarning("[Alatau] video: " + e.Message); }
+            float[] secs = null;
+            if (clip != null && Mathf.Abs(clip.length - 118.6f) < 1.5f)
+            { secs = new float[Cut.Length]; float prev = 0f; for (int i = 0; i < CutBreaks.Length; i++) { secs[i] = CutBreaks[i] - prev; prev = CutBreaks[i]; } secs[Cut.Length - 1] = clip.length - prev + 1.5f; }
+            else if (clip != null) secs = VoiceCuts(clip, Cut.Length);
+            if (secs == null) { secs = CutFallback; Debug.LogWarning("[Alatau] video: " + (clip == null ? "no voice-over in Resources/Video" : "pauses not found") + ", fixed scene lengths"); }
+            var all = steps.ToList(); steps.Clear();
+            for (int i = 0; i < Cut.Length; i++)
+            {
+                var st = all[Cut[i].step]; st.Speed = Mathf.Clamp(Cut[i].need / secs[i], 1f, 5f); st.End = secs[i] * st.Speed; steps.Add(st);
+            }
+            Debug.Log("[Alatau] video scenes (s): " + string.Join(" | ", secs.Select((v, i) => $"{i + 1}: {v:0.0} ×{steps[i].Speed:0.0}")) + $" = {secs.Sum():0.0} s");
+            video = true; videoDone = false; running = true; paused = false;
+            if (clip != null) { if (voice == null) { voice = gameObject.AddComponent<AudioSource>(); voice.playOnAwake = false; voice.spatialBlend = 0f; } voice.clip = clip; voice.Play(); }
+            Go(0);
+        }
+        /// <summary>Scene lengths from the voice-over: the longest pauses are the breaks between paragraphs (11 paragraphs → 10 breaks);
+        /// the 10th paragraph (energy + AI) is split at its own longest pause. The last scene holds 1.5 s after the voice ends.</summary>
+        static float[] VoiceCuts(AudioClip clip, int n)
+        {
+            try
+            {
+                int ch = Mathf.Max(1, clip.channels), sr = clip.frequency, len = clip.samples;
+                var data = new float[len * ch]; if (!clip.GetData(data, 0)) return null;
+                int win = Mathf.Max(1, sr / 50); int nw = len / win; if (nw < 100) return null;
+                var rms = new float[nw];
+                for (int w = 0; w < nw; w++) { double a = 0; for (int k = w * win; k < (w + 1) * win; k++) { float v = data[k * ch]; a += v * v; } rms[w] = (float)Math.Sqrt(a / win); }
+                var sorted = rms.OrderBy(v => v).ToArray(); float thr = Mathf.Max(0.004f, sorted[(int)(nw * 0.9f)] * 0.1f);
+                int first = Array.FindIndex(rms, v => v > thr), last = Array.FindLastIndex(rms, v => v > thr); if (first < 0 || last <= first) return null;
+                var runs = new List<(int a, int b)>();                 // silent runs inside the speech, in windows
+                for (int w = first; w <= last; w++) if (rms[w] <= thr) { int a = w; while (w <= last && rms[w] <= thr) w++; if (w - a >= 10) runs.Add((a, w)); }
+                if (runs.Count < 10) return null;
+                var paras = runs.OrderByDescending(r => r.b - r.a).Take(10).OrderBy(r => r.a).ToList();
+                var cuts = paras.Select(r => (r.a + r.b) * 0.5f).ToList();
+                // the energy + AI paragraph (between breaks 9 and 10) splits at its longest inner pause
+                float p0 = cuts[8], p1 = cuts[9];
+                var inner = runs.Where(r => r.a > p0 + 5 && r.b < p1 - 5).OrderByDescending(r => r.b - r.a).FirstOrDefault();
+                cuts.Insert(9, inner.b > 0 ? (inner.a + inner.b) * 0.5f : (p0 + p1) * 0.5f);
+                var secs = new float[n]; float prev = 0f;
+                for (int i = 0; i < n - 1; i++) { float c = cuts[i] * win / (float)sr; secs[i] = c - prev; prev = c; }
+                secs[n - 1] = clip.length - prev + 1.5f;
+                return secs.All(v => v > 1.5f) ? secs : null;
+            }
+            catch (Exception e) { Debug.LogWarning("[Alatau] video cuts: " + e.Message); return null; }
+        }
 
         // ------------------------------------------------------------------ helpers
         static MapCamera Cam => Camera.main != null ? Camera.main.GetComponent<MapCamera>() : null;
@@ -85,6 +151,12 @@ namespace AlatauCity.DigitalTwin
         static int LrtYear(int p) { int s = (int)TwinState.Scenario; return TwinData.LrtPhaseYear[s] != null && p < TwinData.LrtPhaseYear[s].Length ? TwinData.LrtPhaseYear[s][p] : 2031; }
         static string Fact(string id, string key) { var l = LS?.Get(id); if (l == null) return ""; foreach (var (k, v) in l.Facts) if (k == key) return v; return ""; }
 
+        /// <summary>A scripted notification of the Smart City step, at the camera shown in the window.</summary>
+        static void TourNotice(string src, string icon, string lvl, string title, string text, string status)
+        {
+            var c = SmartCityModule.Selected; var now = DateTime.Now;
+            Notifier.Instance?.Push(new SmartCity.Notice { Source = src, Icon = icon, Level = lvl, Title = title, Text = (c != null ? c.Place + " · " : "") + text, Status = status, Minute = now.Hour * 60 + now.Minute, Cam = -1, World = c != null ? c.World : Vector3.zero, HasPlace = c != null, District = c != null ? c.District : -1 });
+        }
         /// <summary>A camera move or an action at a moment of the step (seconds from its start).</summary>
         static (float, Action) At(float t, Action a) => (t, a);
 
@@ -166,10 +238,15 @@ namespace AlatauCity.DigitalTwin
                 Story = () =>
                 {
                     IndustryStats();
-                    var s = new Story { Eyebrow = "Growing · промышленные пояса", Head = "Заводы — на краях города, вдоль железной дороги и БАКАД", Note = "Реальные проекты Алатау · участки условные, точные не опубликованы" };
-                    s.K(Loc.N0(indCount), "заводов и складов", new Color(1f, 0.62f, 0.22f)).K(Loc.N1(indGfa / 1e6f) + " млн м²", "производственных площадей", Color.white).K(Kk(indGfa / 100f), "рабочих мест", CJobs);
+                    var s = new Story { Eyebrow = "Growing · промышленные пояса · мощности", Head = "Заводы — на краях города, вдоль железной дороги и БАКАД", Note = "Мощности: официальные данные и оценка двойника по аналогам · участки условные" };
+                    LandmarkCapacity.Totals(2050, out float rev, out float exp);
+                    s.K(Loc.N0(indCount), "заводов и складов", new Color(1f, 0.62f, 0.22f)).K(Kk(indGfa / 100f), "рабочих мест", CJobs).K("$" + Loc.N1(rev / 1000f) + " млрд", "выручка крупных заводов в год", COk);
                     var o = new Color(1f, 0.62f, 0.22f);
-                    s.R("PepsiCo", "$360 млн · 900 мест", o).R("Mars Petcare", "$180 млн", o).R("Griffin Logopark", "$125 млн · 120 тыс. м²", o).R("ТЛЦ «Жетыген»", "+$150 млн", o).R("Sunny Paper · DanaFlex · G-Trans", "строятся", o);
+                    foreach (var id in new[] { "pepsico", "mars", "sunny_paper", "danaflex", "tlc", "gtes" })
+                    {
+                        var l = LS?.Get(id); var c = LandmarkCapacity.Of(id); if (l == null || c == null) continue;
+                        s.R(l.Short, LandmarkCapacity.Fmt(LandmarkCapacity.CapacityAt(l, c, 2050), c.Unit) + (c.Jobs > 0 ? " · " + Loc.N0(c.Jobs) + " мест" : ""), o, LandmarkCapacity.Load(l, 2050));
+                    }
                     return s;
                 },
                 Shots = new[] {
@@ -200,8 +277,37 @@ namespace AlatauCity.DigitalTwin
             // ================= what the twin does (segment 6)
             steps.Add(new Step { Seg = 6, Zone = -1, Module = "construction", Year = 2027, AnimFrom = 2027, AnimTo = 2032, Dur = 24, Enter = () => { LS?.Select(null, false); TwinState.SetDistrict(-1); ConstructionModule.TourOverlays = true; ConstructionModule.ApplyTourLayers(); TourFx.Instance?.ConstructionWatch(); TourFx.Instance?.GlideLine(new Vector2(-3200f, -23500f), new Vector2(-1800f, -9000f), 24f, 9500f, 8500f, 8f, -6f, 52f, 46f); }, Title = () => "Контроль стройки: план против факта" });
             steps.Add(new Step { Seg = 6, Zone = -1, Module = "situation", Year = 2036, Dur = 28, Enter = () => TourFx.Instance?.ShowSituation("dtp"), Title = () => "Ситуационный центр" });
+            steps.Add(new Step { Seg = 6, Zone = -1, Module = "smartcity", Year = 2036, Dur = 26, NoCard = true, Title = () => "Smart City: камеры, уведомления, iKomek 109",
+                Enter = () => { LS?.Select(null, false); TwinState.SetDistrict(-1); Notifier.TourToasts = true; SmartCityModule.TourShow(SmartCity.CamType.Traffic, 0); },
+                Story = () =>
+                {
+                    int y = TwinState.Year; var s = new Story { Eyebrow = "Smart City · " + y, Head = "Каждая камера и каждое обращение — на карте двойника", Note = "Демо-заглушки: видео — вид из двойника, события смоделированы · API Smart City, iKomek 109, 112" };
+                    s.K(Loc.N0(SmartCity.CameraCount(y)), "камер в сети", CInfo).K(Loc.N0(SmartCity.EventsPerDay(y)), "событий видеоаналитики в сутки", new Color(0.96f, 0.72f, 0.20f)).K(Loc.N0(SmartCity.RequestsPerDay(y)), "обращений iKomek 109 в сутки", new Color(0.80f, 0.60f, 1f));
+                    s.R("Решено в срок", Mathf.RoundToInt(SmartCity.SolvedInTime(y) * 100f) + " %", COk, SmartCity.SolvedInTime(y)).R("Время реакции", SmartCity.ReactionMin(y) + " мин", CInfo);
+                    for (int t = 0; t < 4; t++) s.R(SmartCity.CamTypeName[t], "", SmartCity.CamTypeColor[t]);
+                    return s;
+                },
+                Shots = new[] {
+                    At(2.5f, () => TourNotice("Smart City · видео", "video", "bad", "ДТП: столкновение двух машин", "камера сама распознала аварию · вызваны ДПС и скорая", "в 112 · 4 мин")),
+                    At(9f, () => { SmartCityModule.TourCam(SmartCity.CamType.Safety, 1); TourNotice("iKomek 109", "bell", "info", "Обращение: не горит освещение во дворе", "житель через приложение iKomek · заявка ушла в службу", "в работе"); }),
+                    At(15.5f, () => { SmartCityModule.TourCam(SmartCity.CamType.Construction, -1); TourNotice("Стройка · видео", "hard_hat", "warn", "Рабочий без каски", "уведомлён прораб · подрядчику — замечание", "нарушение"); }),
+                    At(21.5f, () => TourNotice("iKomek 109", "bell", "ok", "Освещение во дворе восстановлено", "житель получил ответ в приложении · 38 мин от обращения", "решено")) } });
             steps.Add(new Step { Seg = 6, Zone = 1, Module = "overview", Year = TourEnergy.Y0, Dur = 28, Enter = () => { LS?.Select(null, false); TourFx.Instance?.ShowEnergy(); }, Title = () => "Прогноз: энергия 2034" });
             steps.Add(new Step { Seg = 6, Zone = -1, Module = "ai", Year = 2034, Dur = 26, Enter = () => { LS?.Select(null, false); TwinState.SetDistrict(-1); TourFx.Instance?.ShowAi(); }, Title = () => "ИИ-ассистент" });
+
+            // ================= the economy of the city (segment 7): the year runs 2026 → 2050, GRP, construction, budget, the plants
+            steps.Add(new Step { Seg = 7, Zone = -1, Module = "economy", Year = 2026, AnimFrom = 2026, AnimTo = 2050, Dur = 28, Enter = Overview, Title = () => "Экономика города: ВРП, стройка, бюджет",
+                Story = () =>
+                {
+                    int y = TwinState.Year; var e = CityEconomy.Of(y); int self = CityEconomy.SelfSufficientYear();
+                    var s = new Story { Eyebrow = "Экономика Alatau City · " + y, Head = e.Grp[4] > e.GrpTotal * 0.3f ? "Сначала город строят — стройка даёт основную долю ВРП" : "Город зарабатывает сам: услуги, наука, промышленность", Note = "Модель двойника по зданиям и деньгам стройки · цены 2026 г., $1 = 500 ₸ · не официальные данные" };
+                    s.K(CityEconomy.Usd(e.GrpTotal), "ВРП города", COk).K("$" + Loc.N0(e.GrpPerCapitaUsd), "ВРП на жителя", Color.white).K(Mathf.RoundToInt(100f * e.Grp[4] / Mathf.Max(e.GrpTotal, 1f)) + " %", "доля стройки (ПГС)", new Color(0.98f, 0.62f, 0.20f));
+                    s.R("Инвестиции в стройку за год", CityEconomy.Trln(e.Capex), new Color(0.98f, 0.62f, 0.20f));
+                    s.R("Бюджет: свои доходы / расходы", Loc.N0(e.RevOwn) + " / " + Loc.N0(e.Opex + e.BudgetCapex) + " млрд ₸", e.Balance >= 0 ? COk : new Color(1f, 0.45f, 0.38f), Mathf.Clamp01(e.RevOwn / Mathf.Max(e.Opex + e.BudgetCapex, 1f)));
+                    s.R("Крупные заводы: выручка · экспорт", "$" + Loc.N0(e.IndustryOutputUsdM) + " млн · $" + Loc.N0(e.ExportUsdM) + " млн", new Color(1f, 0.62f, 0.22f));
+                    if (self > 0) s.R("Город сам покрывает свои расходы", "с " + self, COk);
+                    return s;
+                } });
 
             // ================= finale (segment 7)
             steps.Add(new Step { Seg = 7, Zone = -1, Year = 2050, Dur = 24, Gfa = true, Enter = Overview, Title = () => "Alatau City 2050 · qTwin",
@@ -209,7 +315,9 @@ namespace AlatauCity.DigitalTwin
                 {
                     var s = new Story { Eyebrow = "Alatau City · 2050", Head = "Город, который проверяют до того, как он стоит денег", Note = "Модель qTwin по генплану (ПП РК № 388) · не официальные данные" };
                     s.K(Kk(Res(2050)), "жителей", CRes).K(Kk(CityStats.Jobs(-1, 2050)), "рабочих мест", CJobs).K(Loc.N0(CityStats.Count(-1, 2050)), "зданий", CInfo);
-                    s.R("Стройка: план против факта", "", COk).R("Сети и дефициты — за годы до проблемы", "", COk).R("Ситуационный центр и ИИ-ассистент", "", COk);
+                    var e = CityEconomy.Of(2050);
+                    s.R("ВРП 2050", CityEconomy.Usd(e.GrpTotal) + " · $" + Loc.N0(e.GrpPerCapitaUsd) + " на жителя", COk);
+                    s.R("Стройка: план против факта", "", COk).R("Сети и дефициты — за годы до проблемы", "", COk).R("Smart City, ситуационный центр и ИИ-ассистент", "", COk);
                     return s;
                 } });
         }
@@ -222,7 +330,7 @@ namespace AlatauCity.DigitalTwin
         }
         public void Stop()
         {
-            running = false; CityTimeline.StopGrowth(); if (box != null) box.style.display = DisplayStyle.None; story?.Hide(); TwinUI.Instance?.Middle?.RemoveFromClassList("tour-nocard"); host?.RemoveFromClassList("tour-on"); TwinUI.Instance?.Middle?.RemoveFromClassList("tour-on"); TwinUI.Instance?.Middle?.RemoveFromClassList("tour-gfa"); ReleaseCard();
+            running = false; video = false; Time.timeScale = 1f; Notifier.TourToasts = false; SmartCityModule.TourHide(); if (voice != null) voice.Stop(); box?.RemoveFromClassList("video"); CityTimeline.StopGrowth(); if (box != null) box.style.display = DisplayStyle.None; story?.Hide(); TwinUI.Instance?.Middle?.RemoveFromClassList("tour-nocard"); host?.RemoveFromClassList("tour-on"); TwinUI.Instance?.Middle?.RemoveFromClassList("tour-on"); TwinUI.Instance?.Middle?.RemoveFromClassList("tour-gfa"); ReleaseCard();
             if (TwinState.Scenario != Scenario.Base) TwinState.Scenario = Scenario.Base;
             TwinState.SetDistrict(-1);
             TourFx.Instance?.Reset(); LrtLayer.Showcase = false;
@@ -231,7 +339,8 @@ namespace AlatauCity.DigitalTwin
         void Go(int i)
         {
             idx = Mathf.Clamp(i, 0, steps.Count - 1); t = 0; var s = steps[idx]; CityTimeline.StopGrowth();
-            TwinState.Playing = false; ConstructionModule.TourOverlays = false; LrtLayer.Showcase = false; TourFx.Instance?.Reset(); if (TwinState.Selected != null) TwinState.SetSelected(null);
+            Time.timeScale = video ? s.Speed : 1f;
+            TwinState.Playing = false; ConstructionModule.TourOverlays = false; LrtLayer.Showcase = false; Notifier.TourToasts = false; SmartCityModule.TourHide(); TourFx.Instance?.Reset(); if (TwinState.Selected != null) TwinState.SetSelected(null);
             if (LS != null && LS.Selected != null) LS.Select(null, false);    // each step opens its own passport, if any
             if (TwinState.Scenario != s.Sc) TwinState.Scenario = s.Sc;
             TwinState.SetModule(s.Module);
@@ -254,6 +363,7 @@ namespace AlatauCity.DigitalTwin
             int k = 0; foreach (var c in segs.Children()) { c.EnableInClassList("on", k == seg); c.EnableInClassList("done", k < seg); k++; }
             try { lStepName.text = s.Title != null ? s.Title() : ""; } catch { lStepName.text = ""; }
             bPause.text = paused ? "Продолжить" : "Пауза";
+            box.EnableInClassList("video", video);
             box.style.display = DisplayStyle.Flex; host?.AddToClassList("tour-on"); TwinUI.Instance?.Middle?.AddToClassList("tour-on");
         }
 
@@ -303,9 +413,10 @@ namespace AlatauCity.DigitalTwin
         void Update()
         {
             if (Input.GetKeyDown(KeyCode.F5) && !MapCamera.Typing) { Toggle(); return; }
+            if (Input.GetKeyDown(KeyCode.F6) && !MapCamera.Typing) { ToggleVideo(); return; }
             if (!running) return;
             if (Input.GetKeyDown(KeyCode.Escape)) { Stop(); return; }
-            if (Input.GetKeyDown(KeyCode.Space)) { paused = !paused; Caption(); }
+            if (Input.GetKeyDown(KeyCode.Space)) { paused = !paused; Caption(); if (voice != null && video) { if (paused) voice.Pause(); else voice.UnPause(); } }
             if (Input.GetKeyDown(KeyCode.RightArrow)) { Next(); return; }
             if (Input.GetKeyDown(KeyCode.LeftArrow)) { Go(idx - 1); return; }
             // presenter shortcut: Shift + 1..8 jumps to the start of a part (Город, Gate, Golden, Growing, Green, ЛРТ, Двойник, Итог)
@@ -334,9 +445,9 @@ namespace AlatauCity.DigitalTwin
                 }
                 if (t > 0.6f && t - Time.deltaTime <= 0.6f) Caption();     // modules refresh their summaries after the first frames
                 if (s.Shots != null) foreach (var (st, act) in s.Shots) if (t >= st && t - Time.deltaTime < st) { try { act(); } catch (Exception e) { Debug.LogWarning("[Alatau] tour shot: " + e.Message); } }
-                if (t >= s.Dur) { Next(); return; }
+                if (t >= s.EndT) { if (video && idx == steps.Count - 1) { paused = true; TourFx.Paused = true; videoDone = true; } else { Next(); return; } }   // the video holds its last frame
             }
-            if (bar != null) bar.style.width = Length.Percent(100f * Mathf.Clamp01(t / s.Dur));
+            if (bar != null) bar.style.width = Length.Percent(100f * Mathf.Clamp01(t / s.EndT));
             if (story != null)
             {
                 if (story.parent != host && host != null) host.Add(story);

@@ -47,6 +47,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 // the 5 figures an investor asks about first; the rest (and the sources) stay behind "Источники"
                 var facts = new VisualElement(); facts.AddToClassList("lm-facts"); card.Add(facts);
                 foreach (var (k, v) in KeyFacts(l)) facts.Add(Widgets.Fact(k, v));
+                Capacity(card, l, y);
             }
             if (!TwinTour.Running)
             {
@@ -76,6 +77,30 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 var cam = Camera.main != null ? Camera.main.GetComponent<MapCamera>() : null; if (cam != null) cam.FlyTo(cam.overview);
             }, "small", "ghost"));
             card.Add(btns);
+        }
+
+        /// <summary>Production capacity: design, the load and output in the shown year, jobs / revenue / export at full load.</summary>
+        static void Capacity(VisualElement card, Landmark l, int y)
+        {
+            var c = LandmarkCapacity.Of(l.Id); if (c == null) return;
+            float cap = LandmarkCapacity.CapacityAt(l, c, y), load = LandmarkCapacity.Load(l, y);
+            var box = new VisualElement(); box.AddToClassList("lm-cap"); card.Add(box);
+            var h = new VisualElement(); h.AddToClassList("row"); box.Add(h);
+            var t = new Label("ПРОИЗВОДСТВЕННАЯ МОЩНОСТЬ") { pickingMode = PickingMode.Ignore }; t.AddToClassList("lm-cap-h"); h.Add(t);
+            var sp = new VisualElement { pickingMode = PickingMode.Ignore }; sp.style.flexGrow = 1; h.Add(sp);
+            var tag = new Label(c.Official ? "официально" : "оценка") { pickingMode = PickingMode.Ignore }; tag.AddToClassList("lm-cap-tag"); tag.EnableInClassList("est", !c.Official); h.Add(tag);
+            var v = new Label(LandmarkCapacity.Fmt(cap, c.Unit)) { pickingMode = PickingMode.Ignore }; v.AddToClassList("lm-cap-v"); box.Add(v);
+            var p = new Label(c.Product + (string.IsNullOrEmpty(c.Plain) ? "" : " · " + c.Plain)) { pickingMode = PickingMode.Ignore }; p.AddToClassList("note"); box.Add(p);
+            var bar = new VisualElement(); bar.AddToClassList("lm-bar"); bar.style.marginTop = 8; var fill = new VisualElement(); fill.AddToClassList("lm-fill");
+            fill.style.width = Length.Percent(load * 100f); fill.EnableInClassList("done", load >= 0.8f); bar.Add(fill); box.Add(bar);
+            var ly = new Label(load > 0f ? $"{y}: загрузка {Mathf.RoundToInt(load * 100f)} % · выпуск {LandmarkCapacity.Fmt(cap * load, c.Unit)}" : $"{y}: ещё не работает · запуск в {l.EndYear}") { pickingMode = PickingMode.Ignore };
+            ly.AddToClassList("note"); ly.style.marginTop = 4; box.Add(ly);
+            var parts = new System.Collections.Generic.List<string>();
+            if (c.Jobs > 0) parts.Add(Loc.N0(c.Jobs) + " рабочих мест");
+            if (c.RevenueUsdM > 0) parts.Add("выручка ≈ $" + Loc.N0(c.RevenueUsdM) + " млн в год");
+            if (c.Export > 0) parts.Add("экспорт " + Mathf.RoundToInt(c.Export * 100f) + " %");
+            if (parts.Count > 0) { var f = new Label("При полной загрузке: " + string.Join(" · ", parts)) { pickingMode = PickingMode.Ignore }; f.AddToClassList("note"); f.style.marginTop = 2; box.Add(f); }
+            if (l.S2End > 0 && c.Stage2Gain > 0) { var s2 = new Label($"2-я очередь ({l.S2End}): +{Mathf.RoundToInt(c.Stage2Gain * 100f)} % мощности") { pickingMode = PickingMode.Ignore }; s2.AddToClassList("note"); box.Add(s2); }
         }
 
         static bool srcOpen;

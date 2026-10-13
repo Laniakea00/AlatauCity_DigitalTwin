@@ -58,6 +58,8 @@ namespace AlatauCity.DigitalTwin.Modules
                         var col = new VisualElement(); col.style.flexGrow = 1; col.style.marginLeft = 8;
                         var n = new Label(l.Name); n.AddToClassList("fw-medium"); col.Add(n);
                         var c = new Label(l.Purpose); c.AddToClassList("muted"); c.AddToClassList("small"); col.Add(c);
+                        var cap = LandmarkCapacity.Of(l.Id);
+                        if (cap != null) { var cl = new Label("Мощность: " + LandmarkCapacity.Fmt(LandmarkCapacity.CapacityAt(l, cap, TwinState.Year), cap.Unit)); cl.AddToClassList("small"); cl.AddToClassList("lm-cap-line"); col.Add(cl); }
                         row.Add(col);
                         var st = Widgets.Status(LandmarkCatalog.StatusOf(l), LandmarkCatalog.ClsOf(l)); row.Add(st);
                         var ll = l; row.AddManipulator(new Clickable(() => LandmarkSystem.Instance?.Select(ll)));

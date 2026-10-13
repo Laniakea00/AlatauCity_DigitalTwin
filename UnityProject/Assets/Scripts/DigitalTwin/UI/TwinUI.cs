@@ -27,12 +27,13 @@ namespace AlatauCity.DigitalTwin.UI
         public VisualElement Pins => pins;
         public ITwinModule Active => active;
         public VisualElement Scene => scene;
+        public Label BellBadge => bellBadge as Label;
         public void BlockWhileHovered(VisualElement e) => Chrome(e);
         /// <summary>True while the pointer is over a panel, the dock or another UI element that blocks the map.</summary>
         public bool PointerOverChrome => hovered.Count > 0;
 
         static readonly Dictionary<string, string> ModuleIcon = new Dictionary<string, string>
-        { ["overview"] = "layout_grid", ["objects"] = "map_pin", ["construction"] = "hard_hat", ["prediction"] = "chart_line", ["infra"] = "network", ["situation"] = "radar", ["ai"] = "sparkles" };
+        { ["overview"] = "layout_grid", ["objects"] = "map_pin", ["construction"] = "hard_hat", ["prediction"] = "chart_line", ["infra"] = "network", ["situation"] = "radar", ["smartcity"] = "video", ["economy"] = "activity", ["ai"] = "sparkles" };
 
         /// <summary>A white line icon from Resources/UI/Icons (Lucide), tinted by USS.</summary>
         public static VisualElement Icon(string name, float size = 18f)
@@ -55,6 +56,8 @@ namespace AlatauCity.DigitalTwin.UI
             modules.Add(new PredictionModule());
             modules.Add(new InfraModule());
             modules.Add(new SituationModule());
+            modules.Add(new SmartCityModule());
+            modules.Add(new EconomyModule());
             modules.Add(new AiModule());
         }
         void OnEnable()
@@ -140,8 +143,9 @@ namespace AlatauCity.DigitalTwin.UI
             yearLabel = new Label(); yearLabel.AddToClassList("year-big"); h.Add(yearLabel);
             var sep3 = new VisualElement { pickingMode = PickingMode.Ignore }; sep3.AddToClassList("hsep"); h.Add(sep3);
             h.Add(HeadIcon("sparkles", Loc.T("tab_ai"), () => TwinState.SetModule("ai")));
-            var bell = HeadIcon("bell", Loc.T("tab_situation"), () => TwinState.SetModule("situation"));
-            bellBadge = new Label("2") { pickingMode = PickingMode.Ignore }; bellBadge.AddToClassList("hbadge"); bell.Add(bellBadge); h.Add(bell);
+            VisualElement bell = null; bell = HeadIcon("bell", "Уведомления · Smart City, iKomek 109", () => Notifier.Instance?.TogglePanel(bell));
+            bellBadge = new Label("") { pickingMode = PickingMode.Ignore }; bellBadge.AddToClassList("hbadge"); bell.Add(bellBadge); h.Add(bell);
+            Notifier.Instance?.BindBadge(bellBadge as Label);
             h.Add(HeadIcon("presentation", Loc.T("tour"), TwinTour.Toggle));
             var user = new VisualElement { pickingMode = PickingMode.Ignore }; user.AddToClassList("user");
             var av = new Label("QT") { pickingMode = PickingMode.Ignore }; av.AddToClassList("avatar"); user.Add(av);
@@ -262,7 +266,6 @@ namespace AlatauCity.DigitalTwin.UI
         void OnYear(int y)
         {
             yearLabel.text = y.ToString(); if (dockYear != null) dockYear.text = y.ToString(); if (slider != null && slider.Value != y) slider.Value = y;
-            if (bellBadge != null) bellBadge.style.display = y >= 2030 ? DisplayStyle.Flex : DisplayStyle.None;
             active?.Refresh(); RefreshCard();
         }
         void OnScenario(Scenario s)

@@ -63,6 +63,8 @@ namespace AlatauCity.DigitalTwin
         public static float GfaAll(int district, int year) { float v = 0; for (int c = 0; c < Cats; c++) v += Gfa(district, c, year); return v; }
         public static float Residents(int district, int year) => Gfa(district, 0, year) / M2PerResident;
         public static float Jobs(int district, int year) { float v = 0; for (int c = 1; c < Cats; c++) v += Gfa(district, c, year) / M2PerJob[c]; return v; }
+        /// <summary>Jobs of one use category (1 business … 4 leisure).</summary>
+        public static float Jobs1(int cat, int year, int district = -1) => cat <= 0 || cat >= Cats ? 0f : Gfa(district, cat, year) / M2PerJob[cat];
         public static float Readiness(int district, int year)
         {
             if (district < 0) return TotalPlannedGfa > 0 ? GfaAll(-1, year) / TotalPlannedGfa : 0;

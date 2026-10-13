@@ -69,7 +69,7 @@ namespace AlatauCity.DigitalTwin.UI
         void Tick()
         {
             if (panel == null) return;
-            float dt = Mathf.Min(Time.unscaledDeltaTime, 0.05f); if (TourFx.Paused) dt = 0; t += dt;
+            float dt = Mathf.Min(Time.unscaledDeltaTime, 0.05f) * Time.timeScale; if (TourFx.Paused) dt = 0; t += dt;   // follows the video mode speed-up
             // 1. typing
             int n = Mathf.Clamp(Mathf.FloorToInt((t - 0.6f) / 0.075f), 0, Question.Length); q.text = Question.Substring(0, n);
             cursor.style.opacity = n < Question.Length || t < 4.5f ? (Mathf.Repeat(t, 0.9f) < 0.5f ? 1f : 0f) : 0f;

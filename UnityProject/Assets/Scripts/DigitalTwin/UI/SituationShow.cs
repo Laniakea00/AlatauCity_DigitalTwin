@@ -98,7 +98,7 @@ namespace AlatauCity.DigitalTwin.UI
         void Tick()
         {
             if (panel == null) return;
-            float dt = Mathf.Min(Time.unscaledDeltaTime, 0.05f); if (TourFx.Paused) dt = 0;
+            float dt = Mathf.Min(Time.unscaledDeltaTime, 0.05f) * Time.timeScale; if (TourFx.Paused) dt = 0;   // follows the video mode speed-up
             t += dt; if (decided) decT += dt;
             var cur = SituationModule.Find(inc.Id);
             if (cur != null && (cur.P - flown).sqrMagnitude > 50f * 50f)

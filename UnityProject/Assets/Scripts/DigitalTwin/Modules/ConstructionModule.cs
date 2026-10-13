@@ -68,7 +68,6 @@ namespace AlatauCity.DigitalTwin.Modules
                 kb[i] = k; row.Add(k);
             }
 
-            BuildBimTeaser();
 
             // one chart: commissioning plan vs fact (lines) over the money spent per year (columns)
             var cbk = Widgets.Block(panel, "Стройка: план, факт и деньги", "");

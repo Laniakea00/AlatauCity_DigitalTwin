@@ -599,3 +599,50 @@
 .story-fill { height: 4px; border-radius: 2px; }
 .story-note { font-size: 10px; color: #7d7d7d; margin-top: 8px; white-space: normal; }
 .tour-nocard .card { display: none; }
+
+/* video mode (F6): the caption without the presenter's controls */
+.tour.tour2.video > .row { display: none; }
+.tour.tour2.video > .note { display: none; }
+
+/* ---------- Smart City: camera feed (stub), notifications, toasts ---------- */
+.feed { height: 194px; border-radius: 8px; overflow: hidden; background-color: #050505; border-width: 1px; border-color: #262626; }
+.compact .feed { height: 172px; }
+.feed-big { height: 196px; }
+.feed-img { position: absolute; left: 0; top: 0; right: 0; bottom: 0; }
+.feed-over { position: absolute; left: 0; top: 0; right: 0; bottom: 0; padding: 7px 9px; }
+.feed-top { flex-direction: row; align-items: center; }
+.feed-rec { width: 9px; height: 9px; margin-right: 8px; }
+.feed-id { font-size: 11px; color: #ffffff; -unity-font-definition: url("Fonts/Geologica-Medium.ttf"); letter-spacing: 0.4px; background-color: rgba(0, 0, 0, 0.45); padding: 1px 5px; border-radius: 3px; }
+.feed-clock { font-size: 10px; color: #e6e6e6; background-color: rgba(0, 0, 0, 0.45); padding: 1px 5px; border-radius: 3px; }
+.feed-place { position: absolute; left: 9px; bottom: 7px; font-size: 11px; color: #f0f0f0; background-color: rgba(0, 0, 0, 0.5); padding: 1px 6px; border-radius: 3px; }
+.feed-stub { position: absolute; right: 9px; bottom: 7px; font-size: 9px; letter-spacing: 1px; color: #ffcf6a; background-color: rgba(0, 0, 0, 0.55); padding: 1px 6px; border-radius: 3px; }
+.feed.offline .feed-place { color: #ff6b61; }
+.feed-tour { position: absolute; right: 12px; top: 12px; width: 372px; padding: 12px 14px 12px 14px; border-radius: 12px;
+    background-color: rgba(16, 16, 16, 0.94); border-width: 1px; border-color: #262626; }
+.compact .feed-tour { width: 330px; }
+
+.toast-host { position: absolute; top: 10px; left: 0; right: 0; align-items: center; }
+.toast { width: 400px; margin: 0; opacity: 0; translate: 0 -12px; background-color: #151515; border-width: 1px; border-color: #2e2e2e; border-left-width: 3px;
+    transition-property: opacity, translate; transition-duration: 0.35s, 0.35s; }
+.toast.show { opacity: 1; translate: 0 0; }
+.tour-on .toast-host { top: 10px; }
+.toast-host .jcard.toast { background-color: rgb(21, 21, 21); }
+.toast-host .jcard.toast.show { opacity: 1; }
+
+.notif-pop { position: absolute; top: 6px; width: 400px; max-height: 640px; padding: 12px 12px 10px 12px; border-radius: 12px;
+    background-color: #121212; border-width: 1px; border-color: #2e2e2e; }
+.notif-list { flex-shrink: 1; max-height: 470px; }
+.notif-list .jcard { margin-right: 4px; }
+.notif-list .unity-scroller--vertical { width: 6px; border-width: 0; background-color: rgba(0, 0, 0, 0); }
+.notif-list .unity-scroller--vertical .unity-base-slider__dragger { background-color: #333333; border-radius: 3px; width: 4px; border-width: 0; left: 1px; }
+.notif-list .unity-scroller__low-button, .notif-list .unity-scroller__high-button { display: none; }
+
+/* ---------- production capacity in passports, economy tab ---------- */
+.lm-cap { margin-top: 10px; padding: 10px 12px 10px 12px; border-radius: 8px; background-color: #1a1a1a; }
+.lm-cap-h { font-size: 10px; letter-spacing: 1.2px; color: #9a9a9a; -unity-font-definition: url("Fonts/Geologica-Medium.ttf"); }
+.lm-cap-tag { font-size: 10px; color: #34c759; padding: 0 6px; border-radius: 6px; background-color: rgba(52, 199, 89, 0.12); }
+.lm-cap-tag.est { color: #f5a623; background-color: rgba(245, 166, 35, 0.12); }
+.lm-cap-v { font-size: 22px; -unity-font-definition: url("Fonts/Geologica-Light.ttf"); letter-spacing: -0.4px; margin-top: 4px; }
+.lm-cap-line { color: #c9c9c9; margin-top: 2px; }
+.eco-h { font-size: 12px; color: #9a9a9a; -unity-font-definition: url("Fonts/Geologica-Medium.ttf"); }
+.story-row.clickable:hover { background-color: #1d1d1d; }

@@ -14,14 +14,6 @@ namespace AlatauCity.DigitalTwin.Modules
 
         static string D(DateTime d) => d.ToString("dd.MM.yyyy", Loc.Ru);
 
-        void BuildBimTeaser()
-        {
-            if (TwinTour.Running) return;     // the investor presentation shows the city's projects, not the engineering pilot
-            var b = Widgets.Block(panel, Loc.T("bim_title"), "BIM · 4D");
-            var t = new Label(Loc.T("bim_teaser")); t.AddToClassList("note"); t.style.color = new Color(0.76f, 0.76f, 0.76f); b.Add(t);
-            var go = Widgets.Btn(Loc.T("bim_open"), EnterBim, "primary", "wide"); b.Add(go);
-        }
-
         /// <summary>Presentation tour: open / close the Gate Q1 BIM view.</summary>
         public void TourBim(bool on) { if (on && !bimMode) EnterBim(); else if (!on && bimMode) LeaveBim(true); }
 
