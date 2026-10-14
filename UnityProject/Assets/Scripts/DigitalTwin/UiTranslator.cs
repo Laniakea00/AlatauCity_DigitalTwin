@@ -159,6 +159,8 @@ namespace AlatauCity.DigitalTwin
         {
             if (Time.unscaledTime > docScan) { docScan = Time.unscaledTime + 2f; docs.Clear(); docs.AddRange(FindObjectsByType<UIDocument>(FindObjectsSortMode.None)); }
             string lang = Loc.Language;
+            // in Russian there is nothing to translate: walk the texts only while some still show another language
+            if (lang == "ru" && seen.Count == 0 && tips.Count == 0 && relayoutAt < 0) return;
             foreach (var d in docs)
             {
                 if (d == null || d.rootVisualElement == null) continue;
@@ -198,7 +200,7 @@ namespace AlatauCity.DigitalTwin
             seen.TryGetValue(te, out var s);
             if (s != null && s.Lang == lang && (ReferenceEquals(cur, s.Shown) || cur == s.Shown)) return;
             if (s != null && cur == s.Shown) cur = s.Orig;                       // the language changed: start again from the original
-            if (lang == "ru") { if (s != null) { s.Orig = cur; s.Shown = cur; s.Lang = lang; } if (te.text != cur) te.text = cur; return; }
+            if (lang == "ru") { if (s != null) seen.Remove(te); if (te.text != cur) te.text = cur; return; }
             if (!Cyr.IsMatch(cur)) { if (s != null) seen.Remove(te); return; }
             var tr = Tr(cur, lang);
             if (s == null) seen[te] = s = new Seen();
@@ -210,7 +212,7 @@ namespace AlatauCity.DigitalTwin
             var cur = e.tooltip; tips.TryGetValue(e, out var s);
             if (s != null && cur == s.Shown && s.Lang == lang) return;
             if (s != null && cur == s.Shown) cur = s.Orig;
-            if (lang == "ru") { if (s != null) { s.Orig = cur; s.Shown = cur; s.Lang = lang; } e.tooltip = cur; return; }
+            if (lang == "ru") { if (s != null) tips.Remove(e); if (e.tooltip != cur) e.tooltip = cur; return; }
             if (!Cyr.IsMatch(cur)) return;
             var tr = Tr(cur, lang); if (s == null) tips[e] = s = new Seen();
             s.Orig = cur; s.Shown = tr; s.Lang = lang; e.tooltip = tr;

@@ -41,7 +41,8 @@ namespace AlatauCity.DigitalTwin
         {
             if (failed || distance > 6500f) return;
             if (!ready) { if (!TwinData.Ready) return; Init(); if (failed) return; }
-            float R = Mathf.Clamp(distance * 2.6f, 1500f, 4600f);
+            float R = Mathf.Clamp(distance * 2.6f, 1500f, 4600f) * GraphicsQuality.TreeRange;
+            float shadowR = GraphicsQuality.TreeShadows ? 2600f * GraphicsQuality.TreeRange : -1f;
             GeometryUtility.CalculateFrustumPlanes(cam, planes);
             Vector3 cp = cam.transform.position;
             int c0x = C(focus.x - R), c1x = C(focus.x + R), c0z = C(focus.z - R), c1z = C(focus.z + R);
@@ -55,7 +56,7 @@ namespace AlatauCity.DigitalTwin
                 for (int s = 0; s < Species; s++)
                     if (cd.m[s] != null && cd.m[s].Length > 0)
                         Graphics.DrawMeshInstanced(near ? hi[s] : lo[s], 0, mat, cd.m[s], cd.m[s].Length, cd.props[s],
-                            d < 2600f ? UnityEngine.Rendering.ShadowCastingMode.On : UnityEngine.Rendering.ShadowCastingMode.Off, true, 0, null);
+                            d < shadowR ? UnityEngine.Rendering.ShadowCastingMode.On : UnityEngine.Rendering.ShadowCastingMode.Off, true, 0, null);
             }
             if (wanted.Count == 0) { Sync = false; return; }
             // place the missing cells, the nearest to the focus first; a few milliseconds per frame unless a capture asks for all

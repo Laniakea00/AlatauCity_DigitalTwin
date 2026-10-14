@@ -48,7 +48,9 @@ namespace AlatauCity.DigitalTwin.UI
             cam.nearClipPlane = 1f; cam.farClipPlane = 20000f;
             float yaw = heading + Mathf.Sin((Time.unscaledTime - t0) * 0.18f) * span;   // PTZ: slow pan left — right
             cam.transform.SetPositionAndRotation(pos, Quaternion.Euler(pitch, yaw, 0f));
+            var sq = QualitySettings.shadows; QualitySettings.shadows = ShadowQuality.Disable;          // a small picture: no shadow maps
             try { cam.Render(); } catch (Exception e) { Debug.LogWarning("[Alatau] feed: " + e.Message); users = 0; }
+            finally { QualitySettings.shadows = sq; }
         }
     }
 

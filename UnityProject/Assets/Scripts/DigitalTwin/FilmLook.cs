@@ -11,6 +11,10 @@ namespace AlatauCity.DigitalTwin
         public bool on = true;
         [Range(4, 22)] public float hour = 17.0f;
         public static FilmLook Instance;
+        /// <summary>The map camera shows nothing for now (the monitoring window renders its own view): no picture finish on it.</summary>
+        public static bool MainIdle;
+        /// <summary>Shadow distance asked by a view other than the map (metres), −1 = follow the map camera.</summary>
+        public static float ShadowOverride = -1f;
 
         Light sun; Camera cam; MapCamera mc; Material sky; bool applied; FilmPost post; Renderer[] curtains = new Renderer[0]; FilmRoads roads; FilmTrees trees;
         // what the scene looked like before, to give it back
@@ -133,12 +137,14 @@ namespace AlatauCity.DigitalTwin
             // haze: the further the camera is from what it looks at, the further it sees
             float dist = mc != null ? mc.distance : 3000f, vis = Mathf.Clamp(dist * 7f, 22000f, 320000f);
             RenderSettings.fog = true; RenderSettings.fogMode = FogMode.ExponentialSquared; RenderSettings.fogDensity = 0.83f / vis; RenderSettings.fogColor = Color.Lerp(hor, zen, 0.12f + 0.3f * dusk);
-            QualitySettings.shadowDistance = Mathf.Clamp(dist * 3.2f, 900f, 40000f);
+            // shadows: as far as the camera needs them, never beyond what the graphics level allows (each cascade re-draws the city)
+            QualitySettings.shadowDistance = ShadowOverride >= 0f ? Mathf.Min(ShadowOverride, GraphicsQuality.MaxShadow) : Mathf.Clamp(dist * 2.0f, 600f, GraphicsQuality.MaxShadow);
             if (cam != null && sky != null) { RenderSettings.skybox = sky; cam.clearFlags = CameraClearFlags.Skybox; }
             if (post != null)
             {
-                post.enabled = true; post.aoRadius = Mathf.Clamp(dist * 0.012f, 5f, 60f);
-                post.focus = dist; post.focusRange = dist * 0.75f; post.depthOfField = true; post.maxBlur = 2f * (1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(3500f, 9000f, dist)));   // a hint of depth only: blur reads as low quality
+                post.enabled = !MainIdle; post.aoRadius = Mathf.Clamp(dist * 0.012f, 5f, 60f);
+                post.ambientOcclusion = GraphicsQuality.Ao; post.bloomOn = GraphicsQuality.Bloom;
+                post.focus = dist; post.focusRange = dist * 0.75f; post.depthOfField = GraphicsQuality.Dof; post.maxBlur = 2f * (1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(3500f, 9000f, dist)));   // a hint of depth only: blur reads as low quality
             }
             foreach (var r in curtains) if (r != null && r.enabled) r.enabled = false;
             Shader.SetGlobalFloat("_AlatauScenIdx", (int)TwinState.Scenario);

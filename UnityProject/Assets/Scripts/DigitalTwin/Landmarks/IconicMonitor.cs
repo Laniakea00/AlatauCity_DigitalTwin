@@ -175,7 +175,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             SetDate(date, true);
             // the monitoring camera starts where the city camera is and flies to the working floor
             if (mon == null) { var g = new GameObject("Iconic monitoring · view"); g.transform.SetParent(transform, false); mon = g.AddComponent<Camera>(); mon.enabled = false; }
-            mon.CopyFrom(main); mon.ResetProjectionMatrix(); mon.fieldOfView = 40f; mon.nearClipPlane = 0.5f; mon.farClipPlane = 40000f; mon.depth = main.depth - 1;
+            mon.CopyFrom(main); mon.ResetProjectionMatrix(); mon.allowHDR = false; mon.fieldOfView = 40f; mon.nearClipPlane = 0.5f; mon.farClipPlane = 40000f; mon.depth = main.depth - 1;
             curPos = main.transform.position; curRot = main.transform.rotation;
             yaw = main.transform.eulerAngles.y + 25f;
             Select(sel, true);
@@ -219,11 +219,13 @@ namespace AlatauCity.DigitalTwin.Landmarks
             root.Insert(0, bgImg);
             mainMask = main.cullingMask; mainClear = main.clearFlags; mainBg = main.backgroundColor;
             main.cullingMask = 0; main.clearFlags = CameraClearFlags.SolidColor; main.backgroundColor = Color.black;
+            FilmLook.MainIdle = true; FilmLook.ShadowOverride = 1600f;          // no picture finish on the idle map camera; near shadows for the views
         }
         void Unfreeze()
         {
             if (bgImg != null) { bgImg.RemoveFromHierarchy(); bgImg = null; }
             if (main != null) { main.cullingMask = mainMask; main.clearFlags = mainClear; main.backgroundColor = mainBg; }
+            FilmLook.MainIdle = false; FilmLook.ShadowOverride = -1f;
         }
 
         // ------------------------------------------------------------------ the date (4D)
@@ -354,12 +356,12 @@ namespace AlatauCity.DigitalTwin.Landmarks
             // the picture: as large as the viewport, in screen pixels
             if (photo != null && photo.panel != null)
             {
-                var r = photo.worldBound; float ppp = Screen.height / Mathf.Max(photo.panel.visualTree.layout.height, 1f);
+                var r = photo.worldBound; float ppp = Screen.height / Mathf.Max(photo.panel.visualTree.layout.height, 1f) * GraphicsQuality.ViewScale;
                 int W = Mathf.Clamp(Mathf.RoundToInt(r.width * ppp), 64, 2400), Hh = Mathf.Clamp(Mathf.RoundToInt(r.height * ppp), 64, 1600);
-                if (r.width > 10f && (monRT == null || Mathf.Abs(monRT.width - W) > 8 || Mathf.Abs(monRT.height - Hh) > 8))
+                if (r.width > 10f && (monRT == null || Mathf.Abs(monRT.width - W) > 8 || Mathf.Abs(monRT.height - Hh) > 8 || monRT.antiAliasing != GraphicsQuality.ViewMsaa))
                 {
                     if (monRT != null) { mon.targetTexture = null; monRT.Release(); }
-                    monRT = new RenderTexture(W, Hh, 24) { name = "iconic_monitor", antiAliasing = 4 }; monRT.Create();
+                    monRT = new RenderTexture(W, Hh, 24) { name = "iconic_monitor", antiAliasing = GraphicsQuality.ViewMsaa }; monRT.Create();
                     mon.targetTexture = monRT; photo.image = monRT;
                 }
                 if (monRT != null && !mon.enabled) { mon.targetTexture = monRT; mon.enabled = true; }
@@ -407,11 +409,14 @@ namespace AlatauCity.DigitalTwin.Landmarks
             if (feedClock != null) feedClock.text = Day(Mathf.Min(date, Report)) + "  " + DateTime.Now.ToString("HH:mm:ss");
             if (feedT > 0f || main == null) return;
             int i; if (tab == 2) { i = rr = (rr + 1) % 4; feedT = 0.08f; } else if (tab == 0) { i = 0; feedT = 0.15f; } else return;
-            if (camRT[i] == null) { camRT[i] = new RenderTexture(400, 225, 24) { name = "iconic_cctv_" + i, antiAliasing = 2 }; camRT[i].Create(); }
+            if (camRT[i] == null) { camRT[i] = new RenderTexture(400, 225, 24) { name = "iconic_cctv_" + i, antiAliasing = Mathf.Min(2, GraphicsQuality.ViewMsaa) }; camRT[i].Create(); }
             if (feedCam == null) { var g = new GameObject("Iconic monitoring · site camera"); g.transform.SetParent(transform, false); feedCam = g.AddComponent<Camera>(); feedCam.enabled = false; }
             feedCam.CopyFrom(mon); feedCam.ResetProjectionMatrix(); feedCam.enabled = false; feedCam.targetTexture = camRT[i]; feedCam.fieldOfView = 58f; feedCam.nearClipPlane = 0.2f; feedCam.farClipPlane = 20000f;
             CamPose(i, out var p, out var r, true); feedCam.transform.SetPositionAndRotation(p, r);
+            // a site camera is a small picture: no shadow maps for it (each extra view would draw the city into its own cascades)
+            var sq = QualitySettings.shadows; QualitySettings.shadows = ShadowQuality.Disable;
             try { feedCam.Render(); } catch (Exception e) { Debug.LogWarning("[Alatau] monitoring camera: " + e.Message); return; }
+            finally { QualitySettings.shadows = sq; }
             if (i == 0 && feedImg != null && feedImg.image != camRT[0]) feedImg.image = camRT[0];
             if (tiles[i] != null && tiles[i].image != camRT[i]) tiles[i].image = camRT[i];
         }

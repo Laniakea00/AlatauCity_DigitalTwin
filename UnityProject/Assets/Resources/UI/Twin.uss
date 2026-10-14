@@ -829,3 +829,6 @@
 .mon-cam-scr { height: 104px; position: relative; }
 .mon-cam-id { font-size: 9px; color: rgba(255, 255, 255, 0.92); margin: 4px 0 0 8px; }
 .mon-cam-cap { font-size: 11px; padding: 4px 8px 5px 8px; background-color: #121212; color: var(--text2); }
+.gfx-chip { flex-direction: row; align-items: center; margin: 0 8px 0 0; padding: 5px 9px 5px 7px; border-radius: 8px; border-width: 1px; border-color: var(--line2); }
+.gfx-chip:hover { border-color: var(--text2); }
+.gfx-chip Label { margin-left: 5px; font-size: 11px; color: var(--text2); }

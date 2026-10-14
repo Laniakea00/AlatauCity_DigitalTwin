@@ -163,6 +163,11 @@ namespace AlatauCity.DigitalTwin.UI
                 lb.AddManipulator(new Clickable(() => TwinState.SetLanguage(code))); lang.Add(lb);
             }
             h.Add(lang);
+            // graphics quality: Авто / высокое / среднее / низкое (F9)
+            var gq = new VisualElement(); gq.AddToClassList("gfx-chip"); gq.tooltip = "Качество графики · F9 — переключить";
+            gq.Add(Icon("settings", 14)); var gql = new Label(GraphicsQuality.Name) { pickingMode = PickingMode.Ignore }; gq.Add(gql);
+            gq.AddManipulator(new Clickable(GraphicsQuality.Cycle)); h.Add(gq);
+            GraphicsQuality.OnChanged += () => gql.text = GraphicsQuality.Name;
             var user = new VisualElement { pickingMode = PickingMode.Ignore }; user.AddToClassList("user");
             var av = new Label("QT") { pickingMode = PickingMode.Ignore }; av.AddToClassList("avatar"); user.Add(av);
             var uc = new VisualElement { pickingMode = PickingMode.Ignore }; uc.AddToClassList("pcol");

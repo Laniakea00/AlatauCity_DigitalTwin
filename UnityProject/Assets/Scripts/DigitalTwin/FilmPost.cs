@@ -11,6 +11,8 @@ namespace AlatauCity.DigitalTwin
         [Range(0, 2)] public float aoStrength = 1.25f;
         public float aoRadius = 14f;                     // metres; FilmLook sets it from the camera distance
         public bool depthOfField = true;
+        /// <summary>Switched by the graphics level (GraphicsQuality): ambient occlusion and bloom cost several full-screen passes.</summary>
+        public bool ambientOcclusion = true, bloomOn = true;
         public float focus = 2000f, focusRange = 1200f;  // metres; FilmLook follows the camera target
         [Range(0, 12)] public float maxBlur = 5f;        // pixels at 1080 lines
         [Range(0, 1)] public float bloom = 0.32f;
@@ -27,11 +29,20 @@ namespace AlatauCity.DigitalTwin
         void OnEnable()
         {
             cam = GetComponent<Camera>(); hdr0 = cam.allowHDR; depth0 = cam.depthTextureMode;
-            cam.depthTextureMode |= DepthTextureMode.Depth; cam.allowHDR = true;
+            NeedDepth(); cam.allowHDR = true;
             if (mat == null) { var sh = Shader.Find("Hidden/AlatauCity/FilmPost"); if (sh != null) mat = new Material(sh) { hideFlags = HideFlags.HideAndDontSave }; }
         }
 
         void OnDisable() { if (cam != null) { cam.allowHDR = hdr0; cam.depthTextureMode = depth0; } }
+
+        /// <summary>The depth texture costs a whole extra pass over the city: only while ambient occlusion or depth of field need it.</summary>
+        void NeedDepth()
+        {
+            bool need = ambientOcclusion || (depthOfField && maxBlur > 0.05f);
+            var m = need ? depth0 | DepthTextureMode.Depth : depth0;
+            if (cam.depthTextureMode != m) cam.depthTextureMode = m;
+        }
+        void OnPreCull() { if (cam != null) NeedDepth(); }
 
         void OnRenderImage(RenderTexture src, RenderTexture dst)
         {
@@ -43,15 +54,27 @@ namespace AlatauCity.DigitalTwin
             mat.SetVector(BloomPId, new Vector4(bloomThreshold, bloom, 0, 0));
             mat.SetVector(DofId, new Vector4(focus, focusRange, maxBlur * h / 1080f, depthOfField ? 1f : 0f));
 
-            // 1. ambient occlusion at half size, blurred along the surfaces
-            var ao = RenderTexture.GetTemporary(w / 2, h / 2, 0, RenderTextureFormat.R8); var ao2 = RenderTexture.GetTemporary(w / 2, h / 2, 0, RenderTextureFormat.R8);
-            Graphics.Blit(src, ao, mat, 0);
-            mat.SetVector(DirId, new Vector4(2f / w, 0, 0, 0)); Graphics.Blit(ao, ao2, mat, 1);
-            mat.SetVector(DirId, new Vector4(0, 2f / h, 0, 0)); Graphics.Blit(ao2, ao, mat, 1);
-            var a = RenderTexture.GetTemporary(w, h, 0, RenderTextureFormat.DefaultHDR); var b = RenderTexture.GetTemporary(w, h, 0, RenderTextureFormat.DefaultHDR);
-            mat.SetTexture(AoTexId, ao); Graphics.Blit(src, a, mat, 2);
-            // 2. depth of field
-            Graphics.Blit(a, b, mat, 3);
+            // 1. ambient occlusion at half size, blurred along the surfaces (off: a white texture, nothing is shaded)
+            RenderTexture ao = null, ao2 = null;
+            if (ambientOcclusion)
+            {
+                ao = RenderTexture.GetTemporary(w / 2, h / 2, 0, RenderTextureFormat.R8); ao2 = RenderTexture.GetTemporary(w / 2, h / 2, 0, RenderTextureFormat.R8);
+                Graphics.Blit(src, ao, mat, 0);
+                mat.SetVector(DirId, new Vector4(2f / w, 0, 0, 0)); Graphics.Blit(ao, ao2, mat, 1);
+                mat.SetVector(DirId, new Vector4(0, 2f / h, 0, 0)); Graphics.Blit(ao2, ao, mat, 1);
+            }
+            var a = RenderTexture.GetTemporary(w, h, 0, RenderTextureFormat.DefaultHDR);
+            mat.SetTexture(AoTexId, ao != null ? (Texture)ao : Texture2D.whiteTexture); Graphics.Blit(src, a, mat, 2);
+            // 2. depth of field (only when it is on)
+            RenderTexture b = a;
+            if (depthOfField && maxBlur > 0.05f) { b = RenderTexture.GetTemporary(w, h, 0, RenderTextureFormat.DefaultHDR); Graphics.Blit(a, b, mat, 3); }
+            if (!bloomOn)
+            {
+                mat.SetVector(BloomPId, new Vector4(bloomThreshold, 0f, 0, 0)); mat.SetTexture(BloomTexId, Texture2D.blackTexture); Graphics.Blit(b, dst, mat, 7);
+                if (ao != null) { RenderTexture.ReleaseTemporary(ao); RenderTexture.ReleaseTemporary(ao2); }
+                RenderTexture.ReleaseTemporary(a); if (b != a) RenderTexture.ReleaseTemporary(b);
+                return;
+            }
             // 3. bloom: bright parts, four sizes down, then back up
             const int N = 4; var down = new RenderTexture[N];
             int bw = w / 2, bh = h / 2;
@@ -69,7 +92,8 @@ namespace AlatauCity.DigitalTwin
             mat.SetTexture(BloomTexId, up); Graphics.Blit(b, dst, mat, 7);
             if (up != down[N - 1]) RenderTexture.ReleaseTemporary(up);
             for (int i = 0; i < N; i++) RenderTexture.ReleaseTemporary(down[i]);
-            RenderTexture.ReleaseTemporary(ao); RenderTexture.ReleaseTemporary(ao2); RenderTexture.ReleaseTemporary(a); RenderTexture.ReleaseTemporary(b);
+            if (ao != null) { RenderTexture.ReleaseTemporary(ao); RenderTexture.ReleaseTemporary(ao2); }
+            RenderTexture.ReleaseTemporary(a); if (b != a) RenderTexture.ReleaseTemporary(b);
         }
     }
 }
