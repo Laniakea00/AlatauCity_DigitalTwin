@@ -89,6 +89,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             CrownGlass = LM.C("#c99c55"), Timber = LM.C("#b9853f"), Fascia = LM.C("#efe9dc"), PoolTile = LM.C("#7fb8c4"), PoolWater = LM.C("#2f8fb0");
         static void Iconic(LandmarkKit k)
         {
+            var shape = IconicShape.P; IconicShape.P = TowerProfile.Iconic;          // the tower's footprint is the one of its interior floors
             Pad(k, 270f, 200f, 22f, Pave);
 
             // ---- the tower: glass shell on the shared footprint (IconicShape, the interior floors fit it), a golden plate at every floor
@@ -182,6 +183,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             for (float z = 14f; z <= 72f; z += 9.5f) { Planted(k, 83.5f, z, 8f, 3); Planted(k, 110.5f, z, 8f, 4); }
             for (float z = 22f; z <= 64f; z += 14f) foreach (float px in new[] { 89.5f, 104.5f }) Bench(k, px, z, 90f);
             for (int i = 0; i < 9; i++) k.Box(new Vector3(-6f + i * 10f, 3.2f, 2f), new Vector3(0.35f, 6f, 0.35f), 0, Steel, LM.Steel, 1f, Warm, LM.Light);
+            IconicShape.P = shape;
         }
         /// <summary>A podium block on the rectangle (x0, z0)–(x1, z1): glass walls, a golden fascia, a flat paved roof terrace with a glass parapet.</summary>
         static void Podium(LandmarkKit k, float x0, float z0, float x1, float z1, float h)

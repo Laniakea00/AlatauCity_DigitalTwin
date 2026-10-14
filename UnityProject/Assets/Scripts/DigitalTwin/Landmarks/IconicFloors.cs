@@ -4,25 +4,80 @@ using UnityEngine;
 
 namespace AlatauCity.DigitalTwin.Landmarks
 {
-    /// <summary>Footprint of the Iconic Complex main tower (local frame of the landmark): one vertical face (east, +x), the other leans in.
-    /// Shared by the exterior model (LandmarkModels.Iconic) and the interior floors (IconicFloors), so the floors always fit the facade.</summary>
+    /// <summary>A tower whose floors can be entered and followed through construction (the interior, the stages of a floor, the
+    /// construction monitoring): its footprint in the local frame of the landmark (one vertical face at x = Xr, the plate may taper with
+    /// height), floor height, number of floors and the use of each floor. Iconic Complex (the 272 m SOM tower) and the library and
+    /// research tower of the KAIST campus.</summary>
+    public class TowerProfile
+    {
+        public string Id, Title, Tower, Enter;
+        public float Xr, Cz, W0, D0, Roof, Fh, Base = 0.3f, Taper, TaperPow = 1.25f, DepthTaper, Chamfer = 5f;
+        /// <summary>Numbered floors; the levels above them (Levels − Floors) are the crown or the roof.</summary>
+        public int Levels, Floors;
+        public Func<int, IconicFloors.Use> UseOf;
+        /// <summary>Name of the use of a floor (when the generic name of the layout does not fit the building).</summary>
+        public Func<int, string> UseName;
+        public string TopName = "Корона, уровень ", TopShort = "К";
+
+        public float RawWidth(float y) { float f = Mathf.Clamp01(y / Roof); return W0 * (1f - Taper * Mathf.Pow(f, TaperPow)); }
+        public float Depth(float y) { float f = Mathf.Clamp01(y / Roof); return D0 * (1f - DepthTaper * f); }
+
+        public static readonly TowerProfile Iconic = new TowerProfile
+        {
+            Id = "iconic", Title = "Башня Iconic Complex (T1)", Tower = "Башня T1", Enter = "Внутрь башни",
+            Xr = 66f, Cz = 34f, W0 = 60f, D0 = 44f, Roof = 252f, Fh = 4.3f, Taper = 0.74f, DepthTaper = 0.28f, Chamfer = 5f, Levels = 58, Floors = 56,
+            UseOf = i =>
+            {
+                if (i == 0) return IconicFloors.Use.Lobby;
+                if (i <= 2) return IconicFloors.Use.Retail;
+                if (i == 3) return IconicFloors.Use.FoodHall;
+                if (i == 4) return IconicFloors.Use.Conference;
+                // by the SOM section: offices low (57 600 m²), residences in the middle (40 300 m²), amenities at the top
+                if (i == 19 || i == 45) return IconicFloors.Use.Technical;
+                if (i <= 18) return IconicFloors.Use.Office;
+                if (i <= 44) return IconicFloors.Use.Residence;
+                if (i <= 51) return IconicFloors.Use.Club;
+                if (i <= 53) return IconicFloors.Use.Restaurant;
+                if (i <= 55) return IconicFloors.Use.Lounge;
+                return IconicFloors.Use.Crown;
+            }
+        };
+        /// <summary>KAIST Kazakhstan: the library and research tower of the campus (40 × 40 m, 58 m): hall, canteen, auditorium,
+        /// reading rooms, laboratories, sports hall, coworking, technical roof level. Illustrative programme.</summary>
+        public static readonly TowerProfile Kaist = new TowerProfile
+        {
+            Id = "kaist", Title = "Библиотечная башня KAIST (B1)", Tower = "Башня B1", Enter = "Внутрь библиотеки",
+            Xr = 170f, Cz = 20f, W0 = 40f, D0 = 40f, Roof = 58f, Fh = 4.1f, Taper = 0f, DepthTaper = 0f, Chamfer = 6f, Levels = 14, Floors = 13,
+            TopName = "Технический уровень кровли", TopShort = "Т",
+            UseOf = i => i == 0 ? IconicFloors.Use.Lobby : i == 1 ? IconicFloors.Use.FoodHall : i == 2 ? IconicFloors.Use.Conference
+                       : i <= 10 ? IconicFloors.Use.Office : i == 11 ? IconicFloors.Use.Club : i == 12 ? IconicFloors.Use.Lounge : IconicFloors.Use.Crown,
+            UseName = i => i == 0 ? "Вестибюль и выставка проектов" : i == 1 ? "Студенческая столовая" : i == 2 ? "Аудитория на 400 мест"
+                         : i <= 6 ? "Читальные залы библиотеки" : i <= 10 ? "Лаборатории и исследовательские группы" : i == 11 ? "Спортзал и фитнес"
+                         : i == 12 ? "Коворкинг и терраса" : "Технический уровень кровли",
+        };
+        public static TowerProfile For(string id) => id == "iconic" ? Iconic : id == "kaist" ? Kaist : null;
+    }
+
+    /// <summary>The tower being looked at (TowerProfile): shared by the exterior model of Iconic Complex, the interior floors (IconicFloors),
+    /// the interior and the construction monitoring, so the floors always fit the facade.</summary>
     public static class IconicShape
     {
-        public const float Xr = 66f, Cz = 34f, W0 = 60f, D0 = 44f, Roof = 252f, Fh = 4.3f, Base = 0.3f;
-        /// <summary>56 floors and 2 levels inside the crown.</summary>
-        public const int Levels = 58;
-        public static float RawWidth(float y) { float f = Mathf.Clamp01(y / Roof); return W0 * (1f - 0.74f * Mathf.Pow(f, 1.25f)); }
-        public static float Depth(float y) { float f = Mathf.Clamp01(y / Roof); return D0 * (1f - 0.28f * f); }
+        public static TowerProfile P = TowerProfile.Iconic;
+        public static float Xr => P.Xr; public static float Cz => P.Cz; public static float W0 => P.W0; public static float D0 => P.D0;
+        public static float Roof => P.Roof; public static float Fh => P.Fh; public static float Base => P.Base;
+        public static int Levels => P.Levels; public static int Floors => P.Floors;
+        public static float RawWidth(float y) => P.RawWidth(y);
+        public static float Depth(float y) => P.Depth(y);
         public static List<Vector2> Ring(float y)
         {
             float w = RawWidth(y), d = Depth(y);
-            return LandmarkKit.Chamfer(Xr - w * 0.5f, Cz, Mathf.Max(w, 5f), d, Mathf.Min(5f, w * 0.18f));
+            return LandmarkKit.Chamfer(Xr - w * 0.5f, Cz, Mathf.Max(w, 5f), d, Mathf.Min(P.Chamfer, w * 0.18f));
         }
         /// <summary>The footprint at height y, moved inward by t metres.</summary>
         public static List<Vector2> Inset(float y, float t)
         {
             float w = RawWidth(y), d = Depth(y);
-            return LandmarkKit.Chamfer(Xr - w * 0.5f, Cz, Mathf.Max(w, 5f) - 2f * t, d - 2f * t, Mathf.Max(Mathf.Min(5f, w * 0.18f) - t * 0.41f, 0.2f));
+            return LandmarkKit.Chamfer(Xr - w * 0.5f, Cz, Mathf.Max(w, 5f) - 2f * t, d - 2f * t, Mathf.Max(Mathf.Min(P.Chamfer, w * 0.18f) - t * 0.41f, 0.2f));
         }
         public static float FloorY(int i) => Base + i * Fh;
     }
@@ -34,23 +89,11 @@ namespace AlatauCity.DigitalTwin.Landmarks
     {
         public enum Use { Lobby, Retail, FoodHall, Conference, Office, Technical, Residence, Club, Restaurant, Lounge, Crown }
 
-        public static Use UseOf(int i)
-        {
-            if (i == 0) return Use.Lobby;
-            if (i <= 2) return Use.Retail;
-            if (i == 3) return Use.FoodHall;
-            if (i == 4) return Use.Conference;
-            // by the SOM section: offices low (57 600 m²), residences in the middle (40 300 m²), amenities at the top
-            if (i == 19 || i == 45) return Use.Technical;
-            if (i <= 18) return Use.Office;
-            if (i <= 44) return Use.Residence;
-            if (i <= 51) return Use.Club;
-            if (i <= 53) return Use.Restaurant;
-            if (i <= 55) return Use.Lounge;
-            return Use.Crown;
-        }
-        public static string Name(int i) => i >= 56 ? "Корона, уровень " + (i - 55) : "Этаж " + (i + 1);
-        public static string Short(int i) => i >= 56 ? "К" + (i - 55) : (i + 1).ToString();
+        public static Use UseOf(int i) => IconicShape.P.UseOf(i);
+        public static string Name(int i) => i >= IconicShape.Floors ? (IconicShape.Levels - IconicShape.Floors > 1 ? IconicShape.P.TopName + (i - IconicShape.Floors + 1) : IconicShape.P.TopName) : "Этаж " + (i + 1);
+        public static string Short(int i) => i >= IconicShape.Floors ? IconicShape.P.TopShort + (IconicShape.Levels - IconicShape.Floors > 1 ? (i - IconicShape.Floors + 1).ToString() : "") : (i + 1).ToString();
+        /// <summary>What floor i is used for, in the words of its building.</summary>
+        public static string FloorUse(int i) => IconicShape.P.UseName != null ? IconicShape.P.UseName(i) : UseName(UseOf(i));
         public static string UseName(Use u)
         {
             switch (u)
@@ -187,7 +230,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             else if (phase == PFitOut) { int n = Mathf.RoundToInt(P.Furniture.Count * f); for (int j = 0; j < n; j++) P.Furniture[j](k); }
             Site(k, P, phase, f, above);
             ceiling = Ceiling(P, phase, f, above);
-            info = new Info { Use = UseName(P.U), Detail = P.Detail, Area = Area(P) };
+            info = new Info { Use = FloorUse(i), Detail = P.Detail, Area = Area(P) };
             return k.ToMesh("Iconic floor " + (i + 1));
         }
         /// <summary>Centre of the floor plate (local frame) and its size — for the camera.</summary>
@@ -333,7 +376,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             Color32 wall = done ? Warm : Concrete;
             float cx0 = P.cx0, cx1 = P.cx1, cz0 = P.cz0, cz1 = P.cz1;
             // lift bank on the west side of the core, doors open to the floor; stairs north and south; risers and toilets east
-            int lifts = P.I < 20 ? 4 : P.I < 39 ? 3 : 2; if (P.I >= 56) lifts = 1;
+            int lifts = P.I < 20 ? 4 : P.I < 39 ? 3 : 2; if (P.I >= IconicShape.Floors) lifts = 1;
             float lw = 2.5f, bank = lifts * lw, bz0 = (cz0 + cz1) * 0.5f - bank * 0.5f;
             // outer walls: north, south, east full; west with the lift openings
             Seg(k, new Vector2(cx0, cz1), new Vector2(cx1, cz1), y0, y1, t, wall, LM.Solid, IconicShape.Fh);

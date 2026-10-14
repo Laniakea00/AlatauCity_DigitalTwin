@@ -456,7 +456,8 @@ namespace AlatauCity.DigitalTwin.Landmarks
             Vector3 c = l.World; float h = Mathf.Min(l.Height * 0.5f, 150f);
             float p = Progress(l, YearNow);
             if (p > 0f && p < 0.999f) h = Mathf.Max(l.Height * Mathf.Clamp01((p - 0.08f) / 0.62f) - 6f, 8f);
-            if (l.Id == "iconic" && model != null) c = model.TransformPoint(new Vector3(IconicShape.Xr - IconicShape.RawWidth(h) * 0.5f, 0f, IconicShape.Cz));
+            var tp = TowerProfile.For(l.Id);
+            if (tp != null && model != null) c = model.TransformPoint(new Vector3(tp.Xr - tp.RawWidth(h) * 0.5f, 0f, tp.Cz));
             float dist = Mathf.Clamp(Mathf.Max(l.Radius, l.Height * 0.25f) * 0.9f, 70f, 260f);
             FlyTo(l, c, dist, h, 10f);
             orbitAt = c; orbitLift = h;

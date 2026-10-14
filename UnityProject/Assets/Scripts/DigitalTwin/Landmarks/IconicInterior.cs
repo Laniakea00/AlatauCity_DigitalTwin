@@ -11,7 +11,8 @@ namespace AlatauCity.DigitalTwin.Landmarks
     public class IconicInterior : MonoBehaviour
     {
         public static IconicInterior Instance;
-        const string Id = "iconic";
+        /// <summary>The building whose interior is shown (TowerProfile: Iconic Complex, the KAIST library tower).</summary>
+        static string Id => IconicShape.P.Id;
         public static bool Active => Instance != null && Instance.active;
         public static bool Walking => Active && Instance.walk;
         /// <summary>Esc belongs to the interior in this frame (inside, or it has just been used to leave): the passport and the presentation keep it.</summary>
@@ -65,17 +66,27 @@ namespace AlatauCity.DigitalTwin.Landmarks
             }
             return best >= 0 ? best : TopFloor(l, p);
         }
-        public bool CanEnter(out string why)
+        public bool CanEnter(out string why) => CanEnter(Id, out why);
+        public bool CanEnter(string id, out string why)
         {
-            why = null; var ls = LandmarkSystem.Instance; var l = ls != null ? ls.Get(Id) : null;
+            why = null; var ls = LandmarkSystem.Instance; var l = ls != null ? ls.Get(id) : null;
+            var prof = TowerProfile.For(id); if (prof == null) { why = "нет модели этажей"; return false; }
+            var keep = IconicShape.P; IconicShape.P = prof;
+            try {
             if (l == null || !ls.Ready) { why = "модель ещё загружается"; return false; }
             if (TopFloor(l, P(l)) < 0) { why = "каркас ещё не начат"; return false; }
             return true;
+            } finally { IconicShape.P = keep; }
         }
 
-        public void Enter()
+        public void Enter() => Enter(Id);
+        /// <summary>Into the tower of landmark id (Iconic Complex, KAIST): its floors, as built in the shown year.</summary>
+        public void Enter(string id)
         {
             var ls = LandmarkSystem.Instance; if (ls == null || !ls.Ready) return;
+            var prof = TowerProfile.For(id); if (prof == null) return;
+            if (active && prof != IconicShape.P) ExitNow();
+            if (prof != IconicShape.P) { IconicShape.P = prof; bFloor = -1; }
             L = ls.Get(Id); if (L == null) return;
             // before the frame rises there is nothing to walk into: show the year the floors are going up
             if (TopFloor(L, P(L)) < 0) { TwinState.Year = Mathf.Min(L.StartYear + 1, L.EndYear); }
@@ -98,8 +109,8 @@ namespace AlatauCity.DigitalTwin.Landmarks
             leaving = true; walk = false;
             if (ceilGo != null) ceilGo.SetActive(false);
             // the map camera takes over from a view of the tower (its orbit continues from there)
-            var c = model.TransformPoint(new Vector3(IconicShape.Xr - 25f, 0f, IconicShape.Cz));
-            Driving = true; mc.SetPose(new Vector3(c.x, 0f, c.z), 520f, cam.transform.eulerAngles.y, 18f, 120f); Driving = false;
+            var c = model.TransformPoint(new Vector3(IconicShape.Xr - IconicShape.W0 * 0.42f, 0f, IconicShape.Cz));
+            Driving = true; mc.SetPose(new Vector3(c.x, 0f, c.z), Mathf.Max(H(L) * 1.9f, 260f), cam.transform.eulerAngles.y, 18f, H(L) * 0.44f); Driving = false;
             Begin(2.0f, cutNow, H(L) + 30f);
             ShowPanel(false);
         }
@@ -203,7 +214,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 {
                     r2.GetPropertyBlock(mpb);
                     mpb.SetFloat("_Reveal", 100000f); mpb.SetFloat("_Build", 0f); mpb.SetFloat("_Ghost", 0f); mpb.SetFloat("_Hi", 0f); mpb.SetFloat("_Facade", 100000f);
-                    mpb.SetFloat("_Land", 1f); mpb.SetFloat("_Glow", -1f); mpb.SetFloat("_H", 272f); mpb.SetFloat("_Park", 0f);
+                    mpb.SetFloat("_Land", 1f); mpb.SetFloat("_Glow", -1f); mpb.SetFloat("_H", H(L)); mpb.SetFloat("_Park", 0f);
                     r2.SetPropertyBlock(mpb);
                 }
             }
@@ -229,10 +240,10 @@ namespace AlatauCity.DigitalTwin.Landmarks
         {
             if (active || MapCamera.Typing) return;
             var ls = LandmarkSystem.Instance; if (ls == null || !ls.Ready) return;
-            var l = ls.Selected; if (l == null || l.Id != Id) { pressed = false; return; }
+            var l = ls.Selected; if (l == null || TowerProfile.For(l.Id) == null) { pressed = false; return; }
             // I or a double click on the selected tower: dive in
-            if (Input.GetKeyDown(KeyCode.I)) { Enter(); return; }
-            var m = ls.ModelOf(Id); var c = Camera.main; if (m == null || c == null) return;
+            if (Input.GetKeyDown(KeyCode.I)) { Enter(l.Id); return; }
+            var m = ls.ModelOf(l.Id); var c = Camera.main; if (m == null || c == null) return;
             if (Input.GetMouseButtonDown(0)) { pressed = !MapCamera.BlockInput; clickPos = Input.mousePosition; }
             if (Input.GetMouseButtonUp(0) && pressed)
             {
@@ -240,7 +251,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 if ((Input.mousePosition - clickPos).magnitude > 6f) return;
                 var col = m.GetComponent<MeshCollider>();
                 if (col == null || !col.Raycast(c.ScreenPointToRay(Input.mousePosition), out _, 200000f)) { lastClick = -10f; return; }
-                if (Time.unscaledTime - lastClick < 0.4f) { lastClick = -10f; Enter(); } else lastClick = Time.unscaledTime;
+                if (Time.unscaledTime - lastClick < 0.4f) { lastClick = -10f; Enter(l.Id); } else lastClick = Time.unscaledTime;
             }
         }
 
@@ -306,7 +317,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             if (keys && (Input.GetKeyDown(KeyCode.PageUp) || Input.GetKeyDown(KeyCode.RightBracket))) { SetFloor(NextFloor(+1)); }
             if (keys && (Input.GetKeyDown(KeyCode.PageDown) || Input.GetKeyDown(KeyCode.LeftBracket))) { SetFloor(NextFloor(-1)); }
             if (keys && Input.GetKeyDown(KeyCode.V)) ToggleWalk();
-            if (keys && Input.GetKeyDown(KeyCode.M)) { IconicMonitor.Instance?.Show(); return; }
+            if (keys && Input.GetKeyDown(KeyCode.M)) { IconicMonitor.Instance?.Show(Id); return; }
             // mouse: drag turns (orbit around the floor / look around), the wheel brings the camera nearer
             bool over = MapCamera.BlockInput;
             if ((Input.GetMouseButtonDown(0) || Input.GetMouseButtonDown(1)) && !over) { dragging = true; lastMouse = Input.mousePosition; clickPos = Input.mousePosition; }
@@ -399,13 +410,13 @@ namespace AlatauCity.DigitalTwin.Landmarks
         {
             panel.Clear();
             var head = new VisualElement(); head.AddToClassList("head");
-            var t = new Label("Iconic Complex · внутри"); t.AddToClassList("t"); head.Add(t);
+            var t = new Label(L.Short + " · внутри"); t.AddToClassList("t"); head.Add(t);
             head.Add(Widgets.Btn("×", Exit, "small", "ghost")); panel.Add(head);
             float yb = IconicShape.FloorY(floor);
-            var sub = new Label(IconicFloors.Name(floor) + (floor < 56 ? " из 56" : "") + " · отметка +" + Loc.N1(yb) + " м"); sub.AddToClassList("id"); panel.Add(sub);
+            var sub = new Label(IconicFloors.Name(floor) + (floor < IconicShape.Floors ? " из " + IconicShape.Floors : "") + " · отметка +" + Loc.N1(yb) + " м"); sub.AddToClassList("id"); panel.Add(sub);
 
             var chips = new VisualElement(); chips.AddToClassList("lm-chips");
-            var uc = new VisualElement(); uc.AddToClassList("lm-chip"); uc.Add(new Label(info != null ? info.Use : IconicFloors.UseName(IconicFloors.UseOf(floor)))); chips.Add(uc);
+            var uc = new VisualElement(); uc.AddToClassList("lm-chip"); uc.Add(new Label(info != null ? info.Use : IconicFloors.FloorUse(floor))); chips.Add(uc);
             string cls = ph >= IconicFloors.PReady ? "ok" : ph >= IconicFloors.PPartitions ? "info" : "warn";
             chips.Add(Widgets.Status(IconicFloors.PhaseNow[ph] + (ph > IconicFloors.PNone && ph < IconicFloors.PReady ? " · " + Mathf.RoundToInt(f * 100f) + " %" : ""), cls));
             panel.Add(chips);
@@ -448,7 +459,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             foreach (int s in new[] { 1, 2, 3, 5, 7 }) leg.Add(Widgets.LegendItem(IconicFloors.PhaseColor[s], IconicFloors.PhaseName[s]));
 
             var btns = new VisualElement(); btns.AddToClassList("lm-btns"); panel.Add(btns);
-            var mon = Widgets.Btn("Мониторинг строительства", () => IconicMonitor.Instance?.Show(), "small", "primary"); mon.style.width = Length.Percent(100); btns.Add(mon);
+            var mon = Widgets.Btn("Мониторинг строительства", () => IconicMonitor.Instance?.Show(Id), "small", "primary"); mon.style.width = Length.Percent(100); btns.Add(mon);
             // only where there is a floor to go to: none above the top of the tower (or of the frame so far), none below the lobby
             if (NextFloor(+1) != floor) btns.Add(Widgets.Btn("Этаж выше", () => SetFloor(NextFloor(+1)), "small"));
             if (NextFloor(-1) != floor) btns.Add(Widgets.Btn("Этаж ниже", () => SetFloor(NextFloor(-1)), "small"));
