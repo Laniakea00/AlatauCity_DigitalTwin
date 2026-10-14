@@ -261,7 +261,9 @@ namespace AlatauCity.DigitalTwin.Landmarks
         }
 
         /// <summary>Year shown by the city now (fractional while the timeline plays).</summary>
-        public static float YearNow => TwinState.Playing || Shader.GetGlobalFloat("_AlatauGrow") > 0.5f ? Mathf.Max(Shader.GetGlobalFloat("_AlatauYearF"), TwinState.Year) : TwinState.Year;
+        /// <summary>A date set by the construction monitoring (4D timeline of one object), −1 = none: the landmarks are shown as of it.</summary>
+        public static float YearOverride = -1f;
+        public static float YearNow => YearOverride >= 0f ? YearOverride : TwinState.Playing || Shader.GetGlobalFloat("_AlatauGrow") > 0.5f ? Mathf.Max(Shader.GetGlobalFloat("_AlatauYearF"), TwinState.Year) : TwinState.Year;
         /// <summary>0 = not started, (0,1) = under construction, 1 = complete in the shown year.</summary>
         public static float Progress(Landmark l, float y)
         {

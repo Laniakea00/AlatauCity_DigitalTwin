@@ -18,6 +18,9 @@ namespace AlatauCity.DigitalTwin.Landmarks
         public static bool EscTaken => Active || (Instance != null && Instance.escFrame >= Time.frameCount - 1);
         /// <summary>Set while the interior itself moves the map camera (it must not take that as "someone else moves the camera").</summary>
         public static bool Driving;
+        /// <summary>Set while the monitoring window drives the camera, the cut and the floor shown (IconicMonitor): the interior waits.</summary>
+        public static bool Suspended;
+        public int Floor => floor;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         static void Boot() { if (Instance == null) new GameObject("Iconic Complex · interior").AddComponent<IconicInterior>(); }
@@ -104,7 +107,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
         public void ExitNow()
         {
             if (!active) return;
-            RestoreLens();
+            RestoreLens(); Suspended = false;
             active = false; leaving = false; walk = false; tr = -1f; cutNow = -1f;
             LandmarkSystem.CutId = null; LandmarkSystem.CutAt = -1f;
             if (floorGo != null) floorGo.SetActive(false); if (ceilGo != null) ceilGo.SetActive(false);
@@ -126,6 +129,28 @@ namespace AlatauCity.DigitalTwin.Landmarks
             Pivot();
             Begin(0.7f, cutNow, CutFor());
             Refresh(true);
+        }
+        /// <summary>For the monitoring window (while Suspended): show floor i as built at the shown date, or hide the floor model.</summary>
+        public void Puppet(int i, bool show)
+        {
+            if (!active || floorGo == null) return;
+            i = Mathf.Clamp(i, 0, IconicShape.Levels - 1);
+            if (show) { if (i != floor) floor = i; Rebuild(P(L), false); }
+            if (floorGo.activeSelf != show) floorGo.SetActive(show);
+            if (ceilGo.activeSelf) ceilGo.SetActive(false);
+        }
+        /// <summary>The panel steps aside while the monitoring window is open.</summary>
+        public void HidePanel() { if (panel != null) ShowPanel(false); }
+        /// <summary>The monitoring window has closed: the interior takes the camera back on its floor (the date may have moved).</summary>
+        public void Resume()
+        {
+            Suspended = false;
+            if (!active || L == null) return;
+            float p = P(L);
+            if (IconicFloors.Phase(floor, p, H(L), out _) == IconicFloors.PNone) { int t = TopFloor(L, p); if (t < 0) { ExitNow(); return; } floor = t; }
+            walk = false; floorGo.SetActive(true); ceilGo.SetActive(false);
+            Rebuild(p, true); Pivot(); Begin(0.9f, LandmarkSystem.CutAt >= 0f ? LandmarkSystem.CutAt : H(L) + 30f, CutFor());
+            ShowPanel(true); Refresh(true);
         }
         /// <summary>Shows floor i from above (the monitoring window looks at the working floor).</summary>
         public void FocusFloor(int i)
@@ -221,7 +246,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
 
         void LateUpdate()
         {
-            if (!active) return;
+            if (!active || Suspended) return;
             var ls = LandmarkSystem.Instance;
             if (L == null || model == null || cam == null || mc == null || ls == null) { ExitNow(); return; }
             float p = P(L);
@@ -366,7 +391,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             if (panel == null || L == null) return;
             uiT -= Time.unscaledDeltaTime; if (!force && uiT > 0f) return; uiT = 0.25f;
             float p = P(L); int ph = IconicFloors.Phase(floor, p, H(L), out float f);
-            string key = floor + "|" + ph + "|" + Mathf.RoundToInt(f * 100f) + "|" + walk + "|" + TwinState.Year + "|" + Loc.Language;
+            string key = floor + "|" + ph + "|" + Mathf.RoundToInt(f * 100f) + "|" + walk + "|" + TwinState.Year + "|" + TopFloor(L, p) + "|" + Loc.Language;
             if (!force && key == uiKey) return; uiKey = key;
             Fill(p, ph, f);
         }
@@ -424,8 +449,9 @@ namespace AlatauCity.DigitalTwin.Landmarks
 
             var btns = new VisualElement(); btns.AddToClassList("lm-btns"); panel.Add(btns);
             var mon = Widgets.Btn("Мониторинг строительства", () => IconicMonitor.Instance?.Show(), "small", "primary"); mon.style.width = Length.Percent(100); btns.Add(mon);
-            btns.Add(Widgets.Btn("Этаж выше", () => SetFloor(NextFloor(+1)), "small"));
-            btns.Add(Widgets.Btn("Этаж ниже", () => SetFloor(NextFloor(-1)), "small"));
+            // only where there is a floor to go to: none above the top of the tower (or of the frame so far), none below the lobby
+            if (NextFloor(+1) != floor) btns.Add(Widgets.Btn("Этаж выше", () => SetFloor(NextFloor(+1)), "small"));
+            if (NextFloor(-1) != floor) btns.Add(Widgets.Btn("Этаж ниже", () => SetFloor(NextFloor(-1)), "small"));
             var wb = Widgets.Btn(walk ? "Вид сверху" : "Пройтись по этажу", ToggleWalk, "small"); if (walk) wb.AddToClassList("active"); btns.Add(wb);
             btns.Add(Widgets.Btn("Наружу", Exit, "small", "ghost"));
             var hint = new Label(walk ? "W A S D — идти · перетаскивание — оглядеться · PgUp / PgDn — этажи · Esc — вид сверху"
