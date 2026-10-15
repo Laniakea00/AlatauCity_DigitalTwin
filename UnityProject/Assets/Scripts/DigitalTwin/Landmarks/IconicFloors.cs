@@ -42,12 +42,12 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 return IconicFloors.Use.Crown;
             }
         };
-        /// <summary>KAIST Kazakhstan: the library and research tower of the campus (40 × 40 m, 58 m): hall, canteen, auditorium,
+        /// <summary>KAIST Kazakhstan: the library and research tower of the campus (40 × 40 m at the base, the west face leaning in to 32 m at the top, 58 m): hall, canteen, auditorium,
         /// reading rooms, laboratories, sports hall, coworking, technical roof level. Illustrative programme.</summary>
         public static readonly TowerProfile Kaist = new TowerProfile
         {
             Id = "kaist", Title = "Библиотечная башня KAIST (B1)", Tower = "Башня B1", Enter = "Внутрь библиотеки",
-            Xr = 170f, Cz = 20f, W0 = 40f, D0 = 40f, Roof = 58f, Fh = 4.1f, Taper = 0f, DepthTaper = 0f, Chamfer = 6f, Levels = 14, Floors = 13,
+            Xr = 170f, Cz = 20f, W0 = 40f, D0 = 40f, Roof = 58f, Fh = 4.1f, Taper = 0.2f, TaperPow = 1f, DepthTaper = 0f, Chamfer = 6f, Levels = 14, Floors = 13,
             TopName = "Технический уровень кровли", TopShort = "Т",
             UseOf = i => i == 0 ? IconicFloors.Use.Lobby : i == 1 ? IconicFloors.Use.FoodHall : i == 2 ? IconicFloors.Use.Conference
                        : i <= 10 ? IconicFloors.Use.Office : i == 11 ? IconicFloors.Use.Club : i == 12 ? IconicFloors.Use.Lounge : IconicFloors.Use.Crown,

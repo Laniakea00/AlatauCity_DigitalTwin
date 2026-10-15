@@ -48,7 +48,11 @@ Shader "AlatauCity/Landmark"
             // every derivative first, before any branch
             float2 uv = IN.fac, fw = fwidth(uv); float lyW = fwidth(IN.ly);
             float3 n = normalize(IN.worldNormal), view = normalize(_WorldSpaceCameraPos - IN.worldPos);
-            clip(_Reveal - IN.ly);
+            // early landscape (LandmarkKit.GreenTag / ParkTreeTag): lawns, paths, water and trees of a park laid out before the
+            // buildings — green from the start of the works, not cut by the rising frame and not an earth site
+            bool parkTree = IN.mat.y < -8.5;
+            bool keep = parkTree || (IN.mat.y < -4.5 && IN.mat.y > -5.5);
+            if (!keep) clip(_Reveal - IN.ly);
             if (_Ghost > 0.01)
             {
                 float2 sp = IN.screenPos.xy / max(IN.screenPos.w, 1e-4) * _ScreenParams.xy;
@@ -57,13 +61,13 @@ Shader "AlatauCity/Landmark"
             }
             int id = (int)round(IN.mat.x);
             bool tree = IN.mat.y < -6.5;                                   // LandmarkKit.TreeTag: planted at the end of construction
-            float prm = tree ? 3.0 : max(IN.mat.y, 0.05);
+            float prm = tree || keep ? 3.0 : max(IN.mat.y, 0.05);
             // staged landscaping: vertex alpha = 1 - stage; a part with a later stage starts later and finishes by _Land = 1.
             // (objects without stages carry alpha 1 → stage 0 → exactly _Land as before)
             float stg = 1.0 - IN.color.a, st0 = stg * 0.75;
             float land = saturate((_Land - st0) / max(1.0 - st0, 0.05));
             if (_Park > 0.5) clip(_Land - st0 + 0.015);                    // grounds not started yet: the old terrain shows through
-            if (tree && _Build > 0.5) clip(land * 1.15 - AHash2(floor(IN.worldPos.xz / 4.0)));
+            if (tree && !parkTree && _Build > 0.5) clip(land * 1.15 - AHash2(floor(IN.worldPos.xz / 4.0)));
             // photo materials (film look): paving slabs and lawn grass, sampled before any branch
             AMat mPave = AlatauMat(IN.worldPos.xz, 7.0), mGrass = AlatauMat(IN.worldPos.xz, 8.0);
             float3 a = IN.color.rgb; float3 emit = 0; float spec = 0;
@@ -151,7 +155,7 @@ Shader "AlatauCity/Landmark"
             //  · above the closed facade and below the working level: the bare frame — concrete slabs every floor, dark open floors
             //    with columns between them, an orange safety edge on the working level;
             //  · the ground of the plot stays an earth site with tyre tracks until paving and planting (_Land)
-            if (_Build > 0.5)
+            if (_Build > 0.5 && !keep)
             {
                 bool ground = (IN.ly < 1.2 || _Park > 0.5) && n.y > 0.6 && !tree;
                 bool raised = !ground && IN.ly >= 1.2 && (id == 4 || (id == 6 && !tree) || id == 7);

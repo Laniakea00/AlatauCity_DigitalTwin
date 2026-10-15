@@ -102,7 +102,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 Id = "kaist", Name = "KAIST Kazakhstan · кампус", Short = "KAIST Kazakhstan", Company = "KAIST (Южная Корея) · ACA",
                 Purpose = "Технологический университет и кампус до 40 тыс. студентов (Академгородок)", Model = "campus",
                 District = 1, Status = LStatus.Concept, StatusNote = "прорабатывается",
-                StartYear = 2029, EndYear = 2032, YearOfficial = false, X = -1457, Z = -12698, Yaw = 45.6f, PadW = 420f, PadD = 360f, Height = 58f, Radius = 210f, ViewYaw = 190f, ViewPitch = 22f,
+                StartYear = 2029, EndYear = 2032, YearOfficial = false, X = -1457, Z = -12698, Yaw = 45.6f, PadW = 420f, PadD = 360f, Height = 69f, Radius = 210f, ViewYaw = 190f, ViewPitch = 22f,
                 Source = "Kazinform, Kapital.kz", SourceDate = "29.09.2025 / 09.2026"
             }.F("Студенты", "до 40 000 (кампус Golden)").F("Сроки", "не объявлены (в демо — 2032)").Stage2("общежития и лаборатории", 2034, 2037));
             L.Add(new Landmark
