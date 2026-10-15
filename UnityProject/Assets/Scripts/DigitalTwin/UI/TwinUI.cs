@@ -31,6 +31,13 @@ namespace AlatauCity.DigitalTwin.UI
         public void BlockWhileHovered(VisualElement e) => Chrome(e);
         /// <summary>True while the pointer is over a panel, the dock or another UI element that blocks the map.</summary>
         public bool PointerOverChrome => hovered.Count > 0;
+        /// <summary>A panel is taken off the screen: the pointer can no longer be over it (or anything inside it).</summary>
+        public void ForgetChrome(VisualElement e)
+        {
+            if (e == null) return;
+            hovered.RemoveWhere(h => h == e || e.Contains(h));
+            MapCamera.BlockInput = hovered.Count > 0;
+        }
 
         static readonly Dictionary<string, string> ModuleIcon = new Dictionary<string, string>
         { ["overview"] = "layout_grid", ["objects"] = "map_pin", ["construction"] = "hard_hat", ["prediction"] = "chart_line", ["infra"] = "network", ["situation"] = "radar", ["smartcity"] = "video", ["economy"] = "activity", ["ai"] = "sparkles" };

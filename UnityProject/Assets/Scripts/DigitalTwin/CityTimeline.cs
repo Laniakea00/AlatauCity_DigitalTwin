@@ -22,7 +22,7 @@ namespace AlatauCity.DigitalTwin
         }
         void Update()
         {
-            if (MapCamera.Typing || TwinTour.Running) { } else
+            if (MapCamera.Typing || TwinTour.Running || Landmarks.IconicInterior.Active) { } else      // inside the tower PgUp / PgDn are floors, Space is the 4D timeline
             {
             if (Input.GetKeyDown(KeyCode.Space)) TogglePlay();
             if (Input.GetKeyDown(KeyCode.PageUp) || Input.GetKeyDown(KeyCode.Period)) TwinState.Year++;

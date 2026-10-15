@@ -81,76 +81,267 @@ namespace AlatauCity.DigitalTwin.Landmarks
             for (int i = 0; i < n; i++) k.Cylinder(new Vector3(x0 + i * (r * 2.3f), 0.3f, z0), r, h, 16, col, LM.Metal, 4f, col, LM.Metal, r * 0.5f);
         }
 
-        // ------------------------------------------------------------------ Iconic Complex (SOM): a 272 m wedge tower + an 80 m terraced hotel tower on a terraced podium
+        // ------------------------------------------------------------------ Iconic Complex (SOM): two separate buildings and a garden between them —
+        // the 272 m tower (offices, residences, amenities at the top) wrapped in golden floor plates that project past the glass and turn a
+        // little from floor to floor, its top glowing; the 80 m hotel stepping down to the west in planted terraces with a timber-and-garden
+        // cascade in its middle; two low retail blocks (up to 32 m) with sloping green roofs and a roof pool; the square with an amphitheatre.
+        static readonly Color32 Gold = LM.C("#cf9f45"), GoldLight = LM.C("#f2cf7f"), Bronze = LM.C("#3b3125"), WarmGlass = LM.C("#4d3d2a"),
+            CrownGlass = LM.C("#c99c55"), Timber = LM.C("#b9853f"), Fascia = LM.C("#efe9dc"), PoolTile = LM.C("#7fb8c4"), PoolWater = LM.C("#2f8fb0");
         static void Iconic(LandmarkKit k)
         {
+            var shape = IconicShape.P; IconicShape.P = TowerProfile.Iconic;          // the tower's footprint is the one of its interior floors
             Pad(k, 270f, 200f, 22f, Pave);
-            // podium: three glazed levels with white fascias, stepping back and down toward the public square (south, −z), planted terraces
-            float[,] lv = { { 0.3f, 8.5f, 196f, 126f, 6f, 12f }, { 8.5f, 15f, 164f, 102f, 16f, 22f }, { 15f, 21f, 128f, 82f, 26f, 30f } };
-            for (int i = 0; i < 3; i++)
-            {
-                float y0 = lv[i, 0], y1 = lv[i, 1], w = lv[i, 2], d = lv[i, 3], cx = lv[i, 4], cz = lv[i, 5];
-                k.Prism(LandmarkKit.RoundRect(cx, cz, w, d, 16f, 5), y0, y1 - 1.6f, GlassWarm, LM.Glass, 4.3f, White, -1);
-                k.Prism(LandmarkKit.RoundRect(cx, cz, w + 2.4f, d + 2.4f, 17f, 5), y1 - 1.6f, y1, White, LM.Solid, 1.6f, Stone, LM.Paving);
-                // light line under each fascia (warm white at night)
-                k.Prism(LandmarkKit.RoundRect(cx, cz, w + 2.5f, d + 2.5f, 17f, 5), y1 - 1.75f, y1 - 1.6f, Warm, LM.Light, 1f, Warm, -1);
-                if (i < 2)
-                {
-                    // planted strip on the exposed terrace in front of the next level
-                    float nz = lv[i + 1, 5] - lv[i + 1, 3] * 0.5f, z0 = cz - d * 0.5f + 3f;
-                    k.Prism(LandmarkKit.RoundRect(cx, (z0 + nz) * 0.5f - 1f, w - 14f, Mathf.Max(3f, nz - z0 - 4f), 3f, 2), y1, y1 + 0.6f, Stone, LM.Solid, 3f, Grass, LM.Plant);
-                }
-            }
-            // atrium roof light over the podium
-            k.Prism(LandmarkKit.RoundRect(-4f, 7f, 46f, 22f, 9f, 4), 21f, 22.2f, GlassBlue, LM.Glass, 1.2f, GlassBlue, LM.Glass);
 
-            // ---- main tower: one vertical face (east, +x) with a white spine, the other leans in to a blade-shaped crown
-            float xr = 66f, cz0 = 34f, W0 = 60f, D0 = 44f, H = 272f, roof = 252f, fh = 4.3f;
-            List<Vector2> Ring(float y)
+            // ---- the tower: glass shell on the shared footprint (IconicShape, the interior floors fit it), a golden plate at every floor
+            float xr = IconicShape.Xr, cz0 = IconicShape.Cz, H = 272f, roof = IconicShape.Roof, fh = IconicShape.Fh, crownFrom = 214f;
+            var prev = IconicShape.Ring(0.3f); float yp = 0.3f; int fl = 0;
+            for (float y = 0.3f + fh; y <= roof + 0.01f; y += fh, fl++)
             {
-                float f = Mathf.Clamp01(y / roof);
-                float w = W0 * (1f - 0.74f * Mathf.Pow(f, 1.25f)), d = D0 * (1f - 0.28f * f);
-                return LandmarkKit.Chamfer(xr - w * 0.5f, cz0, Mathf.Max(w, 5f), d, Mathf.Min(5f, w * 0.18f));
+                var r = IconicShape.Ring(y); bool crown = yp >= crownFrom;
+                k.Loft(prev, yp, r, y, crown ? CrownGlass : Bronze, LM.Glass, fh);
+                if (fl > 0) Plate(k, prev, yp, fl, crown);
+                prev = r; yp = y;
             }
-            var prev = Ring(0.3f); float yp = 0.3f;
-            for (float y = 0.3f + fh; y <= roof + 0.01f; y += fh)
-            {
-                var r = Ring(y); k.Loft(prev, yp, r, y, GlassBlue, LM.Fins, fh); prev = r; yp = y;
-            }
-            // crown: the lean continues as a glass blade to a sharp ridge, then the mast
-            float wTop = W0 * (1f - 0.74f), dTop = D0 * 0.72f;
+            Plate(k, prev, yp, fl, true);
+            // crown: the lean continues as a glass blade to a ridge; mast and aircraft light
+            float dTop = IconicShape.D0 * 0.72f;
             var ridge = LandmarkKit.Chamfer(xr - 1.2f, cz0, 2.4f, dTop * 0.55f, 0.5f);
-            k.Loft(prev, yp, ridge, 264f, GlassBlue, LM.Glass, 2.2f);
-            k.Cap(ridge, 264f, true, MetalG, LM.Metal);
+            k.Loft(prev, yp, ridge, 264f, CrownGlass, LM.Glass, 2.2f);
+            k.Cap(ridge, 264f, true, GoldLight, LM.Metal);
             k.Beam(new Vector3(xr - 1.2f, 263f, cz0), new Vector3(xr - 1.2f, H, cz0), 0.9f, 0.9f, MetalG, LM.Steel);
             k.Box(new Vector3(xr - 1.2f, H - 0.4f, cz0), new Vector3(1.4f, 0.8f, 1.4f), 0, Red, LM.Light, 1f, Red, LM.Light);
-            // crown light band and the white spine on the vertical face
-            k.Box(new Vector3(xr - wTop * 0.5f, roof - 0.6f, cz0), new Vector3(wTop + 1.2f, 1.2f, dTop + 1.2f), 0, Warm, LM.Light, 1f, Warm, -1);
-            k.Box(new Vector3(xr + 1.0f, 131f, cz0), new Vector3(2.2f, 262f, 7f), 0, White, LM.Solid, fh, White, LM.Roof);
-            // tower lobby canopy toward the square
-            k.Box(new Vector3(xr - 30f, 9.3f, cz0 - D0 * 0.5f - 8f), new Vector3(26f, 0.8f, 16f), 0, White, LM.Solid, 1f, White, LM.Roof);
+            // lobby canopy toward the square
+            k.Box(new Vector3(xr - 30f, 6.3f, cz0 - IconicShape.D0 * 0.5f - 7f), new Vector3(30f, 0.7f, 14f), 0, Gold, LM.Solid, 1f, Fascia, LM.Roof);
 
-            // ---- hotel and branded residences: 80 m, terraces stepping down to the west like the foothills
-            // it stands ON the podium roof (level 3, top 21 m) between the atrium light and the main tower: no volume inside another
-            float hx = -4f, hz = 40f, hw = 60f, hd = 30f, baseY = 21f, top = 80f; const int NS = 6; float step = (top - baseY) / NS;
+            // ---- the hotel: 80 m, stepping down to the west, two wings with a planted cascade between them
+            const float hx0 = -128f, hx1 = -32f, hz0 = 14f, hz1 = 74f, gap = 10f, top = 80f; const int NS = 18;
+            float step = (top - 0.3f) / NS, gz0 = (hz0 + hz1 - gap) * 0.5f, gz1 = gz0 + gap;
             for (int s = 0; s < NS; s++)
             {
-                float y0 = baseY + s * step, y1 = baseY + (s + 1) * step;
-                float w = hw - s * 7.4f; float cx = hx + (hw - w) * 0.5f;
-                k.Prism(LandmarkKit.RoundRect(cx, hz, w, hd, 5f, 3), y0, y1 - 1.1f, GlassTeal, LM.Glass, 3.6f, White, -1);
-                k.Prism(LandmarkKit.RoundRect(cx, hz, w + 1.6f, hd + 1.6f, 5.5f, 3), y1 - 1.1f, y1, White, LM.Solid, 1.1f, Stone, LM.Paving);
-                // planted terrace on the step that is not covered by the next floor
-                if (s < NS - 1) k.Prism(LandmarkKit.Rect(cx - w * 0.5f + 3.6f, hz, 5.4f, hd - 4f), y1, y1 + 0.7f, Stone, LM.Solid, 1f, Grass, LM.Plant);
+                float y0 = 0.3f + s * step, y1 = y0 + step, x0 = Mathf.Lerp(hx0, hx1 - 12f, s / (NS - 1f));
+                foreach (var (z0, z1) in new[] { (hz0, gz0), (gz1, hz1) })
+                {
+                    k.Prism(LandmarkKit.Rect((x0 + hx1) * 0.5f, (z0 + z1) * 0.5f, hx1 - x0, z1 - z0), y0, y1 - 1.0f, WarmGlass, LM.Glass, 3.4f, Fascia, -1);
+                    k.Prism(LandmarkKit.Rect((x0 + hx1) * 0.5f - 0.6f, (z0 + z1) * 0.5f, hx1 - x0 + 1.2f, z1 - z0 + 1.2f), y1 - 1.0f, y1, Fascia, LM.Solid, 1f, Stone, LM.Paving);
+                    // planted edge of the terrace this step leaves open
+                    if (s < NS - 1)
+                    {
+                        float tx = x0 + 1.6f;
+                        k.Prism(LandmarkKit.Rect(tx, (z0 + z1) * 0.5f, 2.2f, z1 - z0 - 1.5f), y1, y1 + 0.7f, Stone, LM.Solid, 1f, Grass, LM.Plant);
+                        for (float z = z0 + 3f; z < z1 - 2f; z += 6.5f) k.Tree(new Vector3(tx, y1 + 0.7f, z), 2.6f + (s % 3) * 0.5f, (s & 1) == 0 ? Leaf : Leaf2, s * 0.37f + z * 0.05f);
+                    }
+                }
+                // the cascade: a garden that steps down between the wings, framed by timber fins
+                k.Prism(LandmarkKit.Rect((x0 + hx1) * 0.5f - 3f, (gz0 + gz1) * 0.5f, hx1 - x0 - 6f, gap), y0, y0 + 0.8f, Stone, LM.Solid, 1f, Grass, LM.Plant);
+                if (s % 2 == 0) k.Tree(new Vector3((x0 + hx1) * 0.5f, y0 + 0.8f, (gz0 + gz1) * 0.5f), 3.4f, Leaf2, s * 0.21f);
+                for (float x = x0 + 1f; x < hx1 - 3f; x += 2.4f)
+                    foreach (float z in new[] { gz0 + 0.25f, gz1 - 0.25f })
+                        k.Box(new Vector3(x, (y0 + y1) * 0.5f, z), new Vector3(0.18f, step, 0.5f), 0f, Timber, LM.Solid, 20f, Timber, LM.Solid);
             }
-            k.Box(new Vector3(hx + (hw - 20f) * 0.5f, top + 1.6f, hz), new Vector3(16f, 3.2f, 18f), 0, MetalG, LM.Metal, 3f, Roof, LM.Roof);
+            k.Box(new Vector3(hx1 - 6f, top + 1.5f, (hz0 + hz1) * 0.5f), new Vector3(9f, 3f, 20f), 0, MetalG, LM.Metal, 3f, Roof, LM.Roof);
 
-            // ---- the square: reflecting pool, lawns, trees, paths
-            k.Prism(LandmarkKit.RoundRect(-36f, -64f, 92f, 20f, 9f, 3), 0.3f, 0.5f, Stone, LM.Solid, 1f, Water, LM.Water);
-            Lawn(k, 64f, -66f, 70f, 34f, 8f); Lawn(k, -112f, -10f, 26f, 120f, 8f); Lawn(k, 118f, 24f, 22f, 110f, 8f);
-            Trees(k, 36f, -78f, 92f, -56f, 14f, 9f, 1f);
-            Trees(k, -118f, -60f, -108f, 50f, 13f, 9f, 2f);
-            Trees(k, 112f, -24f, 124f, 70f, 13f, 9f, 3f);
-            for (int i = 0; i < 9; i++) k.Box(new Vector3(-80f + i * 11f, 3.2f, -58f), new Vector3(0.35f, 6f, 0.35f), 0, Steel, LM.Steel, 1f, Warm, LM.Light);
+            // ---- two retail blocks (podiums) with roof terraces and pools, as on the SOM renders: glass walls under a golden fascia,
+            // the south-east one steps down from 26 m to 14 m, the west one rises from 14 m to 22 m toward the garden
+            Podium(k, 6f, -84f, 78f, -12f, 26f); Podium(k, 78f, -84f, 120f, -12f, 14f);
+            RoofPool(k, 42f, -48f, 50f, 15f, 26f, 0f);
+            RoofGarden(k, 99f, -48f, 34f, 64f, 14f);
+            Podium(k, -120f, -84f, -70f, -12f, 14f); Podium(k, -70f, -84f, -24f, -12f, 22f);
+            RoofPool(k, -47f, -48f, 15f, 40f, 22f, 90f);
+            RoofGarden(k, -95f, -48f, 42f, 64f, 14f);
+
+            // ---- grounds: a promenade with a double alley of clipped trees all around the plot, a formal allée with a fountain between
+            // the tower and the hotel, a parterre north of the tower and a square with a reflecting pool east of it
+            var keepOff = new List<Rect>
+            {
+                new Rect(4f, 9f, 66f, 51f),            // tower with its plates
+                new Rect(-122f, 12f, 92f, 64f),        // hotel
+                new Rect(4f, -86f, 118f, 76f), new Rect(-122f, -86f, 100f, 76f),   // podiums
+                new Rect(19f, -4f, 34f, 18f),          // lobby canopy
+                new Rect(-33f, -33f, 46f, 26f),        // amphitheatre
+            };
+            Promenade(k, 270f, 200f, keepOff);
+            // the allée between the tower and the hotel, from the square to the north promenade
+            k.Prism(LandmarkKit.Rect(-13f, 44f, 7f, 80f), 0.3f, 0.38f, Stone, LM.Solid, 1f, Pave, LM.Paving);
+            Lawn(k, -25.5f, 44f, 9f, 80f, 1.5f); Lawn(k, -0.5f, 44f, 6f, 80f, 1.5f);
+            for (float z = 8f; z <= 82f; z += 8f)
+            {
+                if (Mathf.Abs(z - 44f) < 9f) continue;
+                Planted(k, -19.5f, z, 7.5f, 0); Planted(k, -6.5f, z, 7.5f, 1);
+            }
+            k.Cylinder(new Vector3(-13f, 0.3f, 44f), 7f, 0.65f, 28, Stone, LM.Solid, 1f, Stone, LM.Paving);
+            k.Cylinder(new Vector3(-13f, 0.3f, 44f), 6.2f, 0.6f, 28, Stone, LM.Solid, 1f, Water, LM.Water);
+            k.Cylinder(new Vector3(-13f, 0.9f, 44f), 1.1f, 1.4f, 12, Stone, LM.Solid, 1f, Water, LM.Water);
+            // the parterre north of the tower: four lawn panels, a cross of paths, a row of trees along it
+            k.Prism(LandmarkKit.Rect(39f, 72f, 66f, 22f), 0.3f, 0.36f, Stone, LM.Solid, 1f, Pave, LM.Paving);
+            foreach (float px in new[] { 22f, 56f }) foreach (float pz in new[] { 66.5f, 77.5f }) Lawn(k, px, pz, 28f, 8f, 1.5f);
+            for (float x = 10f; x <= 68f; x += 9.5f) Planted(k, x, 61.5f, 6.5f, 2);
+            // the square east of the tower: a long reflecting pool between two rows of trees
+            k.Prism(LandmarkKit.Rect(97f, 42f, 46f, 80f), 0.3f, 0.36f, Stone, LM.Solid, 1f, Pave, LM.Paving);
+            k.Prism(LandmarkKit.Rect(97f, 42f, 12f, 44f), 0.36f, 0.75f, Stone, LM.Solid, 1f, Stone, LM.Paving);
+            k.Prism(LandmarkKit.Rect(97f, 42f, 10.4f, 42.4f), 0.75f, 0.8f, Stone, LM.Solid, 1f, Water, LM.Water);
+            foreach (float px in new[] { 83.5f, 110.5f }) Lawn(k, px, 42f, 9f, 64f, 1.5f);
+            for (float z = 14f; z <= 72f; z += 9.5f) { Planted(k, 83.5f, z, 8f, 3); Planted(k, 110.5f, z, 8f, 4); }
+            for (float z = 22f; z <= 64f; z += 14f) foreach (float px in new[] { 89.5f, 104.5f }) Bench(k, px, z, 90f);
+            for (int i = 0; i < 9; i++) k.Box(new Vector3(-6f + i * 10f, 3.2f, 2f), new Vector3(0.35f, 6f, 0.35f), 0, Steel, LM.Steel, 1f, Warm, LM.Light);
+            IconicShape.P = shape;
+        }
+        /// <summary>A podium block on the rectangle (x0, z0)–(x1, z1): glass walls, a golden fascia, a flat paved roof terrace with a glass parapet.</summary>
+        static void Podium(LandmarkKit k, float x0, float z0, float x1, float z1, float h)
+        {
+            var r = LandmarkKit.Rect((x0 + x1) * 0.5f, (z0 + z1) * 0.5f, x1 - x0, z1 - z0);
+            k.Prism(r, 0.3f, h - 1.6f, WarmGlass, LM.Glass, 4.3f, Fascia, -1);
+            k.Prism(LandmarkKit.Rect((x0 + x1) * 0.5f, (z0 + z1) * 0.5f, x1 - x0 + 0.8f, z1 - z0 + 0.8f), h - 1.6f, h, Gold, LM.Solid, 1.6f, Stone, LM.Paving);
+            float cx = (x0 + x1) * 0.5f, cz = (z0 + z1) * 0.5f, w = x1 - x0, d = z1 - z0;
+            foreach (var (c, sz) in new[] { (new Vector3(cx, h + 0.55f, z0 + 0.3f), new Vector3(w, 1.1f, 0.12f)), (new Vector3(cx, h + 0.55f, z1 - 0.3f), new Vector3(w, 1.1f, 0.12f)),
+                                           (new Vector3(x0 + 0.3f, h + 0.55f, cz), new Vector3(0.12f, 1.1f, d)), (new Vector3(x1 - 0.3f, h + 0.55f, cz), new Vector3(0.12f, 1.1f, d)) })
+                k.Box(c, sz, 0f, GlassBlue, LM.Glass, 1.1f, Fascia, LM.Solid);
+        }
+        /// <summary>A pool on a roof at height y: timber deck, stone coping, the water, sun loungers with parasols along the long sides, planters at the ends.
+        /// yaw 0: the pool runs along x; 90: along z.</summary>
+        static void RoofPool(LandmarkKit k, float cx, float cz, float lx, float lz, float y, float yaw)
+        {
+            k.Prism(LandmarkKit.Rect(cx, cz, lx + 16f, lz + 14f), y, y + 0.14f, Timber, LM.Solid, 1f, Timber, LM.Paving);
+            k.Prism(LandmarkKit.Rect(cx, cz, lx, lz), y + 0.14f, y + 0.42f, PoolTile, LM.Solid, 1f, PoolWater, LM.Water);
+            foreach (var (c, sz) in new[] { (new Vector3(cx, y + 0.3f, cz - lz * 0.5f - 0.5f), new Vector3(lx + 2f, 0.32f, 1f)), (new Vector3(cx, y + 0.3f, cz + lz * 0.5f + 0.5f), new Vector3(lx + 2f, 0.32f, 1f)),
+                                           (new Vector3(cx - lx * 0.5f - 0.5f, y + 0.3f, cz), new Vector3(1f, 0.32f, lz)), (new Vector3(cx + lx * 0.5f + 0.5f, y + 0.3f, cz), new Vector3(1f, 0.32f, lz)) })
+                k.Box(c, sz, 0f, Stone, LM.Solid, 1f, Stone, LM.Paving);
+            bool alongX = yaw < 45f; float len = alongX ? lx : lz, side = (alongX ? lz : lx) * 0.5f + 3.6f;
+            for (float t = -len * 0.5f + 3f; t <= len * 0.5f - 3f; t += 4.2f)
+                foreach (float sgn in new[] { -1f, 1f })
+                {
+                    var p = alongX ? new Vector3(cx + t, y, cz + sgn * side) : new Vector3(cx + sgn * side, y, cz + t);
+                    var sz = alongX ? new Vector3(0.75f, 0.32f, 1.9f) : new Vector3(1.9f, 0.32f, 0.75f);
+                    k.Box(p + Vector3.up * 0.3f, sz, 0f, White, LM.Solid, 1f, White, LM.Solid);
+                    k.Box(p + Vector3.up * 0.3f + (alongX ? new Vector3(0.95f, 0f, 0f) : new Vector3(0f, 0f, 0.95f)), sz, 0f, White, LM.Solid, 1f, White, LM.Solid);
+                    var u = p + (alongX ? new Vector3(0.47f, 0f, sgn * 1.6f) : new Vector3(sgn * 1.6f, 0f, 0.47f));
+                    k.Beam(u + Vector3.up * 0.14f, u + Vector3.up * 2.4f, 0.08f, 0.08f, MetalG, LM.Metal);
+                    k.Cylinder(u + Vector3.up * 2.3f, 1.5f, 0.1f, 10, Fascia, LM.Solid, 1f, Fascia, LM.Solid, 0.35f);
+                }
+            foreach (float e in new[] { -1f, 1f })
+                for (int i = -1; i <= 1; i++)
+                {
+                    var c = alongX ? new Vector3(cx + e * (lx * 0.5f + 5.5f), y, cz + i * lz * 0.32f) : new Vector3(cx + i * lx * 0.32f, y, cz + e * (lz * 0.5f + 5.5f));
+                    k.Box(c + Vector3.up * 0.5f, new Vector3(2.2f, 0.8f, 2.2f), 0f, Stone, LM.Solid, 1f, Grass, LM.Plant);
+                    k.Tree(c + Vector3.up * 0.9f, 4.2f, Leaf2, c.x * 0.13f + c.z * 0.07f);
+                }
+        }
+        /// <summary>A planted roof terrace: lawn beds in timber edging, paths between them, small trees in rows.</summary>
+        static void RoofGarden(LandmarkKit k, float cx, float cz, float lx, float lz, float y)
+        {
+            for (int i = -1; i <= 1; i += 2)
+                for (int j = -1; j <= 1; j += 2)
+                {
+                    float bx = cx + i * lx * 0.24f, bz = cz + j * lz * 0.24f;
+                    k.Prism(LandmarkKit.RoundRect(bx, bz, lx * 0.38f, lz * 0.38f, 1.5f, 2), y, y + 0.55f, Timber, LM.Solid, 1f, Grass, LM.Plant);
+                    for (float t = -lz * 0.15f; t <= lz * 0.15f + 0.01f; t += lz * 0.15f) k.Tree(new Vector3(bx, y + 0.55f, bz + t), 4.6f, Leaf, bx * 0.11f + t);
+                }
+            for (int i = -1; i <= 1; i += 2) Bench(k, cx, cz + i * 3f, 0f, y);
+        }
+        /// <summary>A tree in a square grate (the clipped trees of the alleys): same height and shape along a row.</summary>
+        static void Planted(LandmarkKit k, float x, float z, float h, int row)
+        {
+            k.Box(new Vector3(x, 0.34f, z), new Vector3(1.8f, 0.08f, 1.8f), 0f, Steel, LM.Solid, 1f, Steel, LM.Paving);
+            k.Tree(new Vector3(x, 0.38f, z), h, (row & 1) == 0 ? Leaf : Leaf2, row * 1.7f);
+        }
+        static void Bench(LandmarkKit k, float x, float z, float yaw, float y = 0.3f)
+        {
+            k.Box(new Vector3(x, y + 0.42f, z), new Vector3(2.2f, 0.12f, 0.6f), yaw, Timber, LM.Solid, 1f, Timber, LM.Solid);
+            k.Box(new Vector3(x, y + 0.2f, z), new Vector3(1.8f, 0.4f, 0.4f), yaw, Steel, LM.Solid, 1f, Steel, LM.Solid);
+        }
+        /// <summary>The promenade around the plot: a 12 m paved band along the edge with two rows of clipped trees in grates, lamps between
+        /// the outer trees, benches, and a clipped hedge on the inner side with openings at the entrances. Trees and hedges keep off the buildings.</summary>
+        static void Promenade(LandmarkKit k, float w, float d, List<Rect> keepOff)
+        {
+            float hw = w * 0.5f, hd = d * 0.5f, i0 = 4f, i1 = 16f;
+            bool Free(float x, float z, float m) { foreach (var r in keepOff) if (x > r.xMin - m && x < r.xMax + m && z > r.yMin - m && z < r.yMax + m) return false; return true; }
+            // the paving band (four strips) with a lighter centre line
+            k.Prism(LandmarkKit.Rect(0f, -hd + (i0 + i1) * 0.5f, w - 2f * i0, i1 - i0), 0.3f, 0.36f, Stone, LM.Solid, 1f, Stone, LM.Paving);
+            k.Prism(LandmarkKit.Rect(0f, hd - (i0 + i1) * 0.5f, w - 2f * i0, i1 - i0), 0.3f, 0.36f, Stone, LM.Solid, 1f, Stone, LM.Paving);
+            k.Prism(LandmarkKit.Rect(-hw + (i0 + i1) * 0.5f, 0f, i1 - i0, d - 2f * i1), 0.3f, 0.36f, Stone, LM.Solid, 1f, Stone, LM.Paving);
+            k.Prism(LandmarkKit.Rect(hw - (i0 + i1) * 0.5f, 0f, i1 - i0, d - 2f * i1), 0.3f, 0.36f, Stone, LM.Solid, 1f, Stone, LM.Paving);
+            // walk the ring at a given inset: f(x, z, along-direction)
+            void Ring(float inset, float step, System.Action<float, float, Vector2> f)
+            {
+                float ax = hw - inset, az = hd - inset;
+                for (float x = -ax; x <= ax + 0.01f; x += step) { f(x, -az, Vector2.right); f(x, az, Vector2.right); }
+                for (float z = -az + step; z <= az - step + 0.01f; z += step) { f(-ax, z, Vector2.up); f(ax, z, Vector2.up); }
+            }
+            int n = 0;
+            Ring(6.5f, 9f, (x, z, dir) => { if (Free(x, z, 2.5f)) Planted(k, x, z, 8f, 0); });
+            Ring(13.5f, 9f, (x, z, dir) => { if (Free(x, z, 2.5f)) Planted(k, x, z, 8f, 1); });
+            Ring(6.5f, 9f, (x, z, dir) =>
+            {
+                float lx = x + dir.x * 4.5f, lz = z + dir.y * 4.5f; if (!Free(lx, lz, 1.5f) || Mathf.Abs(lx) > hw - 6f || Mathf.Abs(lz) > hd - 6f) return;
+                k.Box(new Vector3(lx, 3.3f, lz), new Vector3(0.22f, 6f, 0.22f), 0f, Steel, LM.Steel, 1f, Warm, LM.Light);
+                if ((n++ % 3) == 0) { float bx = x + dir.x * 4.5f + dir.y * 3.5f, bz = z + dir.y * 4.5f + dir.x * 3.5f; if (Free(bx, bz, 1.5f)) Bench(k, bx, bz, dir.x != 0f ? 0f : 90f); }
+            });
+            // clipped hedge on the inner edge, open at the middle of each side (entrances)
+            void Hedge(Vector2 a, Vector2 b)
+            {
+                var dl = b - a; float L = dl.magnitude; var u = dl / L;
+                for (float t = 0f; t < L - 0.1f; t += 6f)
+                {
+                    var p = a + u * (t + 2.5f); if (t + 5f > L) break;
+                    if (!Free(p.x, p.y, 3f)) continue;
+                    if (Mathf.Abs(u.x) > 0.5f ? Mathf.Abs(p.x) < 14f : Mathf.Abs(p.y) < 14f) continue;
+                    k.Box(new Vector3(p.x, 0.75f, p.y), Mathf.Abs(u.x) > 0.5f ? new Vector3(5f, 0.9f, 1.2f) : new Vector3(1.2f, 0.9f, 5f), 0f, GrassDark, LM.Plant, 1f, Grass, LM.Plant);
+                }
+            }
+            float hx = hw - i1 - 1f, hz = hd - i1 - 1f;
+            Hedge(new Vector2(-hx, hz), new Vector2(hx, hz)); Hedge(new Vector2(-hx, -hz), new Vector2(hx, -hz));
+            Hedge(new Vector2(-hx, -hz), new Vector2(-hx, hz)); Hedge(new Vector2(hx, -hz), new Vector2(hx, hz));
+        }
+        /// <summary>A golden floor plate: a ring between the glass line and a footprint 1.4 m larger, turned a little (the "sliced" facade).</summary>
+        static void Plate(LandmarkKit k, List<Vector2> glass, float y, int fl, bool crown)
+        {
+            float th = 1.4f * Mathf.Sin(y / 34f) + ((fl & 1) == 0 ? 0.35f : -0.35f);
+            Vector2 c = Vector2.zero; foreach (var p in glass) c += p; c /= glass.Count;
+            var outer = new List<Vector2>(glass.Count);
+            float a = th * Mathf.Deg2Rad, ca = Mathf.Cos(a), sa = Mathf.Sin(a);
+            foreach (var p in glass)
+            {
+                var d = p - c; float L = d.magnitude; var g = L > 0.01f ? d * ((L + 1.4f) / L) : d;
+                outer.Add(c + new Vector2(g.x * ca - g.y * sa, g.x * sa + g.y * ca));
+            }
+            float y0 = y - 0.42f, y1 = y + 0.12f;
+            var col = crown ? GoldLight : Gold; int mat = crown ? LM.Light : LM.Solid;
+            k.Prism(outer, y0, y1, col, mat, 0.6f, col, -1);
+            for (int i = 0; i < glass.Count; i++)
+            {
+                int j = (i + 1) % glass.Count;
+                Vector3 gi = new Vector3(glass[i].x, y1, glass[i].y), gj = new Vector3(glass[j].x, y1, glass[j].y), oi = new Vector3(outer[i].x, y1, outer[i].y), oj = new Vector3(outer[j].x, y1, outer[j].y);
+                k.Quad(gi, gj, oj, oi, Vector3.up, Gold, LM.Solid, 0.6f, glass[i], glass[j], outer[j], outer[i]);
+                gi.y = gj.y = oi.y = oj.y = y0;
+                k.Quad(gi, gj, oj, oi, Vector3.down, Gold, LM.Solid, 0.6f, glass[i], glass[j], outer[j], outer[i]);
+            }
+        }
+        /// <summary>A low block on the rectangle (x0, z0)–(x1, z1) whose roof follows H(x, z): glass walls under a golden fascia, a planted roof with paths.</summary>
+        static void Wedge(LandmarkKit k, float x0, float z0, float x1, float z1, System.Func<float, float, float> Hf, int nx, int nz)
+        {
+            var corners = new[] { new Vector2(x0, z0), new Vector2(x1, z0), new Vector2(x1, z1), new Vector2(x0, z1) };
+            var ce = new Vector2((x0 + x1) * 0.5f, (z0 + z1) * 0.5f);
+            for (int e = 0; e < 4; e++)
+            {
+                var a = corners[e]; var b = corners[(e + 1) % 4]; int n = e % 2 == 0 ? nx : nz;
+                var mid = (a + b) * 0.5f; var o = new Vector3(mid.x - ce.x, 0f, mid.y - ce.y);
+                for (int i = 0; i < n; i++)
+                {
+                    var p = Vector2.Lerp(a, b, i / (float)n); var q = Vector2.Lerp(a, b, (i + 1f) / n);
+                    float hp = Hf(p.x, p.y), hq = Hf(q.x, q.y), u0 = (p - a).magnitude, u1 = (q - a).magnitude;
+                    k.Quad(new Vector3(p.x, 0.3f, p.y), new Vector3(q.x, 0.3f, q.y), new Vector3(q.x, hq - 1.4f, q.y), new Vector3(p.x, hp - 1.4f, p.y), o, WarmGlass, LM.Glass, 4.3f,
+                           new Vector2(u0, 0.3f), new Vector2(u1, 0.3f), new Vector2(u1, hq - 1.4f), new Vector2(u0, hp - 1.4f));
+                    k.Quad(new Vector3(p.x, hp - 1.4f, p.y), new Vector3(q.x, hq - 1.4f, q.y), new Vector3(q.x, hq, q.y), new Vector3(p.x, hp, p.y), o, Gold, LM.Solid, 1.4f,
+                           new Vector2(u0, hp - 1.4f), new Vector2(u1, hq - 1.4f), new Vector2(u1, hq), new Vector2(u0, hp));
+                }
+            }
+            for (int i = 0; i < nx; i++)
+                for (int j = 0; j < nz; j++)
+                {
+                    float xa = Mathf.Lerp(x0, x1, i / (float)nx), xb = Mathf.Lerp(x0, x1, (i + 1f) / nx), za = Mathf.Lerp(z0, z1, j / (float)nz), zb = Mathf.Lerp(z0, z1, (j + 1f) / nz);
+                    bool path = (i + j) % 4 == 0;
+                    k.Quad(new Vector3(xa, Hf(xa, za), za), new Vector3(xb, Hf(xb, za), za), new Vector3(xb, Hf(xb, zb), zb), new Vector3(xa, Hf(xa, zb), zb), Vector3.up,
+                           path ? Pave : Grass, path ? LM.Paving : LM.Plant, 1f, new Vector2(xa, za), new Vector2(xb, za), new Vector2(xb, zb), new Vector2(xa, zb));
+                }
         }
 
         // ------------------------------------------------------------------ airliner (≈ A320): fuselage along +z, nose at +z

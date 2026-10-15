@@ -95,7 +95,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
                     p.El.EnableInClassList("hover", sys.Hovered == p.L);
                 }
                 p.El.EnableInClassList("selected", sel);
-                if (!show) { p.El.style.display = DisplayStyle.None; continue; }
+                if (!show || IconicInterior.Active) { p.El.style.display = DisplayStyle.None; continue; }
                 var sp = cam.WorldToScreenPoint(wp);
                 if (sp.z < 0) { p.El.style.display = DisplayStyle.None; continue; }
                 var pp = RuntimePanelUtils.ScreenToPanel(host.panel, new Vector2(sp.x, Screen.height - sp.y));

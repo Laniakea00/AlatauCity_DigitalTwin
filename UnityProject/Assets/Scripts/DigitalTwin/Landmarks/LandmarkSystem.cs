@@ -20,6 +20,8 @@ namespace AlatauCity.DigitalTwin.Landmarks
         public Landmark Hovered { get; private set; }
         /// <summary>Planned objects drawn as ghosts (set by the Investment projects module).</summary>
         public static bool ShowPlanned;
+        /// <summary>Cut-away of one object (IconicInterior): everything of it above CutAt metres over its base is not drawn.</summary>
+        public static string CutId; public static float CutAt = -1f;
 
         class Crane { public Transform Mast, Head; public MeshRenderer MastR; public MaterialPropertyBlock B; public float Yaw, Speed; }
         class Node
@@ -242,6 +244,8 @@ namespace AlatauCity.DigitalTwin.Landmarks
         }
 
         public Landmark Get(string id) { foreach (var l in Items) if (l.Id == id) return l; return null; }
+        /// <summary>The model of an object (its local frame: x along the long side, y up from the base).</summary>
+        public Transform ModelOf(string id) => nodes.TryGetValue(id, out var n) && n.Go != null ? n.Go.transform : null;
         /// <summary>Is the point on a landmark's plot (with a margin)? Film trees and hedges keep off the plots.</summary>
         public static bool OnPlot(float x, float z, float margin = 4f)
         {
@@ -257,10 +261,13 @@ namespace AlatauCity.DigitalTwin.Landmarks
         }
 
         /// <summary>Year shown by the city now (fractional while the timeline plays).</summary>
-        public static float YearNow => TwinState.Playing || Shader.GetGlobalFloat("_AlatauGrow") > 0.5f ? Mathf.Max(Shader.GetGlobalFloat("_AlatauYearF"), TwinState.Year) : TwinState.Year;
+        /// <summary>A date set by the construction monitoring (4D timeline of one object), −1 = none: the landmarks are shown as of it.</summary>
+        public static float YearOverride = -1f;
+        public static float YearNow => YearOverride >= 0f ? YearOverride : TwinState.Playing || Shader.GetGlobalFloat("_AlatauGrow") > 0.5f ? Mathf.Max(Shader.GetGlobalFloat("_AlatauYearF"), TwinState.Year) : TwinState.Year;
         /// <summary>0 = not started, (0,1) = under construction, 1 = complete in the shown year.</summary>
         public static float Progress(Landmark l, float y)
         {
+            if (l == null) return 0f;
             // works run through the start year: progress grows continuously from the end of the year before (no jump when the year turns)
             float s0 = l.StartYear - 1f;
             if (y <= s0) return 0f;
@@ -293,7 +300,9 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 // stages: site + excavation → frame rises → facade follows bottom-up → paving and planting → handed over
                 float frame = H * Mathf.Clamp01((p - 0.08f) / 0.62f), facade = H * Mathf.Clamp01((p - 0.25f) / 0.65f), land = Mathf.Clamp01((p - 0.85f) / 0.13f);
                 n.R.GetPropertyBlock(n.B);
-                n.B.SetFloat(RevealId, ghost || !building ? 100000f : Mathf.Max(frame, 0.6f));
+                float reveal = ghost || !building ? 100000f : Mathf.Max(frame, 0.6f);
+                if (CutAt >= 0f && n.L.Id == CutId) reveal = Mathf.Min(reveal, CutAt);
+                n.B.SetFloat(RevealId, reveal);
                 n.B.SetFloat(BuildId, building ? 1f : 0f);
                 n.B.SetFloat(FacadeId, building ? facade : 100000f);
                 n.B.SetFloat(LandId, building ? land : 1f);
@@ -324,7 +333,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
                     }
                 }
             }
-            if (Input.GetKeyDown(KeyCode.Escape) && Selected != null && !MapCamera.Typing) Select(null, false);
+            if (Input.GetKeyDown(KeyCode.Escape) && Selected != null && !MapCamera.Typing && !IconicInterior.EscTaken) Select(null, false);
         }
         void LateUpdate() { if (built) FlyStep(); FrameShift(); }     // after MapCamera.Update: the user's input of this frame is known
 
@@ -344,7 +353,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
         {
             Landmark h = null;
             var cam = Camera.main;
-            if (cam != null && !MapCamera.BlockInput && !TwinTour.Running && !Input.GetMouseButton(0) && !Input.GetMouseButton(1))
+            if (cam != null && !MapCamera.BlockInput && !TwinTour.Running && !IconicInterior.Active && !Input.GetMouseButton(0) && !Input.GetMouseButton(1))
             {
                 var ray = cam.ScreenPointToRay(Input.mousePosition); float best = float.MaxValue;
                 foreach (var n in nodes.Values)
@@ -367,7 +376,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 if (TwinState.Selected != null) { if (ts != null) ts.Select(-1); else TwinState.SetSelected(null); }
                 if (fly) FlyTo(l);
             }
-            else { flyT = -1f; var mc = Cam; if (mc != null) mc.holdLift = false; }
+            else { flyT = -1f; orbitAt = null; orbitLift = -1f; var mc = Cam; if (mc != null) mc.holdLift = false; }
             OnSelected?.Invoke(l);
             if (UI.TwinUI.Instance != null) UI.TwinUI.Instance.RefreshCard();
         }
@@ -388,15 +397,16 @@ namespace AlatauCity.DigitalTwin.Landmarks
         }
         static float FrameLift(Landmark l) => Mathf.Min(l.Height * 0.5f, 150f);
 
-        public void FlyTo(Landmark l, Vector3? at = null, float? dist = null)
+        public void FlyTo(Landmark l, Vector3? at = null, float? dist = null, float? lift = null, float? pitch = null)
         {
             var mc = Cam; if (mc == null) return; mc.StopFly();
+            if (lift == null) { orbitAt = null; orbitLift = -1f; }
             Vector3 c = at ?? l.World;
             float dEnd = dist ?? FrameDistance(l);
-            float liftEnd = at.HasValue ? 0f : FrameLift(l);
+            float liftEnd = lift ?? (at.HasValue ? 0f : FrameLift(l));
             if (l.IsLrt && !at.HasValue) { c = new Vector3(-700f, 0f, -1500f); dEnd = 64000f; liftEnd = 0f; }
             f0 = mc.target; f0.y = 0; f1 = new Vector3(c.x, 0, c.z);
-            d0 = mc.distance; d1 = dEnd; y0 = mc.yaw; y1 = at.HasValue ? mc.yaw : l.Yaw + l.ViewYaw; p0 = mc.pitch; p1 = l.IsLrt && !at.HasValue ? 52f : at.HasValue ? 24f : l.ViewPitch;
+            d0 = mc.distance; d1 = dEnd; y0 = mc.yaw; y1 = at.HasValue ? mc.yaw : l.Yaw + l.ViewYaw; p0 = mc.pitch; p1 = pitch ?? (l.IsLrt && !at.HasValue ? 52f : at.HasValue ? 24f : l.ViewPitch);
             l0 = mc.lift; l1 = liftEnd;
             float ratio = Mathf.Abs(Mathf.Log(Mathf.Max(d0, 1f) / Mathf.Max(d1, 1f)));
             flyDur = Mathf.Clamp(1.8f + 0.55f * ratio + Vector3.Distance(f0, f1) / 40000f, 2.0f, 5.0f);
@@ -406,6 +416,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
         void FlyStep()
         {
             var mc = Cam; if (mc == null) return;
+            if (IconicInterior.Active) { flyT = -1f; return; }                                  // inside the tower: the interior drives the camera
             if (mc.IsFlying) { if (flyT >= 0f) flyT = -1f; mc.holdLift = false; return; }       // someone else (home view, district, tour) moves the camera
             if (MapCamera.UserMoved) { flyT = -1f; idle = 0f; return; }                         // the user takes over; the orbit waits
             if (flyT >= 0f)
@@ -422,7 +433,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             }
             var sel = Selected;
             if (sel == null || sel.IsLrt) return;
-            var site = new Vector3(sel.World.x, 0f, sel.World.z); var cur = mc.target; cur.y = 0f;
+            var oc = orbitAt ?? sel.World; var site = new Vector3(oc.x, 0f, oc.z); var cur = mc.target; cur.y = 0f;
             bool near = Vector3.Distance(cur, site) < sel.Radius * 4f + 200f;
             mc.holdLift = near;
             idle += Time.deltaTime;
@@ -431,7 +442,25 @@ namespace AlatauCity.DigitalTwin.Landmarks
             float spd = 6f * Mathf.Clamp01((idle - 2.5f) / 1.5f);
             float k = 1f - Mathf.Exp(-1.2f * Time.deltaTime);
             var tgt = Vector3.Lerp(cur, site, k);
-            mc.SetPose(tgt, mc.distance, mc.yaw + spd * Time.deltaTime, mc.pitch, Mathf.Lerp(mc.lift, FrameLift(sel), k));
+            mc.SetPose(tgt, mc.distance, mc.yaw + spd * Time.deltaTime, mc.pitch, Mathf.Lerp(mc.lift, orbitLift >= 0f ? orbitLift : FrameLift(sel), k));
+        }
+        // close-up: the orbit circles the point looked at, at its height
+        Vector3? orbitAt; float orbitLift = -1f;
+        /// <summary>The camera comes close to the object: for a building under construction to the working level (fresh frame, cranes),
+        /// otherwise to the middle of its height, near enough to read the facade.</summary>
+        public void CloseUp(Landmark l)
+        {
+            if (l == null || l.IsLrt) return;
+            if (Selected != l) Select(l, false);
+            var model = ModelOf(l.Id);
+            Vector3 c = l.World; float h = Mathf.Min(l.Height * 0.5f, 150f);
+            float p = Progress(l, YearNow);
+            if (p > 0f && p < 0.999f) h = Mathf.Max(l.Height * Mathf.Clamp01((p - 0.08f) / 0.62f) - 6f, 8f);
+            var tp = TowerProfile.For(l.Id);
+            if (tp != null && model != null) c = model.TransformPoint(new Vector3(tp.Xr - tp.RawWidth(h) * 0.5f, 0f, tp.Cz));
+            float dist = Mathf.Clamp(Mathf.Max(l.Radius, l.Height * 0.25f) * 0.9f, 70f, 260f);
+            FlyTo(l, c, dist, h, 10f);
+            orbitAt = c; orbitLift = h;
         }
         public bool Orbiting => OrbitOn && Selected != null && !Selected.IsLrt;
         public void ToggleOrbit() { OrbitOn = !OrbitOn; idle = 10f; }

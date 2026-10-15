@@ -33,10 +33,15 @@ namespace AlatauCity.DigitalTwin
         public void StopFly() { flying = false; }
         public bool PressedOnMap => pressedOnMap;
         void Start() { cam = GetComponent<Camera>(); Apply(); }
-        public void FlyTo(View v) { if (v == null) return; goT = v.target; goD = v.distance; goY = v.yaw; goP = v.pitch; flying = true; }
+        public void FlyTo(View v) { if (v == null) return; Yield(); goT = v.target; goD = v.distance; goY = v.yaw; goP = v.pitch; flying = true; }
+        /// <summary>Someone moves the map camera while the camera is inside Iconic Complex: leave the tower first.</summary>
+        static void Yield() { if (Landmarks.IconicInterior.Active && !Landmarks.IconicInterior.Driving) Landmarks.IconicInterior.Instance.ExitNow(); }
+        /// <summary>Nearest zoom: a selected landmark can be looked at from close by (facade, cranes, the working level).</summary>
+        float MinD => Landmarks.LandmarkSystem.Instance != null && Landmarks.LandmarkSystem.Instance.Selected != null ? 40f : minDistance;
         void Update()
         {
             UserMoved = false;
+            if (Landmarks.IconicInterior.Active) return;          // inside the tower the interior drives the camera
             float dt = Time.deltaTime, fast = Key(KeyCode.LeftShift) || Key(KeyCode.RightShift) ? 3f : 1f;
             Vector3 fwd = Quaternion.Euler(0, yaw, 0) * Vector3.forward, right = Quaternion.Euler(0, yaw, 0) * Vector3.right;
             Vector3 pan = Vector3.zero;
@@ -82,7 +87,7 @@ namespace AlatauCity.DigitalTwin
                 target = Vector3.Lerp(target, goT, k); distance = Mathf.Lerp(distance, goD, k); yaw = Mathf.LerpAngle(yaw, goY, k); pitch = Mathf.Lerp(pitch, goP, k);
                 if ((target - goT).magnitude < 1f && Mathf.Abs(distance - goD) < 1f) flying = false;
             }
-            distance = Mathf.Clamp(distance, minDistance, maxDistance);
+            distance = Mathf.Clamp(distance, MinD, maxDistance);
             if (!holdLift) lift = Mathf.Lerp(lift, 0f, 1f - Mathf.Exp(-1.6f * dt));
             target.y = CityGround.HeightAt(target.x, target.z) + lift;
             Apply();
@@ -90,7 +95,8 @@ namespace AlatauCity.DigitalTwin
         /// <summary>Scripted pose (fly-to, orbit): sets and applies immediately; 'lift' raises the orbit point above the ground.</summary>
         public void SetPose(Vector3 t, float d, float y, float p, float liftM)
         {
-            flying = false; target = t; distance = Mathf.Clamp(d, minDistance, maxDistance); yaw = y; pitch = Mathf.Clamp(p, 8f, 89f); lift = liftM;
+            Yield();
+            flying = false; target = t; distance = Mathf.Clamp(d, MinD, maxDistance); yaw = y; pitch = Mathf.Clamp(p, 8f, 89f); lift = liftM;
             target.y = CityGround.HeightAt(target.x, target.z) + lift; Apply();
         }
         void LateUpdate() { if (!Input.GetMouseButton(0) && !Input.GetMouseButton(1) && !Input.GetMouseButtonUp(0) && !Input.GetMouseButtonUp(1)) dragging = false; }
