@@ -364,7 +364,13 @@ namespace AlatauCity.DigitalTwin.Landmarks
                     monRT = new RenderTexture(W, Hh, 24) { name = "iconic_monitor", antiAliasing = GraphicsQuality.ViewMsaa }; monRT.Create();
                     mon.targetTexture = monRT; photo.image = monRT;
                 }
-                if (monRT != null && !mon.enabled) { mon.targetTexture = monRT; mon.enabled = true; }
+                // the window is built anew each time it opens: hand the picture to its image every time (not only when the texture is made)
+                if (monRT != null)
+                {
+                    if (mon.targetTexture != monRT) mon.targetTexture = monRT;
+                    if (!mon.enabled) mon.enabled = true;
+                    if (photo.image != monRT) photo.image = monRT;
+                }
                 Pin();
             }
         }
