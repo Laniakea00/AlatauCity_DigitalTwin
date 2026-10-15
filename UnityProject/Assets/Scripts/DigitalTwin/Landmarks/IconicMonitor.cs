@@ -374,6 +374,9 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 }
                 Pin();
             }
+            // video analytics on the full-size camera picture (the pose and projection the picture is about to be drawn with)
+            if (view == View.Cam) Detect(mon, monRT != null ? monRT.height : 600f, bigBox); else bigBox.Clear();
+            bigOver?.MarkDirtyRepaint();
         }
 
         // ------------------------------------------------------------------ site cameras
@@ -410,6 +413,87 @@ namespace AlatauCity.DigitalTwin.Landmarks
         }
         /// <summary>Renders the site cameras into their small screens: the core camera on the overview (≈ 7 frames a second),
         /// all four in turn on the cameras tab.</summary>
+        /// <summary>Video analytics of a site camera: every worker on the floor in the cut (IconicFloors.Crew) that this camera really
+        /// sees — in front of it, inside its picture, large enough to recognise, not behind the core or below the cut edge of the facade —
+        /// gets a box round its figure, in the picture's own coordinates (0..1, y up) at the moment the picture is taken.</summary>
+        readonly List<Rect>[] feedBox = { new List<Rect>(), new List<Rect>(), new List<Rect>(), new List<Rect>() };
+        readonly List<Rect> bigBox = new List<Rect>(); VisualElement bigOver;
+        int crewSeen = -1;
+        void Detect(Camera cam, float rtH, List<Rect> list)
+        {
+            list.Clear();
+            var ii = IconicInterior.Instance;
+            if (cam == null || ii == null || !ii.FloorShown || IconicFloors.CrewFloor != focusFloor || IconicFloors.CrewTower != IconicShape.P.Id) return;
+            var vp = cam.projectionMatrix * cam.worldToCameraMatrix;
+            Vector3 eye = model.InverseTransformPoint(cam.transform.position);
+            float cutY = LandmarkSystem.CutAt >= 0f ? LandmarkSystem.CutAt : float.MaxValue;
+            var plate = IconicFloors.CrewPlate; var core = IconicFloors.CrewCore;
+            core = Rect.MinMaxRect(core.xMin - 1.05f, core.yMin - 1.05f, core.xMax + 0.55f, core.yMax + 1.05f);   // with the climbing formwork round it
+            float coreTop = IconicFloors.CrewYt + IconicShape.Fh + 2.5f;             // the core and its formwork run a floor ahead
+            foreach (var w in IconicFloors.Crew)
+            {
+                var head = w + Vector3.up * 1.6f; var chest = w + Vector3.up * 1.1f;
+                if (eye.y < w.y + 0.4f) continue;                                      // a camera below the floor sees its soffit
+                if (Blocked(eye, head, core, w.y, coreTop) && Blocked(eye, chest, core, w.y, coreTop)) continue;
+                if (!plate.Contains(new Vector2(eye.x, eye.z)) && EdgeHeight(eye, head, plate) < cutY - 0.05f) continue;   // the facade below the cut
+                float x0 = 1e9f, y0 = 1e9f, x1 = -1e9f, y1 = -1e9f; bool ok = true;
+                for (int c = 0; c < 8; c++)
+                {
+                    var lp = w + new Vector3((c & 1) == 0 ? -0.28f : 0.28f, (c & 2) == 0 ? 0f : 1.84f, (c & 4) == 0 ? -0.24f : 0.24f);
+                    var wp = model.TransformPoint(lp); var cp = vp * new Vector4(wp.x, wp.y, wp.z, 1f);
+                    if (cp.w < 0.25f) { ok = false; break; }
+                    float nx = cp.x / cp.w * 0.5f + 0.5f, ny = cp.y / cp.w * 0.5f + 0.5f;
+                    x0 = Mathf.Min(x0, nx); x1 = Mathf.Max(x1, nx); y0 = Mathf.Min(y0, ny); y1 = Mathf.Max(y1, ny);
+                }
+                if (!ok || x1 < 0.01f || x0 > 0.99f || y1 < 0.01f || y0 > 0.99f) continue;
+                if ((y1 - y0) * rtH < 6f) continue;                                    // too small in the picture to recognise
+                float px = (x1 - x0) * 0.18f, py = (y1 - y0) * 0.08f;
+                list.Add(Rect.MinMaxRect(x0 - px, y0 - py, x1 + px, y1 + py));
+            }
+        }
+        static readonly Color BoxC = new Color(0.35f, 0.95f, 0.55f, 0.95f);
+        /// <summary>The analytics boxes over a picture of size w × h whose top-left corner is at (ox, oy), drawn w × h large.</summary>
+        static void DrawBoxes(Painter2D g, List<Rect> boxes, float ox, float oy, float dw, float dh, Rect clip, float line)
+        {
+            foreach (var b in boxes)
+            {
+                var q = Rect.MinMaxRect(ox + b.xMin * dw, oy + (1f - b.yMax) * dh, ox + b.xMax * dw, oy + (1f - b.yMin) * dh);
+                if (q.xMax < clip.xMin || q.xMin > clip.xMax || q.yMax < clip.yMin || q.yMin > clip.yMax) continue;
+                Frame(g, q, BoxC, line);
+                float tw = Mathf.Min(q.width, 10f * line), th = 2.4f * line;
+                g.fillColor = BoxC; g.BeginPath(); g.MoveTo(new Vector2(q.xMin, q.yMin - th)); g.LineTo(new Vector2(q.xMin + tw, q.yMin - th));
+                g.LineTo(new Vector2(q.xMin + tw, q.yMin)); g.LineTo(new Vector2(q.xMin, q.yMin)); g.ClosePath(); g.Fill();
+            }
+        }
+        void SeenNote(int i)
+        {
+            if (i != 0 || aiNote == null) return;
+            int n = feedBox[0].Count; if (n == crewSeen) return; crewSeen = n;
+            aiNote.text = n == 0 ? "ИИ-видеоаналитика: в кадре нет людей" : "ИИ-видеоаналитика: " + n + " " + People(n) + " в кадре · все в касках и жилетах";
+        }
+        static string People(int n) { int m = n % 100, d = n % 10; return m >= 12 && m <= 14 ? "человек" : d >= 2 && d <= 4 ? "человека" : "человек"; }
+        /// <summary>The sight line eye → p passes through the core (a box over the core plan from the floor to coreTop).</summary>
+        static bool Blocked(Vector3 eye, Vector3 p, Rect core, float yb, float coreTop)
+        {
+            Vector3 d = p - eye; float t0 = 0f, t1 = 0.98f;
+            if (!Slab1(eye.x, d.x, core.xMin, core.xMax, ref t0, ref t1)) return false;
+            if (!Slab1(eye.z, d.z, core.yMin, core.yMax, ref t0, ref t1)) return false;
+            if (!Slab1(eye.y, d.y, yb, coreTop, ref t0, ref t1)) return false;
+            return t0 <= t1;
+        }
+        static bool Slab1(float o, float d, float lo, float hi, ref float t0, ref float t1)
+        {
+            if (Mathf.Abs(d) < 1e-6f) return o >= lo && o <= hi;
+            float a = (lo - o) / d, b = (hi - o) / d; if (a > b) { var s = a; a = b; b = s; }
+            t0 = Mathf.Max(t0, a); t1 = Mathf.Min(t1, b); return t0 <= t1;
+        }
+        /// <summary>Height at which the sight line from an eye outside the plate crosses the plate's edge on its way to p.</summary>
+        static float EdgeHeight(Vector3 eye, Vector3 p, Rect plate)
+        {
+            Vector3 d = p - eye; float t0 = 0f, t1 = 1f;
+            if (!Slab1(eye.x, d.x, plate.xMin, plate.xMax, ref t0, ref t1) || !Slab1(eye.z, d.z, plate.yMin, plate.yMax, ref t0, ref t1)) return float.MaxValue;
+            return eye.y + d.y * t0;
+        }
         void Feeds(float dt)
         {
             feedT -= dt; feedOver?.MarkDirtyRepaint(); foreach (var o in tileOver) o?.MarkDirtyRepaint();
@@ -418,8 +502,9 @@ namespace AlatauCity.DigitalTwin.Landmarks
             int i; if (tab == 2) { i = rr = (rr + 1) % 4; feedT = 0.08f; } else if (tab == 0) { i = 0; feedT = 0.15f; } else return;
             if (camRT[i] == null) { camRT[i] = new RenderTexture(400, 225, 24) { name = "iconic_cctv_" + i, antiAliasing = Mathf.Min(2, GraphicsQuality.ViewMsaa) }; camRT[i].Create(); }
             if (feedCam == null) { var g = new GameObject("Iconic monitoring · site camera"); g.transform.SetParent(transform, false); feedCam = g.AddComponent<Camera>(); feedCam.enabled = false; }
-            feedCam.CopyFrom(mon); feedCam.ResetProjectionMatrix(); feedCam.enabled = false; feedCam.targetTexture = camRT[i]; feedCam.fieldOfView = 58f; feedCam.nearClipPlane = 0.2f; feedCam.farClipPlane = 20000f;
+            feedCam.CopyFrom(mon); feedCam.ResetProjectionMatrix(); feedCam.enabled = false; feedCam.targetTexture = camRT[i]; feedCam.ResetAspect(); feedCam.fieldOfView = 58f; feedCam.nearClipPlane = 0.2f; feedCam.farClipPlane = 20000f;
             CamPose(i, out var p, out var r, true); feedCam.transform.SetPositionAndRotation(p, r);
+            Detect(feedCam, camRT[i] != null ? camRT[i].height : 225f, feedBox[i]); SeenNote(i);
             // a site camera is a small picture: no shadow maps for it (each extra view would draw the city into its own cascades)
             var sq = QualitySettings.shadows; QualitySettings.shadows = ShadowQuality.Disable;
             try { feedCam.Render(); } catch (Exception e) { Debug.LogWarning("[Alatau] monitoring camera: " + e.Message); return; }
@@ -475,6 +560,9 @@ namespace AlatauCity.DigitalTwin.Landmarks
             // ---- body: the live view of the twin with the panels over it
             body = new VisualElement(); body.AddToClassList("mon-body"); win.Add(body);
             photo = new Image { scaleMode = ScaleMode.StretchToFill }; photo.AddToClassList("mon-photo"); body.Add(photo);
+            // the analytics boxes over the picture while a site camera is shown full size
+            bigOver = new VisualElement { pickingMode = PickingMode.Ignore }; bigOver.AddToClassList("mon-photo"); body.Add(bigOver);
+            bigOver.generateVisualContent += ctx => { var rr2 = bigOver.contentRect; if (view == View.Cam && rr2.width > 20f) DrawBoxes(ctx.painter2D, bigBox, 0f, 0f, rr2.width, rr2.height, new Rect(0f, 0f, rr2.width, rr2.height), 2f); };
             ViewInput(photo);
             pin = new VisualElement { pickingMode = PickingMode.Ignore }; pin.AddToClassList("mon-pin"); pin.style.display = DisplayStyle.None;
             pinText = new Label { pickingMode = PickingMode.Ignore }; pin.Add(pinText);
@@ -758,8 +846,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             // the core camera
             int f = Mathf.Max(focusFloor, 0);
             feedNote.text = "кран № 2 · вид на " + IconicFloors.Name(f).ToLower();
-            int crew = 8 + (f * 7) % 9;
-            aiNote.text = "ИИ-видеоаналитика: " + crew + " человек в зоне · все в касках и жилетах";
+            crewSeen = -1; SeenNote(0);
 
             // the schedule
             for (int i = 0; i < grows.Count; i++)
@@ -893,15 +980,10 @@ namespace AlatauCity.DigitalTwin.Landmarks
             g.lineWidth = 1f; g.strokeColor = new Color(1f, 1f, 1f, 0.035f);
             for (float y = 0; y < r.height; y += 3f) { g.BeginPath(); g.MoveTo(new Vector2(0, y)); g.LineTo(new Vector2(r.width, y)); g.Stroke(); }
             if (Mathf.Repeat(phase + cam * 0.3f, 1.2f) < 0.7f) { g.fillColor = new Color(1f, 0.23f, 0.18f); g.BeginPath(); g.Arc(new Vector2(10f, 11f), 3.5f, 0f, 360f); g.Fill(); }
-            if (cam == 3) return;
-            var rnd = new System.Random(7 + cam * 13);
-            for (int i = 0; i < 3; i++)
-            {
-                float bx = 0.15f + (float)rnd.NextDouble() * 0.65f, by = 0.45f + (float)rnd.NextDouble() * 0.3f, bw = 0.05f + (float)rnd.NextDouble() * 0.03f;
-                float dx = Mathf.Sin(phase * 0.3f + i * 1.9f) * 0.03f;
-                var q = new Rect((bx + dx) * r.width, by * r.height, bw * r.width, bw * r.width * 1.8f);
-                Frame(g, q, cam == 2 && i == 1 ? new Color(0.98f, 0.62f, 0.2f, 0.95f) : new Color(0.35f, 0.95f, 0.55f, 0.9f), 1.5f);
-            }
+            // the boxes of the video analytics: the picture fills the screen and is cropped (ScaleAndCrop), so map through the crop
+            var rt = camRT[cam]; float iw = rt != null ? rt.width : 400f, ih = rt != null ? rt.height : 225f;
+            float s = Mathf.Max(r.width / iw, r.height / ih), dw = iw * s, dh = ih * s, ox = (r.width - dw) * 0.5f, oy = (r.height - dh) * 0.5f;
+            DrawBoxes(g, feedBox[cam], ox, oy, dw, dh, new Rect(0f, 0f, r.width, r.height), 1.3f);
         }
 
         // ------------------------------------------------------------------ small builders
