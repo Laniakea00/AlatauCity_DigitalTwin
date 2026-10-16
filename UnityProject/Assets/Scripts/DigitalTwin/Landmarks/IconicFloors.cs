@@ -42,12 +42,12 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 return IconicFloors.Use.Crown;
             }
         };
-        /// <summary>KAIST Kazakhstan: the library and research tower of the campus (40 × 40 m, 58 m): hall, canteen, auditorium,
+        /// <summary>KAIST Kazakhstan: the library and research tower of the campus (40 × 40 m at the base, the west face leaning in to 32 m at the top, 58 m): hall, canteen, auditorium,
         /// reading rooms, laboratories, sports hall, coworking, technical roof level. Illustrative programme.</summary>
         public static readonly TowerProfile Kaist = new TowerProfile
         {
             Id = "kaist", Title = "Библиотечная башня KAIST (B1)", Tower = "Башня B1", Enter = "Внутрь библиотеки",
-            Xr = 170f, Cz = 20f, W0 = 40f, D0 = 40f, Roof = 58f, Fh = 4.1f, Taper = 0f, DepthTaper = 0f, Chamfer = 6f, Levels = 14, Floors = 13,
+            Xr = 170f, Cz = 20f, W0 = 40f, D0 = 40f, Roof = 58f, Fh = 4.1f, Taper = 0.2f, TaperPow = 1f, DepthTaper = 0f, Chamfer = 6f, Levels = 14, Floors = 13,
             TopName = "Технический уровень кровли", TopShort = "Т",
             UseOf = i => i == 0 ? IconicFloors.Use.Lobby : i == 1 ? IconicFloors.Use.FoodHall : i == 2 ? IconicFloors.Use.Conference
                        : i <= 10 ? IconicFloors.Use.Office : i == 11 ? IconicFloors.Use.Club : i == 12 ? IconicFloors.Use.Lounge : IconicFloors.Use.Crown,
@@ -144,7 +144,12 @@ namespace AlatauCity.DigitalTwin.Landmarks
             f = 1f; return PReady;
         }
         /// <summary>Calendar year (fractional) at landmark progress p — the inverse of LandmarkSystem.Progress.</summary>
-        public static float YearAt(Landmark l, float p) => (l.StartYear - 1f) + p * (l.EndYear - l.StartYear + 1f);
+        public static float YearAt(Landmark l, float p)
+        {
+            int m = l.Parts != null ? l.Main : -1;                  // a complex: the dates of its tower
+            if (m >= 0) { var t = l.Parts[m]; return t.A + p * (t.B - t.A); }
+            return (l.StartYear - 1f) + p * (l.EndYear - l.StartYear + 1f);
+        }
         static readonly string[] Mon = { "янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек" };
         public static string MonthYear(float y) { int yi = Mathf.FloorToInt(y); int m = Mathf.Clamp(Mathf.FloorToInt((y - yi) * 12f), 0, 11); return Mon[m] + " " + yi; }
 
@@ -212,10 +217,17 @@ namespace AlatauCity.DigitalTwin.Landmarks
         // ------------------------------------------------------------------ public entry: one floor at one moment
         /// <summary>Builds floor i in phase 'phase' (f = progress inside it); 'above' = phase of the floor above (props under a fresh slab).
         /// Returns the floor (seen from above) and, in 'ceiling', what is overhead for the walk-through view.</summary>
+        /// <summary>The workers of the floor built last (local frame of the landmark, at their feet), its plate and its core — what the
+        /// video analytics of the site cameras looks for (IconicMonitor draws a box round each worker a camera actually sees).</summary>
+        public static readonly List<Vector3> Crew = new List<Vector3>();
+        public static int CrewFloor = -1; public static string CrewTower;
+        public static Rect CrewPlate, CrewCore; public static float CrewYb, CrewYt;
         public static Mesh Build(int i, int phase, float f, int above, out Mesh ceiling, out Info info)
         {
             var P = MakePlan(i);
             Layout(P);
+            Crew.Clear(); CrewFloor = i; CrewTower = IconicShape.P.Id; CrewYb = P.yb; CrewYt = P.yt;
+            CrewPlate = Rect.MinMaxRect(P.X0, P.Z0, P.X1, P.Z1); CrewCore = Rect.MinMaxRect(P.cx0, P.cz0, P.cx1, P.cz1);
             var k = new LandmarkKit();
             Slab(k, P, phase, f);
             Core(k, P, phase, f);
@@ -318,6 +330,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
         }
         static void Person(LandmarkKit k, float x, float z, float yb, float yaw, Color32 vest, bool helmet = true)
         {
+            Crew.Add(new Vector3(x, yb, z));
             BR(k, x, z, 0.36f, 0.22f, yb, yb + 0.86f, yaw, Jeans);
             BR(k, x, z, 0.44f, 0.27f, yb + 0.86f, yb + 1.46f, yaw, vest);
             BR(k, x, z, 0.21f, 0.23f, yb + 1.48f, yb + 1.72f, yaw, Skin);

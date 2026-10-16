@@ -30,10 +30,13 @@ Shader "AlatauCity/Landmark"
         #pragma target 3.5
         #include "Assets/Shaders/AlatauFilm.cginc"
         float _Reveal, _Build, _Ghost, _Hi, _Facade, _Land, _Glow, _H, _Park;
-        struct Input { float4 color : COLOR; float2 fac; float2 mat; float ly; float3 worldPos; float3 worldNormal; float4 screenPos; };
+        // buildings of a complex (LandmarkSystem.Parts): x reveal, y build, z facade, w landscaping · x glow, y height, z outline, w progress
+        float4 _PartA[8], _PartB[8];
+        // fm = facade metres (xy) and material (zw); lp = local height, building of the complex; win = stage window inside the building
+        struct Input { float4 color : COLOR; float4 fm; float2 lp; float4 win; float3 worldPos; float3 worldNormal; float4 screenPos; };
         void vert(inout appdata_full v, out Input o)
         {
-            UNITY_INITIALIZE_OUTPUT(Input, o); o.fac = v.texcoord.xy; o.mat = v.texcoord1.xy; o.ly = v.vertex.y;
+            UNITY_INITIALIZE_OUTPUT(Input, o); o.fm = float4(v.texcoord.xy, v.texcoord1.xy); o.lp = float2(v.vertex.y, v.texcoord2.x); o.win = v.texcoord3;
         }
         half4 LightingSoft(SurfaceOutput s, half3 lightDir, half3 viewDir, half atten)
         {
@@ -46,24 +49,48 @@ Shader "AlatauCity/Landmark"
         void surf(Input IN, inout SurfaceOutput o)
         {
             // every derivative first, before any branch
-            float2 uv = IN.fac, fw = fwidth(uv); float lyW = fwidth(IN.ly);
+            float2 uv = IN.fm.xy, fw = fwidth(uv); float lyW = fwidth(IN.lp.x);
             float3 n = normalize(IN.worldNormal), view = normalize(_WorldSpaceCameraPos - IN.worldPos);
-            clip(_Reveal - IN.ly);
+            // the building of a complex this fragment belongs to (uv2.x, LandmarkKit.Part): its own stages, 0 = the object's values
+            float rev = _Reveal, bld = _Build, fcd = _Facade, lnd = _Land, glw = _Glow, hgt = _H, hiP = _Hi;
+            int pid = (int)round(IN.lp.y);
+            if (pid > 0 && pid < 8)
+            {
+                float4 pa = _PartA[pid], pb = _PartB[pid];
+                rev = pa.x; bld = pa.y; fcd = pa.z; lnd = pa.w; glw = pb.x; hgt = pb.y; hiP = max(hiP, pb.z * 0.4);
+                // a piece with its own stage window (LandmarkKit.Win): columns, a transfer slab, a wing, a sector of an arc … rises
+                // from y0 to y1 while the building goes from a to b, then gets its facade and its grounds; finished after its window
+                if (IN.win.y > IN.win.x + 1e-4)
+                {
+                    float q = saturate((pb.w - IN.win.x) / (IN.win.y - IN.win.x));
+                    float h0 = IN.win.z, h1 = IN.win.w;
+                    if (q <= 0.0) { rev = -1000.0; bld = 1.0; lnd = 0.0; }
+                    else if (q >= 0.999) { rev = 100000.0; bld = 0.0; fcd = 100000.0; lnd = 1.0; }
+                    else if (IN.fm.zw.y < -6.5) { rev = 100000.0; bld = 1.0; lnd = q; }       // trees: planted one by one over the window
+                    else { rev = max(h0 + (h1 - h0) * saturate(q / 0.6), h0 + 0.6); bld = 1.0; fcd = h0 + (h1 - h0) * saturate((q - 0.3) / 0.6); lnd = saturate((q - 0.8) / 0.2); }
+                }
+            }
+            // early landscape (LandmarkKit.GreenTag / ParkTreeTag) of the plot itself (part 0): lawns, paths, water and trees laid out
+            // before the buildings — not cut by the rising frame and not an earth site. Inside a building of a complex they follow it.
+            bool green = IN.fm.zw.y < -4.5 && IN.fm.zw.y > -5.5;
+            bool parkTree = IN.fm.zw.y < -8.5;
+            bool keep = pid <= 0 && (parkTree || green);
+            if (!keep) clip(rev - IN.lp.x);
             if (_Ghost > 0.01)
             {
                 float2 sp = IN.screenPos.xy / max(IN.screenPos.w, 1e-4) * _ScreenParams.xy;
                 float ign = frac(52.9829189 * frac(dot(floor(sp), float2(0.06711056, 0.00583715))));
                 clip((1.0 - 0.72 * _Ghost) - ign);
             }
-            int id = (int)round(IN.mat.x);
-            bool tree = IN.mat.y < -6.5;                                   // LandmarkKit.TreeTag: planted at the end of construction
-            float prm = tree ? 3.0 : max(IN.mat.y, 0.05);
-            // staged landscaping: vertex alpha = 1 - stage; a part with a later stage starts later and finishes by _Land = 1.
-            // (objects without stages carry alpha 1 → stage 0 → exactly _Land as before)
+            int id = (int)round(IN.fm.zw.x);
+            bool tree = IN.fm.zw.y < -6.5;                                   // LandmarkKit.TreeTag: planted at the end of construction
+            float prm = tree || keep || green ? 3.0 : max(IN.fm.zw.y, 0.05);
+            // staged landscaping: vertex alpha = 1 - stage; a part with a later stage starts later and finishes by lnd = 1.
+            // (objects without stages carry alpha 1 → stage 0 → exactly lnd as before)
             float stg = 1.0 - IN.color.a, st0 = stg * 0.75;
-            float land = saturate((_Land - st0) / max(1.0 - st0, 0.05));
-            if (_Park > 0.5) clip(_Land - st0 + 0.015);                    // grounds not started yet: the old terrain shows through
-            if (tree && _Build > 0.5) clip(land * 1.15 - AHash2(floor(IN.worldPos.xz / 4.0)));
+            float land = saturate((lnd - st0) / max(1.0 - st0, 0.05));
+            if (_Park > 0.5) clip(lnd - st0 + 0.015);                    // grounds not started yet: the old terrain shows through
+            if (tree && (!parkTree || pid > 0) && bld > 0.5) clip(land * 1.15 - AHash2(floor(IN.worldPos.xz / 4.0)));
             // photo materials (film look): paving slabs and lawn grass, sampled before any branch
             AMat mPave = AlatauMat(IN.worldPos.xz, 7.0), mGrass = AlatauMat(IN.worldPos.xz, 8.0);
             float3 a = IN.color.rgb; float3 emit = 0; float spec = 0;
@@ -150,11 +177,11 @@ Shader "AlatauCity/Landmark"
             // under construction (stages driven by LandmarkSystem):
             //  · above the closed facade and below the working level: the bare frame — concrete slabs every floor, dark open floors
             //    with columns between them, an orange safety edge on the working level;
-            //  · the ground of the plot stays an earth site with tyre tracks until paving and planting (_Land)
-            if (_Build > 0.5)
+            //  · the ground of the plot stays an earth site with tyre tracks until paving and planting (lnd)
+            if (bld > 0.5 && !keep)
             {
-                bool ground = (IN.ly < 1.2 || _Park > 0.5) && n.y > 0.6 && !tree;
-                bool raised = !ground && IN.ly >= 1.2 && (id == 4 || (id == 6 && !tree) || id == 7);
+                bool ground = (IN.lp.x < 1.2 || _Park > 0.5) && n.y > 0.6 && !tree;
+                bool raised = !ground && IN.lp.x >= 1.2 && (id == 4 || (id == 6 && !tree) || id == 7);
                 if (raised)
                 {
                     // terraces and roof gardens above the ground: a bare concrete slab until they are paved and planted (never soil in the air)
@@ -169,10 +196,10 @@ Shader "AlatauCity/Landmark"
                     float l = ground || id == 4 ? land : saturate(land * 1.5 - 0.5);
                     a = lerp(soil, a, l); emit *= l; spec *= l;
                 }
-                else if (!tree && IN.ly > _Facade && IN.ly > 1.2)
+                else if (!tree && IN.lp.x > fcd && IN.lp.x > 1.2)
                 {
                     float fh = (id == 1 || id == 8 || id == 0) ? max(prm, 3.0) : 4.0;
-                    float q = frac(IN.ly / fh), qw = max(lyW / fh, 1e-4);
+                    float q = frac(IN.lp.x / fh), qw = max(lyW / fh, 1e-4);
                     float slab = 1.0 - saturate((q - 0.16) / qw + 0.5);
                     float colm = 1.0 - saturate((abs(frac(uv.x / 7.5) - 0.5) - 0.44) / max(fw.x / 7.5, 1e-4) + 0.5);
                     float3 concrete = float3(0.66, 0.65, 0.62) * (0.92 + 0.10 * grain);
@@ -180,26 +207,26 @@ Shader "AlatauCity/Landmark"
                     float wall = 1.0 - saturate(abs(n.y) * 3.0);
                     float3 frameA = lerp(concrete, lerp(inside, concrete, saturate(slab + colm)), wall);
                     // the facade crew works a few metres above the closed part: a band of scaffold mesh
-                    float net = saturate(1.0 - (IN.ly - _Facade) / 6.0) * wall;
+                    float net = saturate(1.0 - (IN.lp.x - fcd) / 6.0) * wall;
                     frameA = lerp(frameA, float3(0.20, 0.42, 0.30) * (0.9 + 0.2 * grain), net * 0.85);
                     a = frameA; emit = 0; spec = 0.05;
-                    float edge = saturate(1.0 - (_Reveal - IN.ly) / 2.2);
+                    float edge = saturate(1.0 - (rev - IN.lp.x) / 2.2) * wall;          // the safety edge on the walls (not over a whole roof that happens to be there)
                     a = lerp(a, float3(0.98, 0.52, 0.10), edge); emit += float3(0.98, 0.52, 0.10) * edge * 0.35;
                 }
             }
             // hand-over: a warm band of light runs up the building once
-            if (_Glow >= 0.0)
+            if (glw >= 0.0)
             {
-                float band = exp(-abs(IN.ly - _Glow * _H * 1.15) / max(_H * 0.04, 3.0));
-                emit += float3(1.0, 0.86, 0.58) * band * 1.4 + a * (1.0 - _Glow) * 0.18;
+                float band = exp(-abs(IN.lp.x - glw * hgt * 1.15) / max(hgt * 0.04, 3.0));
+                emit += float3(1.0, 0.86, 0.58) * band * 1.4 + a * (1.0 - glw) * 0.18;
             }
             if (_Ghost > 0.01) { a = lerp(a, float3(0.70, 0.78, 0.92), 0.55 * _Ghost); emit += float3(0.10, 0.16, 0.26) * _Ghost; spec = 0; }
 
             // ambient: in the film look shaded by facing and height like the city (AlatauLit), else spherical harmonics
             half3 amb = ShadeSH9(half4(n, 1.0));
-            if (film > 0.5) amb = lerp(_AlatauSkyGround.rgb * 0.62, lerp(_AlatauSkyHorizon.rgb, _AlatauSkyZenith.rgb, 0.5), n.y * 0.5 + 0.5) * 0.84 * lerp(0.75, 1.0, saturate(IN.ly / 12.0));
+            if (film > 0.5) amb = lerp(_AlatauSkyGround.rgb * 0.62, lerp(_AlatauSkyHorizon.rgb, _AlatauSkyZenith.rgb, 0.5), n.y * 0.5 + 0.5) * 0.84 * lerp(0.75, 1.0, saturate(IN.lp.x / 12.0));
             float rim = pow(1.0 - saturate(dot(n, view)), 4.0);
-            emit += _Hi * (rim * 0.7 + 0.03) * float3(0.85, 0.30, 0.95);
+            emit += hiP * (rim * 0.7 + 0.03) * float3(0.85, 0.30, 0.95);
             o.Albedo = a; o.Emission = emit + a * amb; o.Specular = spec; o.Alpha = 1;
         }
         ENDCG

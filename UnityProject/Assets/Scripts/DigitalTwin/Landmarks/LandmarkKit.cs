@@ -18,7 +18,17 @@ namespace AlatauCity.DigitalTwin.Landmarks
     {
         readonly List<Vector3> v = new List<Vector3>(), n = new List<Vector3>();
         readonly List<Color32> c = new List<Color32>();
-        readonly List<Vector2> uv0 = new List<Vector2>(), uv1 = new List<Vector2>();
+        readonly List<Vector2> uv0 = new List<Vector2>(), uv1 = new List<Vector2>(), uv2 = new List<Vector2>();
+        /// <summary>Building of a complex the next geometry belongs to (uv2.x; 0 = the plot): each building is staged on its own dates
+        /// (Landmark.Parts, AlatauLandmark _PartA / _PartB).</summary>
+        public int Part;
+        /// <summary>Stage window of the next geometry inside its building (uv3): it rises from y0 to y1 while the building's progress
+        /// goes from a to b, gets its facade and its grounds within that window, and is finished after it (zero = staged with the
+        /// whole building). Lets each building be put up in its real order (columns, transfer slab, box, roof …).</summary>
+        public Vector4 Window;
+        public void Win(float a, float b, float y0, float y1) => Window = new Vector4(a, b, y0, y1);
+        public void NoWin() => Window = Vector4.zero;
+        readonly List<Vector4> uv3 = new List<Vector4>();
         readonly List<int> t = new List<int>();
         public int VertexCount => v.Count;
         /// <summary>Sets the colour alpha of the vertices from 'start' to the end (AlatauLandmark: alpha = 1 − landscaping stage).</summary>
@@ -32,7 +42,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             bool flip = Vector3.Dot(nn, outward) < 0; nn = nn.normalized; if (flip) nn = -nn;
             int i = v.Count;
             v.Add(a); v.Add(b); v.Add(cc); v.Add(d);
-            for (int k = 0; k < 4; k++) { n.Add(nn); c.Add(col); uv1.Add(new Vector2(mat, prm)); }
+            for (int k = 0; k < 4; k++) { n.Add(nn); c.Add(col); uv1.Add(new Vector2(mat, prm)); uv2.Add(new Vector2(Part, 0f)); uv3.Add(Window); }
             uv0.Add(ua); uv0.Add(ub); uv0.Add(uc); uv0.Add(ud);
             if (!flip) { t.Add(i); t.Add(i + 1); t.Add(i + 2); t.Add(i); t.Add(i + 2); t.Add(i + 3); }
             else { t.Add(i); t.Add(i + 2); t.Add(i + 1); t.Add(i); t.Add(i + 3); t.Add(i + 2); }
@@ -41,7 +51,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
         {
             var nn = Vector3.Cross(b - a, cc - a); bool flip = Vector3.Dot(nn, outward) < 0; nn = nn.normalized; if (flip) nn = -nn;
             int i = v.Count; v.Add(a); v.Add(b); v.Add(cc);
-            for (int k = 0; k < 3; k++) { n.Add(nn); c.Add(col); uv1.Add(new Vector2(mat, prm)); }
+            for (int k = 0; k < 3; k++) { n.Add(nn); c.Add(col); uv1.Add(new Vector2(mat, prm)); uv2.Add(new Vector2(Part, 0f)); uv3.Add(Window); }
             uv0.Add(ua); uv0.Add(ub); uv0.Add(uc);
             if (!flip) { t.Add(i); t.Add(i + 1); t.Add(i + 2); } else { t.Add(i); t.Add(i + 2); t.Add(i + 1); }
         }
@@ -57,7 +67,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             }
         }
         /// <summary>Vertical walls of a footprint from y0 to y1 (+ top cap, optional bottom).</summary>
-        public void Prism(IList<Vector2> fp, float y0, float y1, Color32 wall, int wallMat, float prm, Color32 top, int topMat, bool bottom = false)
+        public void Prism(IList<Vector2> fp, float y0, float y1, Color32 wall, int wallMat, float prm, Color32 top, int topMat, bool bottom = false, float topPrm = 3f)
         {
             Vector2 ce = Vector2.zero; foreach (var p in fp) ce += p; ce /= fp.Count;
             float u = 0;
@@ -70,7 +80,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
                      new Vector2(u, y0), new Vector2(u + L, y0), new Vector2(u + L, y1), new Vector2(u, y1));
                 u += L;
             }
-            if (topMat >= 0) Cap(fp, y1, true, top, topMat);
+            if (topMat >= 0) Cap(fp, y1, true, top, topMat, topPrm);
             if (bottom) Cap(fp, y0, false, wall, wallMat);
         }
         /// <summary>Walls between two footprints with the same number of corners (sloped / tapering faces).</summary>
@@ -121,7 +131,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 v.Add(baseC + dir * r); v.Add(baseC + dir * r + Vector3.up * h);
                 n.Add(dir); n.Add(dir); c.Add(col); c.Add(col);
                 uv0.Add(new Vector2(circ * s / seg, baseC.y)); uv0.Add(new Vector2(circ * s / seg, baseC.y + h));
-                uv1.Add(new Vector2(mat, prm)); uv1.Add(new Vector2(mat, prm));
+                uv1.Add(new Vector2(mat, prm)); uv1.Add(new Vector2(mat, prm)); uv2.Add(new Vector2(Part, 0f)); uv2.Add(new Vector2(Part, 0f)); uv3.Add(Window); uv3.Add(Window);
             }
             for (int s = 0; s < seg; s++) { int a = i0 + s * 2; t.Add(a); t.Add(a + 1); t.Add(a + 3); t.Add(a); t.Add(a + 3); t.Add(a + 2); }
             if (topMat < 0) return;
@@ -134,7 +144,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             }
         }
         /// <summary>A tube between two points (octagon, radius r0 → r1): fuselages, pipes, masts lying down.</summary>
-        public void Tube(Vector3 p0, Vector3 p1, float r0, float r1, int seg, Color32 col, int mat, bool caps = true)
+        public void Tube(Vector3 p0, Vector3 p1, float r0, float r1, int seg, Color32 col, int mat, bool caps = true, float prm = 3f)
         {
             var dir = (p1 - p0).normalized; var a = Vector3.Cross(dir, Mathf.Abs(dir.y) > 0.9f ? Vector3.right : Vector3.up).normalized; var b = Vector3.Cross(dir, a);
             float L = (p1 - p0).magnitude;
@@ -144,11 +154,11 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 Vector3 d0 = a * Mathf.Cos(t0) + b * Mathf.Sin(t0), d1 = a * Mathf.Cos(t1) + b * Mathf.Sin(t1);
                 var q0 = p0 + d0 * r0; var q1 = p0 + d1 * r0; var q2 = p1 + d1 * r1; var q3 = p1 + d0 * r1;
                 float u0 = r0 * t0, u1 = r0 * t1;
-                Quad(q0, q1, q2, q3, (d0 + d1) * 0.5f, col, mat, 3f, new Vector2(u0, 0), new Vector2(u1, 0), new Vector2(u1, L), new Vector2(u0, L));
+                Quad(q0, q1, q2, q3, (d0 + d1) * 0.5f, col, mat, prm, new Vector2(u0, 0), new Vector2(u1, 0), new Vector2(u1, L), new Vector2(u0, L));
                 if (caps)
                 {
-                    if (r0 > 0.01f) Tri(p0, q1, q0, -dir, col, mat, 3f, Vector2.zero, Vector2.right, Vector2.up);
-                    if (r1 > 0.01f) Tri(p1, q3, q2, dir, col, mat, 3f, Vector2.zero, Vector2.right, Vector2.up);
+                    if (r0 > 0.01f) Tri(p0, q1, q0, -dir, col, mat, prm, Vector2.zero, Vector2.right, Vector2.up);
+                    if (r1 > 0.01f) Tri(p1, q3, q2, dir, col, mat, prm, Vector2.zero, Vector2.right, Vector2.up);
                 }
             }
         }
@@ -163,11 +173,16 @@ namespace AlatauCity.DigitalTwin.Landmarks
         }
         /// <summary>Material parameter that marks a tree (AlatauLandmark plants it only when the site is landscaped).</summary>
         public const float TreeTag = -7f;
+        /// <summary>Early landscape: a lawn, path or pond (GreenTag, pass as the facade / top parameter) or trees (Planted = true → ParkTreeTag)
+        /// of a park laid out before the buildings — green from the start of the works (see AlatauLandmark.shader).</summary>
+        public const float GreenTag = -5f, ParkTreeTag = -9f;
+        public bool Planted;
         /// <summary>A low-poly tree: trunk + faceted crown.</summary>
         public void Tree(Vector3 p, float h, Color32 leaf, float seed)
         {
             float r = h * 0.32f; var trunk = LM.C("#5b4a3a");
-            Beam(p, p + Vector3.up * (h * 0.45f), 0.35f, 0.35f, trunk, LM.Solid, TreeTag);   // TreeTag: planted at the end of construction
+            float tag = Planted ? ParkTreeTag : TreeTag;
+            Beam(p, p + Vector3.up * (h * 0.45f), 0.35f, 0.35f, trunk, LM.Solid, tag);   // TreeTag: planted at the end of construction
             var cc = p + Vector3.up * (h * 0.62f);
             int seg = 6; float rot = seed * 37f;
             for (int s = 0; s < seg; s++)
@@ -176,8 +191,8 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 var e0 = cc + new Vector3(Mathf.Cos(a0) * r, 0, Mathf.Sin(a0) * r); var e1 = cc + new Vector3(Mathf.Cos(a1) * r, 0, Mathf.Sin(a1) * r);
                 var top = cc + Vector3.up * (h * 0.40f); var bot = cc - Vector3.up * (h * 0.22f);
                 var o = ((e0 + e1) * 0.5f - cc);
-                Tri(top, e0, e1, o + Vector3.up * r, leaf, LM.Plant, TreeTag, new Vector2(top.x, top.z), new Vector2(e0.x, e0.z), new Vector2(e1.x, e1.z));
-                Tri(bot, e1, e0, o - Vector3.up * r, leaf, LM.Plant, TreeTag, new Vector2(bot.x, bot.z), new Vector2(e1.x, e1.z), new Vector2(e0.x, e0.z));
+                Tri(top, e0, e1, o + Vector3.up * r, leaf, LM.Plant, tag, new Vector2(top.x, top.z), new Vector2(e0.x, e0.z), new Vector2(e1.x, e1.z));
+                Tri(bot, e1, e0, o - Vector3.up * r, leaf, LM.Plant, tag, new Vector2(bot.x, bot.z), new Vector2(e1.x, e1.z), new Vector2(e0.x, e0.z));
             }
         }
 
@@ -220,7 +235,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
         public Mesh ToMesh(string name)
         {
             var m = new Mesh { name = name, indexFormat = v.Count > 65000 ? IndexFormat.UInt32 : IndexFormat.UInt16 };
-            m.SetVertices(v); m.SetNormals(n); m.SetColors(c); m.SetUVs(0, uv0); m.SetUVs(1, uv1); m.SetTriangles(t, 0); m.RecalculateBounds();
+            m.SetVertices(v); m.SetNormals(n); m.SetColors(c); m.SetUVs(0, uv0); m.SetUVs(1, uv1); m.SetUVs(2, uv2); m.SetUVs(3, uv3); m.SetTriangles(t, 0); m.RecalculateBounds();
             return m;
         }
     }
