@@ -176,7 +176,7 @@ namespace AlatauCity.DigitalTwin
             if (indCount >= 0) return; indCount = 0; indGfa = 0; var db = CityDatabase.Instance; if (db == null) return;
             foreach (var b in db.Buildings) if (b != null && b.Kind == "industry" && b.District == "Growing" && !LandmarkSystem.IsHiddenBid(b.Bid)) { indCount++; indGfa += b.GfaM2; }
         }
-        static float IconicP() { var l = LS?.Get("iconic"); return l == null ? 0f : LandmarkSystem.Progress(l, LandmarkSystem.YearNow); }
+        static float IconicP() { var l = LS?.Get("iconic"); return l == null ? 0f : LandmarkSystem.TowerP(l, LandmarkSystem.YearNow); }
 
         void Build()
         {

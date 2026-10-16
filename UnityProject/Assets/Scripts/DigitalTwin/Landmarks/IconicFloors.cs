@@ -144,7 +144,12 @@ namespace AlatauCity.DigitalTwin.Landmarks
             f = 1f; return PReady;
         }
         /// <summary>Calendar year (fractional) at landmark progress p — the inverse of LandmarkSystem.Progress.</summary>
-        public static float YearAt(Landmark l, float p) => (l.StartYear - 1f) + p * (l.EndYear - l.StartYear + 1f);
+        public static float YearAt(Landmark l, float p)
+        {
+            int m = l.Parts != null ? l.Main : -1;                  // a complex: the dates of its tower
+            if (m >= 0) { var t = l.Parts[m]; return t.A + p * (t.B - t.A); }
+            return (l.StartYear - 1f) + p * (l.EndYear - l.StartYear + 1f);
+        }
         static readonly string[] Mon = { "янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек" };
         public static string MonthYear(float y) { int yi = Mathf.FloorToInt(y); int m = Mathf.Clamp(Mathf.FloorToInt((y - yi) * 12f), 0, 11); return Mon[m] + " " + yi; }
 

@@ -29,11 +29,16 @@ namespace AlatauCity.DigitalTwin.Landmarks
             public Landmark L; public GameObject Go; public MeshRenderer R; public MeshCollider C; public MaterialPropertyBlock B; public float hi;
             public GameObject Site; public readonly List<Crane> Cranes = new List<Crane>(); public float lastP = -1f, glow = -1f;
             public Transform Flyer; public float FlyT;
+            // the buildings of a complex (Landmark.Parts): their stages for the shader (_PartA / _PartB, index = part of the model),
+            // the hand-over light sweep of each, and which part every triangle of the model belongs to (picking in the monitoring)
+            public readonly Vector4[] PA = new Vector4[8], PB = new Vector4[8]; public readonly float[] LastPP = new float[8], GlowP = new float[8];
+            public List<Vector2> PartUv; public int[] Tris;
         }
         readonly Dictionary<string, Node> nodes = new Dictionary<string, Node>();
         Material mat; bool built;
         static readonly int RevealId = Shader.PropertyToID("_Reveal"), BuildId = Shader.PropertyToID("_Build"), GhostId = Shader.PropertyToID("_Ghost"), HiId = Shader.PropertyToID("_Hi"),
-            FacadeId = Shader.PropertyToID("_Facade"), LandId = Shader.PropertyToID("_Land"), GlowId = Shader.PropertyToID("_Glow"), HeightId = Shader.PropertyToID("_H");
+            FacadeId = Shader.PropertyToID("_Facade"), LandId = Shader.PropertyToID("_Land"), GlowId = Shader.PropertyToID("_Glow"), HeightId = Shader.PropertyToID("_H"),
+            PartAId = Shader.PropertyToID("_PartA"), PartBId = Shader.PropertyToID("_PartB");
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         static void Boot() { if (Instance == null) new GameObject("Landmarks (Alatau City projects)").AddComponent<LandmarkSystem>(); }
@@ -186,6 +191,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             var c = go.AddComponent<MeshCollider>(); c.sharedMesh = m;
             go.AddComponent<LandmarkObject>().Id = l.Id;
             var node = new Node { L = l, Go = go, R = r, C = c, B = new MaterialPropertyBlock() };
+            for (int k = 0; k < 8; k++) { node.LastPP[k] = -1f; node.GlowP[k] = -1f; node.PA[k] = new Vector4(100000f, 0f, 100000f, 1f); node.PB[k] = new Vector4(-1f, l.Height, 0f, 0f); }
             nodes[l.Id] = node;
             l.Anchor = go.transform.TransformPoint(LandmarkSite.TopAnchor(m));
             try { BuildSite(node, m); } catch (Exception e) { Debug.LogWarning("[Alatau] site " + l.Id + ": " + e.Message); }
@@ -268,11 +274,27 @@ namespace AlatauCity.DigitalTwin.Landmarks
         public static float Progress(Landmark l, float y)
         {
             if (l == null) return 0f;
+            // a complex of several buildings: from the first start to the last hand-over
+            if (l.Parts != null) { float a = l.Begin, b = l.Finish; return y <= a ? 0f : Mathf.Clamp01((y - a) / Mathf.Max(b - a, 0.01f)); }
             // works run through the start year: progress grows continuously from the end of the year before (no jump when the year turns)
             float s0 = l.StartYear - 1f;
             if (y <= s0) return 0f;
             return Mathf.Clamp01((y - s0) / (l.EndYear - l.StartYear + 1f));
         }
+        /// <summary>Planned progress of building i of a complex (index in Landmark.Parts) at date y.</summary>
+        public static float PlanPart(Landmark l, int i, float y)
+        {
+            if (l?.Parts == null || i < 0 || i >= l.Parts.Count) return Progress(l, y);
+            var p = l.Parts[i]; return y <= p.A ? 0f : Mathf.Clamp01((y - p.A) / Mathf.Max(p.B - p.A, 0.01f));
+        }
+        /// <summary>The actual delay of building i at date y in years (set by the construction monitoring while it shows the actual; null = the plan).</summary>
+        public static Func<Landmark, int, float, float> FactShift;
+        /// <summary>Progress of building i as shown now: the plan, or the actual while the monitoring shows it.</summary>
+        public static float PartP(Landmark l, int i, float y) => PlanPart(l, i, y - (FactShift != null ? FactShift(l, i, y) : 0f));
+        /// <summary>Progress of the tower of a complex (the one followed floor by floor), else of the object.</summary>
+        public static float TowerP(Landmark l, float y) { int m = l != null && l.Parts != null ? l.Main : -1; return m >= 0 ? PartP(l, m, y) : Progress(l, y); }
+        /// <summary>Building of a complex outlined in the monitoring (landmark id, index in Parts; −1 none).</summary>
+        public static string HiObj; public static int HiPart = -1;
         public bool IsBuilt(Landmark l) => Progress(l, YearNow) >= 0.999f;
         public bool IsVisible(Landmark l) => l.IsLrt || Progress(l, YearNow) > 0f || ShowPlanned;
 
@@ -310,6 +332,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 n.B.SetFloat(HeightId, H);
                 n.B.SetFloat(GhostId, ghost ? 1f : 0f);
                 n.B.SetFloat(HiId, n.hi);
+                if (n.L.Parts != null) Parts(n, y, ghost);
                 n.R.SetPropertyBlock(n.B);
                 if (n.Flyer != null) { bool f = !ghost && !building; if (!f && n.Flyer.gameObject.activeSelf) n.Flyer.gameObject.SetActive(false); if (f) Fly(n, Time.deltaTime); }
                 // site: hoarding and cranes while building (the cranes leave once the facade is closed)
@@ -319,8 +342,10 @@ namespace AlatauCity.DigitalTwin.Landmarks
                     if (n.Site.activeSelf != siteOn) n.Site.SetActive(siteOn);
                     if (siteOn)
                     {
-                        bool cranes = p < 0.93f;
-                        float top = Mathf.Max(frame + 14f, 34f);
+                        // the cranes serve the tallest building (the tower of a complex): they climb with its frame and leave with its facade
+                        float tp = n.L.Parts != null ? TowerP(n.L, y) : p, th = n.L.Parts != null && n.L.Main >= 0 ? n.L.Parts[n.L.Main].H : H;
+                        bool cranes = tp > 0f && tp < 0.93f;
+                        float top = Mathf.Max(th * Mathf.Clamp01((tp - 0.08f) / 0.62f) + 14f, 34f);
                         foreach (var c in n.Cranes)
                         {
                             if (c.Mast.gameObject.activeSelf != cranes) { c.Mast.gameObject.SetActive(cranes); c.Head.gameObject.SetActive(cranes); }
@@ -334,6 +359,52 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 }
             }
             if (Input.GetKeyDown(KeyCode.Escape) && Selected != null && !MapCamera.Typing && !IconicInterior.EscTaken) Select(null, false);
+        }
+        /// <summary>Stages of every building of a complex for the shader: each rises, gets its facade and its grounds on its own dates
+        /// (part 0, the plot, follows the whole complex). Not started → not drawn; handed over → a sweep of light runs up it.</summary>
+        void Parts(Node n, float y, bool ghost)
+        {
+            var l = n.L; int main = l.Main;
+            for (int i = 0; i < l.Parts.Count && i < 7; i++)
+            {
+                var pt = l.Parts[i]; float pp = PartP(l, i, y); int k = i + 1;
+                if (n.LastPP[k] >= 0f && n.LastPP[k] < 0.999f && pp >= 0.999f) n.GlowP[k] = 0f;
+                n.LastPP[k] = pp;
+                if (n.GlowP[k] >= 0f) { n.GlowP[k] += Time.deltaTime / 2.6f; if (n.GlowP[k] > 1f) n.GlowP[k] = -1f; }
+                bool b = !ghost && pp < 0.999f; float h = pt.H;
+                float fr = h * Mathf.Clamp01((pp - 0.08f) / 0.62f), fa = h * Mathf.Clamp01((pp - 0.25f) / 0.65f), la = Mathf.Clamp01((pp - 0.85f) / 0.13f);
+                if (pt.Land) { fr = 100000f; fa = 100000f; la = Mathf.Clamp01((pp - 0.05f) / 0.9f); }
+                float rv = ghost || !b ? 100000f : pp <= 0f ? 0f : Mathf.Max(fr, 0.6f);
+                if (CutAt >= 0f && l.Id == CutId && i == main) rv = Mathf.Min(rv, CutAt);
+                n.PA[k] = new Vector4(rv, b ? 1f : 0f, b ? fa : 100000f, b ? la : 1f);
+                n.PB[k] = new Vector4(n.GlowP[k], h, HiObj == l.Id && HiPart == i ? 1f : 0f, ghost ? 1f : pp);      // w: progress, for the pieces' own windows
+            }
+            n.PA[0] = new Vector4(-1f, 0f, 0f, 0f);                // slot 0 unused: part 0 takes the object's own values
+            n.B.SetVectorArray(PartAId, n.PA); n.B.SetVectorArray(PartBId, n.PB);
+        }
+        /// <summary>Tower cranes of the site of a landmark: how many, and the top of the mast of crane i (the landmark's local coordinates)
+        /// while that crane stands — a site camera can hang on it.</summary>
+        public int CraneCount(string id) => nodes.TryGetValue(id, out var n) ? n.Cranes.Count : 0;
+        public bool CraneTop(string id, int i, out Vector3 p)
+        {
+            p = default;
+            if (!nodes.TryGetValue(id, out var n) || n.Site == null || !n.Site.activeSelf || i < 0 || i >= n.Cranes.Count) return false;
+            var c = n.Cranes[i]; if (c.Head == null || !c.Head.gameObject.activeSelf) return false;
+            p = c.Head.localPosition; return true;
+        }
+        /// <summary>Which building of a complex is under the ray (index in Landmark.Parts; −1 none or the plot).</summary>
+        public int PickPart(string id, Ray ray, out Vector3 point)
+        {
+            point = default;
+            if (!nodes.TryGetValue(id, out var n) || n.C == null || n.L.Parts == null) return -1;
+            if (!n.C.Raycast(ray, out var hit, 100000f)) return -1;
+            point = hit.point;
+            var m = n.C.sharedMesh; if (m == null) return -1;
+            if (n.PartUv == null) { n.PartUv = new List<Vector2>(); m.GetUVs(2, n.PartUv); n.Tris = m.triangles; }
+            int t = hit.triangleIndex * 3; if (n.Tris == null || t < 0 || t >= n.Tris.Length) return -1;
+            int v = n.Tris[t]; if (v >= n.PartUv.Count) return -1;
+            int part = Mathf.RoundToInt(n.PartUv[v].x) - 1;
+            return part >= 0 && part < n.L.Parts.Count ? part : -1;
         }
         void LateUpdate() { if (built) FlyStep(); FrameShift(); }     // after MapCamera.Update: the user's input of this frame is known
 
@@ -454,7 +525,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             if (Selected != l) Select(l, false);
             var model = ModelOf(l.Id);
             Vector3 c = l.World; float h = Mathf.Min(l.Height * 0.5f, 150f);
-            float p = Progress(l, YearNow);
+            float p = TowerP(l, YearNow);
             if (p > 0f && p < 0.999f) h = Mathf.Max(l.Height * Mathf.Clamp01((p - 0.08f) / 0.62f) - 6f, 8f);
             var tp = TowerProfile.For(l.Id);
             if (tp != null && model != null) c = model.TransformPoint(new Vector3(tp.Xr - tp.RawWidth(h) * 0.5f, 0f, tp.Cz));

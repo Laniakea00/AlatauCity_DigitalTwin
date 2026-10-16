@@ -46,7 +46,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
 
         // ------------------------------------------------------------------ state
         static float H(Landmark l) => l != null ? l.Height : 272f;
-        static float P(Landmark l) => LandmarkSystem.Progress(l, LandmarkSystem.YearNow);
+        static float P(Landmark l) => LandmarkSystem.TowerP(l, LandmarkSystem.YearNow);
         /// <summary>The highest floor whose works have started (−1: none yet).</summary>
         static int TopFloor(Landmark l, float p)
         {

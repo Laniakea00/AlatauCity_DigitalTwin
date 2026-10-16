@@ -5,8 +5,37 @@ namespace AlatauCity.DigitalTwin.Landmarks
 {
     /// <summary>Procedural models of the landmarks. Local frame: x = long side, z = across, y = up from the base (0 = ground).
     /// Proportions follow the published figures (heights, areas, capacities); details are illustrative, not design documentation.</summary>
+    /// <summary>The order in which each building of a complex is put up: stage windows in the progress of the building (0 … 1), shared
+    /// by the model (LandmarkKit.Win: what rises when) and by the construction monitoring (the works of the schedule).</summary>
+    public static class Wbs
+    {
+        static Vector2 V(float a, float b) => new Vector2(a, b);
+        // Iconic Complex · hotel T2: excavation and raft, frame stepping up with the core, terraces (waterproofing and gardens), cascade
+        public static readonly Vector2 T2Pit = V(0f, 0.08f), T2Frame = V(0.06f, 0.92f), T2Terr = V(0.55f, 0.88f), T2Cascade = V(0.62f, 0.90f);
+        // retail blocks: the high block first, the low one a little later, the roof pool, the roof garden
+        public static readonly Vector2 RHigh = V(0.08f, 0.85f), RLow = V(0.15f, 0.88f), RPool = V(0.70f, 0.92f), RGarden = V(0.75f, 0.95f);
+        // grounds: the promenade, the allée with the fountain, the parterre and the square, trees and lamps
+        public static readonly Vector2 GProm = V(0.15f, 0.65f), GAllee = V(0.30f, 0.80f), GSquare = V(0.35f, 0.85f), GTrees = V(0.65f, 1f);
+        // KAIST · main hall: apron, columns of the lobby, transfer slab at +10 m, the steel box, its white grid, roof and pyramids,
+        // the glazed lobby, terrace with stair and ramp, the plaza with the pool
+        public static readonly Vector2 MApron = V(0f, 1f), MCols = V(0.10f, 0.30f), MSlab = V(0.26f, 0.40f), MBox = V(0.36f, 0.86f), MGrid = V(0.50f, 0.84f),
+            MRoof = V(0.60f, 0.78f), MLobby = V(0.62f, 0.90f), MTerr = V(0.70f, 0.90f), MPlaza = V(0.86f, 1f);
+        // laboratories: the spine, then wings A, B, C one after another, the courts last
+        public static readonly Vector2 LSpine = V(0.06f, 0.42f), LCourts = V(0.85f, 1f);
+        public static readonly Vector2[] LWing = { V(0.22f, 0.55f), V(0.34f, 0.68f), V(0.46f, 0.80f) };
+        // north block: four sectors (захватки) along the arc from the west, then the green roof
+        public static readonly Vector2[] NSector = { V(0.06f, 0.56f), V(0.16f, 0.66f), V(0.26f, 0.76f), V(0.36f, 0.86f) };
+        public static readonly Vector2 NRoof = V(0.78f, 0.94f);
+        // sports: the stand, its canopy, the running track, the pitch
+        public static readonly Vector2 SStand = V(0.15f, 0.55f), SCanopy = V(0.45f, 0.70f), STrack = V(0.50f, 0.85f), SPitch = V(0.70f, 1f);
+        // the park: ground and lawn, the lake and the island, paths and the bridge, lamps and fountains, the trees
+        public static readonly Vector2 PGround = V(-0.02f, 1f), PLake = V(0.10f, 0.55f), PPaths = V(0.35f, 0.80f), PLamps = V(0.60f, 0.95f), PTrees = V(0.70f, 1f);
+        public static readonly Vector2 Apron = V(0f, 1f);
+    }
+
     public static class LandmarkModels
     {
+        static void W(LandmarkKit k, Vector2 w, float y0, float y1) => k.Win(w.x, w.y, y0, y1);
         // palette
         static readonly Color32 White = LM.C("#ecebe6"), Stone = LM.C("#d9d4ca"), Pave = LM.C("#c8c2b6"), PaveDark = LM.C("#a9a397"), Concrete = LM.C("#bcb7ae"),
             GlassBlue = LM.C("#1f3549"), GlassTeal = LM.C("#1d3b3d"), GlassWarm = LM.C("#2b2f33"), GlassDark = LM.C("#151d26"),
@@ -93,6 +122,9 @@ namespace AlatauCity.DigitalTwin.Landmarks
             Pad(k, 270f, 200f, 22f, Pave);
 
             // ---- the tower: glass shell on the shared footprint (IconicShape, the interior floors fit it), a golden plate at every floor
+            // (parts of the model = the buildings of LandmarkData's Iconic Complex, each staged on its own dates: 1 T1, 2 T2, 3 east retail,
+            // 4 west retail, 5 the grounds; 0 the plot)
+            k.Part = 1;
             float xr = IconicShape.Xr, cz0 = IconicShape.Cz, H = 272f, roof = IconicShape.Roof, fh = IconicShape.Fh, crownFrom = 214f;
             var prev = IconicShape.Ring(0.3f); float yp = 0.3f; int fl = 0;
             for (float y = 0.3f + fh; y <= roof + 0.01f; y += fh, fl++)
@@ -114,6 +146,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             k.Box(new Vector3(xr - 30f, 6.3f, cz0 - IconicShape.D0 * 0.5f - 7f), new Vector3(30f, 0.7f, 14f), 0, Gold, LM.Solid, 1f, Fascia, LM.Roof);
 
             // ---- the hotel: 80 m, stepping down to the west, two wings with a planted cascade between them
+            k.Part = 2;
             const float hx0 = -128f, hx1 = -32f, hz0 = 14f, hz1 = 74f, gap = 10f, top = 80f; const int NS = 18;
             float step = (top - 0.3f) / NS, gz0 = (hz0 + hz1 - gap) * 0.5f, gz1 = gz0 + gap;
             for (int s = 0; s < NS; s++)
@@ -126,14 +159,19 @@ namespace AlatauCity.DigitalTwin.Landmarks
                     // planted edge of the terrace this step leaves open
                     if (s < NS - 1)
                     {
-                        float tx = x0 + 1.6f;
+                        // terraces: waterproofed and planted once the frame is past them (the lower ones first)
+                        float tx = x0 + 1.6f, tq = s / (NS - 1f);
+                        k.Win(Mathf.Lerp(Wbs.T2Terr.x, Wbs.T2Terr.y - 0.1f, tq), Mathf.Lerp(Wbs.T2Terr.x + 0.1f, Wbs.T2Terr.y, tq), y1, y1 + 4f);
                         k.Prism(LandmarkKit.Rect(tx, (z0 + z1) * 0.5f, 2.2f, z1 - z0 - 1.5f), y1, y1 + 0.7f, Stone, LM.Solid, 1f, Grass, LM.Plant);
                         for (float z = z0 + 3f; z < z1 - 2f; z += 6.5f) k.Tree(new Vector3(tx, y1 + 0.7f, z), 2.6f + (s % 3) * 0.5f, (s & 1) == 0 ? Leaf : Leaf2, s * 0.37f + z * 0.05f);
+                        k.NoWin();
                     }
                 }
                 // the cascade: a garden that steps down between the wings, framed by timber fins
+                W(k, Wbs.T2Cascade, y0, y0 + 4.2f);
                 k.Prism(LandmarkKit.Rect((x0 + hx1) * 0.5f - 3f, (gz0 + gz1) * 0.5f, hx1 - x0 - 6f, gap), y0, y0 + 0.8f, Stone, LM.Solid, 1f, Grass, LM.Plant);
                 if (s % 2 == 0) k.Tree(new Vector3((x0 + hx1) * 0.5f, y0 + 0.8f, (gz0 + gz1) * 0.5f), 3.4f, Leaf2, s * 0.21f);
+                k.NoWin();
                 for (float x = x0 + 1f; x < hx1 - 3f; x += 2.4f)
                     foreach (float z in new[] { gz0 + 0.25f, gz1 - 0.25f })
                         k.Box(new Vector3(x, (y0 + y1) * 0.5f, z), new Vector3(0.18f, step, 0.5f), 0f, Timber, LM.Solid, 20f, Timber, LM.Solid);
@@ -142,14 +180,20 @@ namespace AlatauCity.DigitalTwin.Landmarks
 
             // ---- two retail blocks (podiums) with roof terraces and pools, as on the SOM renders: glass walls under a golden fascia,
             // the south-east one steps down from 26 m to 14 m, the west one rises from 14 m to 22 m toward the garden
-            Podium(k, 6f, -84f, 78f, -12f, 26f); Podium(k, 78f, -84f, 120f, -12f, 14f);
-            RoofPool(k, 42f, -48f, 50f, 15f, 26f, 0f);
-            RoofGarden(k, 99f, -48f, 34f, 64f, 14f);
-            Podium(k, -120f, -84f, -70f, -12f, 14f); Podium(k, -70f, -84f, -24f, -12f, 22f);
-            RoofPool(k, -47f, -48f, 15f, 40f, 22f, 90f);
-            RoofGarden(k, -95f, -48f, 42f, 64f, 14f);
+            // (each: the high block first, the low one a little later, then the roof pool and the roof garden — Wbs.R*)
+            k.Part = 3;
+            W(k, Wbs.RHigh, 0.3f, 27.1f); Podium(k, 6f, -84f, 78f, -12f, 26f);
+            W(k, Wbs.RLow, 0.3f, 15.1f); Podium(k, 78f, -84f, 120f, -12f, 14f);
+            W(k, Wbs.RPool, 26f, 29f); RoofPool(k, 42f, -48f, 50f, 15f, 26f, 0f);
+            W(k, Wbs.RGarden, 14f, 19.5f); RoofGarden(k, 99f, -48f, 34f, 64f, 14f);
+            k.Part = 4;
+            W(k, Wbs.RHigh, 0.3f, 23.1f); Podium(k, -70f, -84f, -24f, -12f, 22f);
+            W(k, Wbs.RLow, 0.3f, 15.1f); Podium(k, -120f, -84f, -70f, -12f, 14f);
+            W(k, Wbs.RPool, 22f, 25f); RoofPool(k, -47f, -48f, 15f, 40f, 22f, 90f);
+            W(k, Wbs.RGarden, 14f, 19.5f); RoofGarden(k, -95f, -48f, 42f, 64f, 14f);
 
             // ---- grounds: a promenade with a double alley of clipped trees all around the plot, a formal allée with a fountain between
+            k.Part = 5;
             // the tower and the hotel, a parterre north of the tower and a square with a reflecting pool east of it
             var keepOff = new List<Rect>
             {
@@ -161,28 +205,36 @@ namespace AlatauCity.DigitalTwin.Landmarks
             };
             Promenade(k, 270f, 200f, keepOff);
             // the allée between the tower and the hotel, from the square to the north promenade
+            W(k, Wbs.GAllee, 0.3f, 2.3f);
             k.Prism(LandmarkKit.Rect(-13f, 44f, 7f, 80f), 0.3f, 0.38f, Stone, LM.Solid, 1f, Pave, LM.Paving);
             Lawn(k, -25.5f, 44f, 9f, 80f, 1.5f); Lawn(k, -0.5f, 44f, 6f, 80f, 1.5f);
             for (float z = 8f; z <= 82f; z += 8f)
             {
                 if (Mathf.Abs(z - 44f) < 9f) continue;
-                Planted(k, -19.5f, z, 7.5f, 0); Planted(k, -6.5f, z, 7.5f, 1);
+                W(k, Wbs.GTrees, 0.3f, 9f); Planted(k, -19.5f, z, 7.5f, 0); Planted(k, -6.5f, z, 7.5f, 1);
             }
+            W(k, Wbs.GAllee, 0.3f, 2.3f);
             k.Cylinder(new Vector3(-13f, 0.3f, 44f), 7f, 0.65f, 28, Stone, LM.Solid, 1f, Stone, LM.Paving);
             k.Cylinder(new Vector3(-13f, 0.3f, 44f), 6.2f, 0.6f, 28, Stone, LM.Solid, 1f, Water, LM.Water);
             k.Cylinder(new Vector3(-13f, 0.9f, 44f), 1.1f, 1.4f, 12, Stone, LM.Solid, 1f, Water, LM.Water);
             // the parterre north of the tower: four lawn panels, a cross of paths, a row of trees along it
+            W(k, Wbs.GSquare, 0.3f, 1f);
             k.Prism(LandmarkKit.Rect(39f, 72f, 66f, 22f), 0.3f, 0.36f, Stone, LM.Solid, 1f, Pave, LM.Paving);
             foreach (float px in new[] { 22f, 56f }) foreach (float pz in new[] { 66.5f, 77.5f }) Lawn(k, px, pz, 28f, 8f, 1.5f);
+            W(k, Wbs.GTrees, 0.3f, 9f);
             for (float x = 10f; x <= 68f; x += 9.5f) Planted(k, x, 61.5f, 6.5f, 2);
             // the square east of the tower: a long reflecting pool between two rows of trees
+            W(k, Wbs.GSquare, 0.3f, 1f);
             k.Prism(LandmarkKit.Rect(97f, 42f, 46f, 80f), 0.3f, 0.36f, Stone, LM.Solid, 1f, Pave, LM.Paving);
             k.Prism(LandmarkKit.Rect(97f, 42f, 12f, 44f), 0.36f, 0.75f, Stone, LM.Solid, 1f, Stone, LM.Paving);
             k.Prism(LandmarkKit.Rect(97f, 42f, 10.4f, 42.4f), 0.75f, 0.8f, Stone, LM.Solid, 1f, Water, LM.Water);
             foreach (float px in new[] { 83.5f, 110.5f }) Lawn(k, px, 42f, 9f, 64f, 1.5f);
+            W(k, Wbs.GTrees, 0.3f, 9f);
             for (float z = 14f; z <= 72f; z += 9.5f) { Planted(k, 83.5f, z, 8f, 3); Planted(k, 110.5f, z, 8f, 4); }
             for (float z = 22f; z <= 64f; z += 14f) foreach (float px in new[] { 89.5f, 104.5f }) Bench(k, px, z, 90f);
+            W(k, Wbs.GSquare, 0.3f, 6.5f);
             for (int i = 0; i < 9; i++) k.Box(new Vector3(-6f + i * 10f, 3.2f, 2f), new Vector3(0.35f, 6f, 0.35f), 0, Steel, LM.Steel, 1f, Warm, LM.Light);
+            k.Part = 0; k.NoWin();
             IconicShape.P = shape;
         }
         /// <summary>A podium block on the rectangle (x0, z0)–(x1, z1): glass walls, a golden fascia, a flat paved roof terrace with a glass parapet.</summary>
@@ -254,7 +306,8 @@ namespace AlatauCity.DigitalTwin.Landmarks
         {
             float hw = w * 0.5f, hd = d * 0.5f, i0 = 4f, i1 = 16f;
             bool Free(float x, float z, float m) { foreach (var r in keepOff) if (x > r.xMin - m && x < r.xMax + m && z > r.yMin - m && z < r.yMax + m) return false; return true; }
-            // the paving band (four strips) with a lighter centre line
+            // the paving band (four strips) with a lighter centre line — laid first, then trees, lamps and benches, the hedge last (Wbs.G*)
+            W(k, Wbs.GProm, 0.3f, 0.4f);
             k.Prism(LandmarkKit.Rect(0f, -hd + (i0 + i1) * 0.5f, w - 2f * i0, i1 - i0), 0.3f, 0.36f, Stone, LM.Solid, 1f, Stone, LM.Paving);
             k.Prism(LandmarkKit.Rect(0f, hd - (i0 + i1) * 0.5f, w - 2f * i0, i1 - i0), 0.3f, 0.36f, Stone, LM.Solid, 1f, Stone, LM.Paving);
             k.Prism(LandmarkKit.Rect(-hw + (i0 + i1) * 0.5f, 0f, i1 - i0, d - 2f * i1), 0.3f, 0.36f, Stone, LM.Solid, 1f, Stone, LM.Paving);
@@ -267,8 +320,10 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 for (float z = -az + step; z <= az - step + 0.01f; z += step) { f(-ax, z, Vector2.up); f(ax, z, Vector2.up); }
             }
             int n = 0;
+            W(k, Wbs.GTrees, 0.3f, 9f);
             Ring(6.5f, 9f, (x, z, dir) => { if (Free(x, z, 2.5f)) Planted(k, x, z, 8f, 0); });
             Ring(13.5f, 9f, (x, z, dir) => { if (Free(x, z, 2.5f)) Planted(k, x, z, 8f, 1); });
+            W(k, Wbs.GSquare, 0.3f, 6.5f);
             Ring(6.5f, 9f, (x, z, dir) =>
             {
                 float lx = x + dir.x * 4.5f, lz = z + dir.y * 4.5f; if (!Free(lx, lz, 1.5f) || Mathf.Abs(lx) > hw - 6f || Mathf.Abs(lz) > hd - 6f) return;
@@ -288,6 +343,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 }
             }
             float hx = hw - i1 - 1f, hz = hd - i1 - 1f;
+            W(k, Wbs.GTrees, 0.3f, 1.3f);
             Hedge(new Vector2(-hx, hz), new Vector2(hx, hz)); Hedge(new Vector2(-hx, -hz), new Vector2(hx, -hz));
             Hedge(new Vector2(-hx, -hz), new Vector2(-hx, hz)); Hedge(new Vector2(hx, -hz), new Vector2(hx, hz));
         }
@@ -955,34 +1011,53 @@ namespace AlatauCity.DigitalTwin.Landmarks
         static void Campus(LandmarkKit k)
         {
             // ---- the ground: one lawn over the whole plot (a plinth buried in the slope), a walk and a double alley round the edge
+            // (part 6 = the park of LandmarkData's KAIST campus: built first, in a few months, on its own windows — Wbs.P*)
+            k.Part = 6; W(k, Wbs.PGround, 0f, 0.4f);
             k.Prism(LandmarkKit.RoundRect(0, 0, 420f, 360f, 30f, 5), -16f, 0.3f, PaveDark, LM.Solid, GT, Grass, LM.Plant, false, GT);
+            W(k, Wbs.PPaths, 0f, 0.5f);
             Band(k, LandmarkKit.RoundRect(0, 0, 392f, 332f, 20f, 5), LandmarkKit.RoundRect(0, 0, 402f, 342f, 25f, 5), 0.3f, 0.45f, Rim, Pave, LM.Paving, GT);
 
             // ---- the lake with an island, a footbridge and fountains; a ring path with lamps round it
             Vector2 lc = new Vector2(-15f, -5f); float lrx = 64f, lrz = 36f;
             var shore = Ellipse(lc.x, lc.y, lrx, lrz, 40, 0.05f, 0.7f);
+            W(k, Wbs.PLake, 0f, 0.6f);
             k.Prism(shore, 0.15f, 0.34f, Rim, LM.Solid, GT, Pond, LM.Water, false, GT);
             Band(k, shore, Ellipse(lc.x, lc.y, lrx + 1.8f, lrz + 1.8f, 40, 0.05f, 0.7f), 0.3f, 0.55f, Rim, Rim, LM.Paving, GT);
+            W(k, Wbs.PPaths, 0f, 0.5f);
             Band(k, Ellipse(lc.x, lc.y, lrx + 10f, lrz + 10f, 48), Ellipse(lc.x, lc.y, lrx + 14f, lrz + 14f, 48), 0.3f, 0.45f, Rim, Pave, LM.Paving, GT);
+            W(k, Wbs.PLamps, 0f, 5f);
             for (int i = 0; i < 18; i++) { float a = (i + 0.5f) * 20f * Mathf.Deg2Rad; Lamp(k, lc.x + Mathf.Cos(a) * (lrx + 16f), lc.y + Mathf.Sin(a) * (lrz + 16f)); }
+            W(k, Wbs.PLake, 0f, 0.9f);
             k.Prism(Ellipse(8f, 10f, 13f, 8.5f, 18, 0.08f, 2.1f), 0.2f, 0.85f, GrassDark, LM.Solid, GT, Grass, LM.Plant, false, GT);
+            W(k, Wbs.PTrees, 0f, 12f);
             ParkTree(k, 4f, 10f, 11f, 0.31f); ParkTree(k, 12f, 13f, 9.5f, 0.57f); ParkTree(k, 10f, 6f, 8f, 0.83f);
+            W(k, Wbs.PPaths, 0f, 2.2f);
             k.Prism(LandmarkKit.Rect(8f, 26f, 3.2f, 18f), 0.3f, 1.05f, White, LM.Solid, GT, Stone, LM.Paving, false, GT);            // footbridge to the island
             k.Beam(new Vector3(6.4f, 2.0f, 17f), new Vector3(6.4f, 2.0f, 35f), 0.12f, 0.12f, White, LM.Solid, GT);
             k.Beam(new Vector3(9.6f, 2.0f, 17f), new Vector3(9.6f, 2.0f, 35f), 0.12f, 0.12f, White, LM.Solid, GT);
+            W(k, Wbs.PLamps, 0f, 18.5f);
             Jet(k, -44f, -6f, 0.34f, 18f, GT);
             for (int i = 0; i < 5; i++) Jet(k, 14f + i * 6f, -12f + (i % 2) * 3f, 0.34f, 5.5f + (i == 2 ? 2.5f : 0f), GT);
             for (int i = 0; i < 6; i++) { float a = i * 60f * Mathf.Deg2Rad; Jet(k, -44f + Mathf.Cos(a) * 9f, -6f + Mathf.Sin(a) * 6f, 0.34f, 4f, GT); }
 
             // ---- main hall: a blue glass box with a white grid, lifted on white columns over a recessed lobby
+            // (parts of the model = the buildings of LandmarkData's KAIST campus: 1 tower B1, 2 main hall, 3 laboratories, 4 north block, 5 sports)
+            k.Part = 2;
             float mx = -20f, mz = -122f, mw = 150f, md = 56f;
+            W(k, Wbs.MApron, 0f, 0.4f);
             k.Prism(LandmarkKit.RoundRect(mx, mz, mw + 22f, md + 22f, 6f, 3), 0.3f, 0.38f, PaveDark, LM.Solid, 3f, Pave, LM.Paving);   // apron (an earth site while built)
+            W(k, Wbs.MLobby, 0.3f, 9f);
             k.Prism(LandmarkKit.RoundRect(mx, mz - 2f, mw - 30f, md - 16f, 4f, 3), 0.3f, 9f, GlassDark, LM.Glass, 4.4f, Roof, -1);    // lobby
+            W(k, Wbs.MCols, 0.38f, 9.1f);
             for (int i = 0; i <= 12; i++) for (int s = 0; s < 2; s++)
                 k.Cylinder(new Vector3(mx - mw * 0.5f + 4f + i * (mw - 8f) / 12f, 0.38f, mz + (s == 0 ? -1 : 1) * (md * 0.5f - 3f)), 0.75f, 8.7f, 10, White, LM.Solid, 3f, White, -1);
-            k.Prism(LandmarkKit.Rect(mx, mz, mw + 2f, md + 2f), 9f, 10.2f, White, LM.Solid, 1.2f, White, -1, true);                     // soffit
+            W(k, Wbs.MSlab, 9f, 10.2f);
+            k.Prism(LandmarkKit.Rect(mx, mz, mw + 2f, md + 2f), 9f, 10.2f, White, LM.Solid, 1.2f, Pave, LM.Paving, true);             // soffit and deck of the transfer slab
+            W(k, Wbs.MBox, 10.2f, 28f);
             k.Prism(LandmarkKit.Rect(mx, mz, mw, md), 10.2f, 28f, CampusBlue, LM.Glass, 4.45f, Roof, LM.Roof);
+            W(k, Wbs.MRoof, 28f, 29.2f);
             k.Prism(LandmarkKit.Rect(mx, mz, mw + 2f, md + 2f), 28f, 29.2f, White, LM.Solid, 1.2f, White, LM.Roof);                    // cornice
+            W(k, Wbs.MGrid, 10.2f, 28f);
             float hx = mw * 0.5f + 0.3f, hz = md * 0.5f + 0.3f;
             for (int i = 0; i <= 20; i++)
             {
@@ -1006,6 +1081,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             }
             // glass pyramid roof lights: a large one over the atrium, two small ones
             float[,] pyr = { { 0f, 44f, 26f, 10f }, { -46f, 16f, 16f, 6f }, { 44f, 16f, 16f, 6f } };
+            W(k, Wbs.MRoof, 29.2f, 39.8f);
             for (int i = 0; i < 3; i++)
             {
                 float px = mx + pyr[i, 0], w = pyr[i, 1], d = pyr[i, 2], h = pyr[i, 3], y0 = 29.2f;
@@ -1016,6 +1092,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             }
             // the white terrace along the front, a broad stair down to the plaza, a ramp at the west end
             float tz = mz + md * 0.5f + 5f;
+            W(k, Wbs.MTerr, 0.3f, 5.5f);
             k.Prism(LandmarkKit.Rect(mx, tz, 124f, 10f), 0.3f, 4.2f, White, LM.Solid, 1.3f, Stone, LM.Paving);
             for (int i = 0; i < 8; i++)
                 k.Prism(LandmarkKit.Rect(mx, tz + 5f + 0.75f + i * 1.5f, 32f, 1.5f), 0.3f, 4.2f - (i + 1) * 0.49f, White, LM.Solid, 0.5f, Stone, LM.Paving);
@@ -1027,6 +1104,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             k.Beam(new Vector3(mx + 16f, 5.2f, tz + 5f), new Vector3(mx + 62f, 5.2f, tz + 5f), 0.2f, 0.25f, White, LM.Solid);
             // the plaza with a reflecting pool and a row of jets, hedges and trees on its sides (finished with the landscaping)
             float pz = tz + 5f + 12f + 10f;
+            W(k, Wbs.MPlaza, 0.3f, 9f);
             k.Prism(LandmarkKit.Rect(mx, pz, 150f, 20f), 0.3f, 0.38f, PaveDark, LM.Solid, 3f, Stone, LM.Paving);
             k.Prism(LandmarkKit.Rect(mx, pz, 96f, 10f), 0.3f, 0.75f, Rim, LM.Solid, 1f, Rim, LM.Paving);
             k.Prism(LandmarkKit.Rect(mx, pz, 93f, 7f), 0.3f, 0.62f, Rim, LM.Solid, 1f, Pond, LM.Water);
@@ -1038,6 +1116,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             }
 
             // ---- library and research tower B1: the floors follow the tower profile (the interior and the monitoring use the same plates)
+            k.Part = 1; k.NoWin();
             var keepP = IconicShape.P; IconicShape.P = TowerProfile.Kaist;
             try
             {
@@ -1066,14 +1145,19 @@ namespace AlatauCity.DigitalTwin.Landmarks
             finally { IconicShape.P = keepP; }
 
             // ---- laboratories: a spine with three teal-glass wings (stepped, with green roofs) around planted courts
+            k.Part = 3;
+            W(k, Wbs.Apron, 0f, 0.4f);
             k.Prism(LandmarkKit.Rect(-178f, 25f, 32f, 204f), 0.3f, 0.38f, PaveDark, LM.Solid, 3f, Pave, LM.Paving);
-            k.Prism(LandmarkKit.Rect(-178f, 25f, 22f, 190f), 0.3f, 17f, GlassWarm, LM.Glass, 4.2f, White, LM.Roof);
+            W(k, Wbs.LSpine, 0.3f, 18.6f);
+            k.Prism(LandmarkKit.Rect(-178f, 25f, 22f, 190f), 0.3f, 17f, GlassTeal, LM.Fins, 4.2f, White, LM.Roof);
             k.Prism(LandmarkKit.Rect(-178f, 25f, 23.5f, 191.5f), 17f, 18.2f, White, LM.Solid, 1.2f, White, LM.Roof);
             k.Prism(LandmarkKit.Rect(-178f, 25f, 16f, 182f), 18.2f, 18.6f, GrassDark, LM.Solid, 1f, Grass, LM.Plant);
             for (int i = 0; i < 3; i++)
             {
                 float z = -45f + i * 60f, hi = 14.5f - (i == 1 ? 0f : 2f);
+                W(k, Wbs.Apron, 0f, 0.4f);
                 k.Prism(LandmarkKit.Rect(-140f, z, 60f, 28f), 0.3f, 0.38f, PaveDark, LM.Solid, 3f, Pave, LM.Paving);
+                W(k, Wbs.LWing[i], 0.3f, hi + 0.4f);
                 k.Prism(LandmarkKit.Rect(-153f, z, 28f, 18f), 0.3f, hi, GlassTeal, LM.Fins, 3.6f, White, LM.Roof);
                 k.Prism(LandmarkKit.Rect(-125f, z, 28f, 18f), 0.3f, hi - 4f, GlassTeal, LM.Fins, 3.6f, White, LM.Roof);
                 k.Prism(LandmarkKit.Rect(-153f, z, 25f, 15f), hi, hi + 0.4f, GrassDark, LM.Solid, 1f, Grass, LM.Plant);
@@ -1082,42 +1166,57 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 if (i < 2)
                 {
                     float cz = z + 30f;                                                           // the court between two wings
+                    W(k, Wbs.LCourts, 0f, 9f);
                     Walk(k, new Vector2(-166f, cz), new Vector2(-104f, cz), 3.5f);
                     for (int t = 0; t < 4; t++) { k.Tree(new Vector3(-158f + t * 14f, 0.4f, cz - 9f), 8f, Leaf2, t * 0.21f + i); k.Tree(new Vector3(-158f + t * 14f, 0.4f, cz + 9f), 8f, Leaf, t * 0.37f + i); }
                 }
             }
 
             // ---- north teaching block: a curved glass block with white fins and a green roof, facing the lake
+            k.Part = 4;
             var ac = new Vector2(-15f, -40f); const float A0 = 58f, A1 = 122f; const int NS = 16;
             for (int s = 0; s < NS; s++)
             {
                 float a0 = A0 + (A1 - A0) * s / NS, a1 = A0 + (A1 - A0) * (s + 1) / NS;
+                // sectors (захватки) from the west end: the arc is cast four segments at a time, the green roof goes on last
+                var sec = Wbs.NSector[Mathf.Min(3, (NS - 1 - s) * 4 / NS)];
+                W(k, Wbs.Apron, 0f, 0.4f);
                 k.Prism(Sector(ac, 153f, 183f, a0, a1), 0.3f, 0.38f, PaveDark, LM.Solid, 3f, Pave, LM.Paving);
+                W(k, sec, 0.3f, 19.2f);
                 k.Prism(Sector(ac, 160f, 176f, a0, a1), 0.3f, 18f, CampusBlue, LM.Glass, 4.2f, Roof, -1);
                 k.Prism(Sector(ac, 158.5f, 177.5f, a0, a1), 18f, 19.2f, White, LM.Solid, 1.2f, White, LM.Roof, true);
-                k.Prism(Sector(ac, 163f, 173f, a0, a1), 19.2f, 19.6f, GrassDark, LM.Solid, 1f, Grass, LM.Plant);
                 for (int f = 1; f < 3; f++) k.Prism(Sector(ac, 159.6f, 176.4f, a0, a1), f * 6f - 0.2f, f * 6f + 0.35f, White, LM.Solid, 0.55f, White, -1);
+                W(k, Wbs.NRoof, 19.2f, 19.6f);
+                k.Prism(Sector(ac, 163f, 173f, a0, a1), 19.2f, 19.6f, GrassDark, LM.Solid, 1f, Grass, LM.Plant);
             }
             for (int s = 0; s <= NS * 2; s++)
             {
                 float a = (A0 + (A1 - A0) * s / (NS * 2)) * Mathf.Deg2Rad; var dir = new Vector2(Mathf.Cos(a), Mathf.Sin(a));
                 var pi = ac + dir * 159.5f; var po = ac + dir * 176.5f;
+                W(k, Wbs.NSector[Mathf.Min(3, (NS * 2 - s) * 4 / (NS * 2 + 1))], 0.3f, 18f);
                 k.Beam(new Vector3(pi.x, 0.3f, pi.y), new Vector3(pi.x, 18f, pi.y), 0.35f, 0.35f, White, LM.Solid, 1f);
                 k.Beam(new Vector3(po.x, 0.3f, po.y), new Vector3(po.x, 18f, po.y), 0.35f, 0.35f, White, LM.Solid, 1f);
             }
 
             // ---- athletics: an oval track round a pitch, a stand with a canopy
+            k.Part = 5;
             float sx = 140f, sz = -122f;
+            W(k, Wbs.Apron, 0f, 0.4f);
             k.Prism(LandmarkKit.RoundRect(sx, sz, 124f, 80f, 38f, 6), 0.3f, 0.38f, PaveDark, LM.Solid, 3f, Pave, LM.Paving);
+            W(k, Wbs.STrack, 0.38f, 0.5f);
             k.Prism(LandmarkKit.RoundRect(sx, sz, 112f, 68f, 34f, 6), 0.38f, 0.5f, Track, LM.Solid, 1f, Track, LM.Roof);
+            W(k, Wbs.SPitch, 0.5f, 0.56f);
             k.Prism(LandmarkKit.RoundRect(sx, sz, 86f, 42f, 21f, 6), 0.5f, 0.56f, CampusTurf, LM.Solid, 1f, CampusTurf, LM.Plant);
+            W(k, Wbs.SStand, 0.38f, 4.6f);
             for (int i = 0; i < 5; i++) k.Prism(LandmarkKit.Rect(sx, sz + 36f + i * 1.6f, 64f, 1.6f), 0.38f, 1.0f + i * 0.9f, Concrete, LM.Solid, 0.9f, White, LM.Paving);
+            W(k, Wbs.SCanopy, 0.38f, 9.1f);
             k.Prism(LandmarkKit.Rect(sx, sz + 39f, 68f, 10f), 8.6f, 9.1f, White, LM.Solid, 1f, White, LM.Roof, true);
             for (int i = 0; i < 5; i++) k.Beam(new Vector3(sx - 32f + i * 16f, 0.38f, sz + 44f), new Vector3(sx - 32f + i * 16f, 8.6f, sz + 44f), 0.5f, 0.5f, White, LM.Solid);
 
             // ---- paths linking the lake, the halls, the tower and the sports ground
+            k.Part = 6; W(k, Wbs.PPaths, 0f, 0.5f);
             Walk(k, new Vector2(lc.x + lrx + 12f, lc.y + 4f), new Vector2(112f, 20f), 5f);
-            Walk(k, new Vector2(150f, -16f), new Vector2(150f, sz + 47f), 5f);
+            Walk(k, new Vector2(85f, 9f), new Vector2(112f, sz + 47f), 5f);          // to the sports ground: branches off the path to the tower, west of its apron
             Walk(k, new Vector2(lc.x, lc.y + lrz + 12f), new Vector2(lc.x, 118f), 6f);
             Walk(k, new Vector2(lc.x - lrx - 12f, lc.y - 4f), new Vector2(-104f, -15f), 5f);
             Walk(k, new Vector2(lc.x + 40f, lc.y + lrz + 6f), new Vector2(92f, 88f), 4f);
@@ -1141,12 +1240,13 @@ namespace AlatauCity.DigitalTwin.Landmarks
             Vector2[] paths =
             {
                 new Vector2(lc.x + lrx + 12f, lc.y + 4f), new Vector2(112f, 20f),
-                new Vector2(150f, -16f), new Vector2(150f, sz + 47f), new Vector2(lc.x, lc.y + lrz + 12f), new Vector2(lc.x, 118f),
+                new Vector2(85f, 9f), new Vector2(112f, sz + 47f), new Vector2(lc.x, lc.y + lrz + 12f), new Vector2(lc.x, 118f),
                 new Vector2(lc.x - lrx - 12f, lc.y - 4f), new Vector2(-104f, -15f), new Vector2(lc.x + 40f, lc.y + lrz + 6f), new Vector2(92f, 88f),
                 new Vector2(lc.x - 40f, lc.y + lrz + 6f), new Vector2(-104f, 86f)
             };
             bool OnPath(float x, float z, float m) { var p = new Vector2(x, z); for (int i = 0; i < paths.Length; i += 2) if (DistSeg(p, paths[i], paths[i + 1]) < m) return true; return false; }
-            // the alley: two rows along the edge walk
+            // the alley: two rows along the edge walk (the park's last stage: planting)
+            W(k, Wbs.PTrees, 0.3f, 14f);
             foreach (float off in new[] { 192f, 205f })
             {
                 float hw = off, hd = off - 30f;
@@ -1163,6 +1263,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 if (Mathf.Abs(px) > 178f || Mathf.Abs(qz) > 148f) continue;                                                      // the alley is there
                 ParkTree(k, px, qz, 8f + 5f * Hash(qz, px), h);
             }
+            k.Part = 0; k.NoWin();
         }
 
         // ------------------------------------------------------------------ medical cluster: clinical podium, three ward towers, helipad

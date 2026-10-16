@@ -832,3 +832,43 @@
 .gfx-chip { flex-direction: row; align-items: center; margin: 0 8px 0 0; padding: 5px 9px 5px 7px; border-radius: 8px; border-width: 1px; border-color: var(--line2); }
 .gfx-chip:hover { border-color: var(--text2); }
 .gfx-chip Label { margin-left: 5px; font-size: 11px; color: var(--text2); }
+
+/* construction monitoring: the buildings of a complex, the investor panel */
+.mon-objs { margin-bottom: 6px; flex-wrap: wrap; justify-content: center; }
+.mon-obj { flex-direction: row; align-items: center; padding: 4px 10px 4px 8px; }
+.mon-obj .dot { margin-right: 6px; }
+.mon-obj-p { margin-left: 6px; font-size: 11px; color: var(--muted); }
+.mon-seg .btn.active .mon-obj-p { color: #3a3a3a; }
+.mon-opin Label { white-space: nowrap; font-size: 11px; padding: 3px 8px 3px 8px; background-color: rgba(16, 16, 16, 0.92); color: var(--text); border-width: 1px; border-color: var(--line2); border-radius: 6px; }
+.mon-opin .mon-stem { height: 16px; width: 1px; background-color: rgba(255, 255, 255, 0.55); }
+.mon-opin.sel Label { background-color: rgba(250, 250, 250, 0.96); color: #111111; }
+.mon-opin:hover Label { border-color: var(--text2); }
+.mon-td.m { width: 64px; -unity-text-align: upper-right; font-size: 11px; flex-shrink: 0; }
+.mon-tr.sel { background-color: rgba(91, 141, 239, 0.12); }
+.mon-g-sum .mon-g-label { -unity-font-definition: url("Fonts/Geologica-Medium.ttf"); }
+.mon-inv { height: 58%; max-height: 58%; }
+.mon-inv-kpis { flex-direction: row; margin: 4px 0 10px 0; flex-shrink: 0; }
+.mon-inv-k { flex-grow: 1; flex-basis: 0; margin-right: 8px; padding: 8px 12px 8px 12px; border-radius: 8px; background-color: #1a1a1a; }
+.mon-inv-cap { font-size: 10px; color: var(--muted); }
+.mon-inv-val { font-size: 22px; color: var(--text); -unity-font-definition: url("Fonts/Geologica-Light.ttf"); }
+.mon-inv-val.warn { color: var(--warn); }
+.mon-inv-val.bad { color: var(--bad); }
+.mon-inv-sub { font-size: 10px; color: var(--text2); white-space: normal; }
+.mon-inv-body { flex-direction: row; flex-grow: 1; flex-shrink: 1; min-height: 0; }
+.mon-inv-table { flex-grow: 1.5; flex-basis: 0; margin-right: 14px; overflow: hidden; }
+.mon-inv-tr { flex-direction: row; align-items: flex-start; padding: 5px 0 5px 8px; border-left-width: 2px; border-left-color: rgba(0, 0, 0, 0); border-bottom-width: 1px; border-bottom-color: var(--line); flex-shrink: 0; }
+.mon-inv-tr.ok { border-left-color: var(--ok); }
+.mon-inv-tr.warn { border-left-color: var(--warn); }
+.mon-inv-tr.bad { border-left-color: var(--bad); }
+.mon-inv-tr.sel { background-color: rgba(91, 141, 239, 0.12); }
+.mon-inv-tr:hover { background-color: rgba(255, 255, 255, 0.04); }
+.mon-inv-tr .mon-td { font-size: 11px; }
+.mon-td.o { flex-grow: 1.2; flex-basis: 0; min-width: 0; padding-right: 8px; }
+.mon-td.b { width: 64px; flex-shrink: 0; }
+.mon-td.r { width: 116px; flex-shrink: 0; padding-right: 14px; }
+.mon-td.e { width: 150px; flex-shrink: 0; padding-right: 8px; }
+.mon-td.c { flex-grow: 1; flex-basis: 0; min-width: 0; color: var(--text2); white-space: normal; }
+.mon-inv-n { font-size: 12px; margin-bottom: 3px; }
+.mon-inv-chartbox { flex-grow: 1; flex-basis: 0; }
+.mon-inv-chart { flex-grow: 1; min-height: 120px; margin-top: 6px; position: relative; }
+.mon-inv-mk { position: absolute; font-size: 9px; color: var(--text2); translate: -50% 0; }

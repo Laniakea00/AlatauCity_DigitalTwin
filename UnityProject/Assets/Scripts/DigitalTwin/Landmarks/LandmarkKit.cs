@@ -18,7 +18,17 @@ namespace AlatauCity.DigitalTwin.Landmarks
     {
         readonly List<Vector3> v = new List<Vector3>(), n = new List<Vector3>();
         readonly List<Color32> c = new List<Color32>();
-        readonly List<Vector2> uv0 = new List<Vector2>(), uv1 = new List<Vector2>();
+        readonly List<Vector2> uv0 = new List<Vector2>(), uv1 = new List<Vector2>(), uv2 = new List<Vector2>();
+        /// <summary>Building of a complex the next geometry belongs to (uv2.x; 0 = the plot): each building is staged on its own dates
+        /// (Landmark.Parts, AlatauLandmark _PartA / _PartB).</summary>
+        public int Part;
+        /// <summary>Stage window of the next geometry inside its building (uv3): it rises from y0 to y1 while the building's progress
+        /// goes from a to b, gets its facade and its grounds within that window, and is finished after it (zero = staged with the
+        /// whole building). Lets each building be put up in its real order (columns, transfer slab, box, roof …).</summary>
+        public Vector4 Window;
+        public void Win(float a, float b, float y0, float y1) => Window = new Vector4(a, b, y0, y1);
+        public void NoWin() => Window = Vector4.zero;
+        readonly List<Vector4> uv3 = new List<Vector4>();
         readonly List<int> t = new List<int>();
         public int VertexCount => v.Count;
         /// <summary>Sets the colour alpha of the vertices from 'start' to the end (AlatauLandmark: alpha = 1 − landscaping stage).</summary>
@@ -32,7 +42,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             bool flip = Vector3.Dot(nn, outward) < 0; nn = nn.normalized; if (flip) nn = -nn;
             int i = v.Count;
             v.Add(a); v.Add(b); v.Add(cc); v.Add(d);
-            for (int k = 0; k < 4; k++) { n.Add(nn); c.Add(col); uv1.Add(new Vector2(mat, prm)); }
+            for (int k = 0; k < 4; k++) { n.Add(nn); c.Add(col); uv1.Add(new Vector2(mat, prm)); uv2.Add(new Vector2(Part, 0f)); uv3.Add(Window); }
             uv0.Add(ua); uv0.Add(ub); uv0.Add(uc); uv0.Add(ud);
             if (!flip) { t.Add(i); t.Add(i + 1); t.Add(i + 2); t.Add(i); t.Add(i + 2); t.Add(i + 3); }
             else { t.Add(i); t.Add(i + 2); t.Add(i + 1); t.Add(i); t.Add(i + 3); t.Add(i + 2); }
@@ -41,7 +51,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
         {
             var nn = Vector3.Cross(b - a, cc - a); bool flip = Vector3.Dot(nn, outward) < 0; nn = nn.normalized; if (flip) nn = -nn;
             int i = v.Count; v.Add(a); v.Add(b); v.Add(cc);
-            for (int k = 0; k < 3; k++) { n.Add(nn); c.Add(col); uv1.Add(new Vector2(mat, prm)); }
+            for (int k = 0; k < 3; k++) { n.Add(nn); c.Add(col); uv1.Add(new Vector2(mat, prm)); uv2.Add(new Vector2(Part, 0f)); uv3.Add(Window); }
             uv0.Add(ua); uv0.Add(ub); uv0.Add(uc);
             if (!flip) { t.Add(i); t.Add(i + 1); t.Add(i + 2); } else { t.Add(i); t.Add(i + 2); t.Add(i + 1); }
         }
@@ -121,7 +131,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 v.Add(baseC + dir * r); v.Add(baseC + dir * r + Vector3.up * h);
                 n.Add(dir); n.Add(dir); c.Add(col); c.Add(col);
                 uv0.Add(new Vector2(circ * s / seg, baseC.y)); uv0.Add(new Vector2(circ * s / seg, baseC.y + h));
-                uv1.Add(new Vector2(mat, prm)); uv1.Add(new Vector2(mat, prm));
+                uv1.Add(new Vector2(mat, prm)); uv1.Add(new Vector2(mat, prm)); uv2.Add(new Vector2(Part, 0f)); uv2.Add(new Vector2(Part, 0f)); uv3.Add(Window); uv3.Add(Window);
             }
             for (int s = 0; s < seg; s++) { int a = i0 + s * 2; t.Add(a); t.Add(a + 1); t.Add(a + 3); t.Add(a); t.Add(a + 3); t.Add(a + 2); }
             if (topMat < 0) return;
@@ -225,7 +235,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
         public Mesh ToMesh(string name)
         {
             var m = new Mesh { name = name, indexFormat = v.Count > 65000 ? IndexFormat.UInt32 : IndexFormat.UInt16 };
-            m.SetVertices(v); m.SetNormals(n); m.SetColors(c); m.SetUVs(0, uv0); m.SetUVs(1, uv1); m.SetTriangles(t, 0); m.RecalculateBounds();
+            m.SetVertices(v); m.SetNormals(n); m.SetColors(c); m.SetUVs(0, uv0); m.SetUVs(1, uv1); m.SetUVs(2, uv2); m.SetUVs(3, uv3); m.SetTriangles(t, 0); m.RecalculateBounds();
             return m;
         }
     }
