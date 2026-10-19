@@ -49,69 +49,72 @@ namespace AlatauCity.DigitalTwin
         public static void Toggle() { if (Instance == null) return; if (Instance.running) Instance.Stop(); else Instance.Begin(); }
 
         // ------------------------------------------------------------------ video mode (F6)
-        // The investor video (about 1:50): 12 scenes of the tour cut to the voice-over in Resources/Video (ElevenLabs mp3). The scene
-        // lengths come from the pauses between the paragraphs of the voice-over, so picture and voice stay in step; every scene plays
-        // faster (Time.timeScale) so its content fits. Record the Game view (Unity Recorder, 30 fps) — the voice is recorded with it.
+        // The investor video in English (3:18): 15 scenes cut to the ElevenLabs voice-over in Resources/Video. Each scene is a tour step
+        // (or a scene of its own: Iconic rising to 2028, then inside the tower and its construction monitoring) and lasts exactly as long
+        // as its paragraphs of the voice-over; the step plays faster (Time.timeScale) so its content fits, the camera keeps its own pace.
+        // The interface switches to English for the video and back after it. Record with Alatau City → Record investor video
+        // (Game view, 30 fps constant): picture and voice are on one timeline from frame 0.
         public static bool VideoMode => Instance != null && Instance.video;
-        bool video, videoDone; AudioSource voice;
+        bool video, videoDone; AudioSource voice; string langBefore;
+        List<Step> tourSteps;                                   // the whole tour, for the navigator's list in the video
         /// <summary>The video reached the end of its last scene (the recorder stops on it).</summary>
         public static bool VideoDone => Instance != null && Instance.video && Instance.videoDone;
-        // (tour step, step seconds the scene needs to show its point)
-        static readonly (int step, float need)[] Cut = { (0, 10f), (1, 26f), (3, 32f), (5, 18f), (7, 14f), (11, 24f), (12, 8f), (13, 14f), (14, 22f), (16, 20f), (17, 22f), (19, 8f) };   // steps 15 (Smart City) and 18 (economy) are not in the 12.10 voice-over
-        // the ElevenLabs voice-over of 12.10.2026 (118.6 s): paragraph starts found by text length on the speech timeline, snapped to pauses
-        static readonly float[] CutBreaks = { 17.1f, 28.12f, 38.85f, 47.64f, 59.61f, 69.45f, 75.12f, 82.0f, 95.87f, 101.99f, 109.04f };
-        static readonly float[] CutFallback = { 15f, 10f, 10f, 8f, 11f, 9f, 6f, 7f, 12f, 6.5f, 6.5f, 9f };
+        const int RiseScene = -1, InsideScene = -2;
+        // (tour step or a special scene, step seconds the scene needs to show its point) — in the order of the voice-over
+        static readonly (int step, float need)[] Cut = {
+            (0, 16.6f), (1, 24f), (RiseScene, 24f), (InsideScene, 0f), (5, 18f), (7, 22f), (11, 22f), (12, 10f),
+            (13, 20f), (15, 24f), (14, 21f), (16, 18f), (17, 14f), (18, 25f), (19, 12f) };
+        // the voice-over of 15.10.2026 (196.6 s): the cuts sit in the pauses between its paragraphs (Iconic inside + monitoring + cameras
+        // is one scene of three paragraphs; the energy and AI paragraph is cut at its inner sentence), found from the text against the pauses
+        const float VoiceLen = 196.60f;
+        static readonly float[] CutBreaks = { 16.64f, 28.01f, 40.26f, 82.34f, 99.02f, 116.03f, 126.33f, 131.83f, 140.53f, 150.95f, 165.38f, 170.68f, 176.62f, 185.42f };
+        static readonly float[] CutFallback = { 16.6f, 11.4f, 12.3f, 42.1f, 16.7f, 17f, 10.3f, 5.5f, 8.7f, 10.4f, 14.4f, 5.3f, 5.9f, 8.8f, 12.7f };
+        /// <summary>The video is in English: the interface switches before the first frame (the recorder calls it a few seconds ahead).</summary>
+        public static void VideoLanguage() { var me = Instance; if (me == null) return; if (me.langBefore == null) me.langBefore = Loc.Language; UiTranslator.Persist = false; if (Loc.Language != "en") TwinState.SetLanguage("en"); }
         public static void ToggleVideo() { if (Instance == null) return; if (Instance.running) Instance.Stop(); else Instance.BeginVideo(); }
         void BeginVideo()
         {
             if (!TwinData.Ready || !CityStats.Ready) { Debug.LogWarning("[Alatau] video: data not ready"); return; }
+            VideoLanguage();
             Build();
             AudioClip clip = null; try { clip = Resources.LoadAll<AudioClip>("Video").FirstOrDefault(); } catch (Exception e) { Debug.LogWarning("[Alatau] video: " + e.Message); }
             float[] secs = null;
-            if (clip != null && Mathf.Abs(clip.length - 118.6f) < 1.5f)
-            { secs = new float[Cut.Length]; float prev = 0f; for (int i = 0; i < CutBreaks.Length; i++) { secs[i] = CutBreaks[i] - prev; prev = CutBreaks[i]; } secs[Cut.Length - 1] = clip.length - prev + 1.5f; }
-            else if (clip != null) secs = VoiceCuts(clip, Cut.Length);
-            if (secs == null) { secs = CutFallback; Debug.LogWarning("[Alatau] video: " + (clip == null ? "no voice-over in Resources/Video" : "pauses not found") + ", fixed scene lengths"); }
-            var all = steps.ToList(); steps.Clear();
+            if (clip != null && Mathf.Abs(clip.length - VoiceLen) < 1.0f)
+            { secs = new float[Cut.Length]; float prev = 0f; for (int i = 0; i < CutBreaks.Length; i++) { secs[i] = CutBreaks[i] - prev; prev = CutBreaks[i]; } secs[Cut.Length - 1] = VoiceLen - prev + 1.5f; }
+            if (secs == null) { secs = CutFallback; Debug.LogWarning("[Alatau] video: " + (clip == null ? "no voice-over in Resources/Video" : $"the voice-over is {clip.length:0.0} s, not the one of 15.10 ({VoiceLen} s)") + ", fixed scene lengths"); }
+            var all = steps.ToList(); steps.Clear(); tourSteps = all; NavReset();
             for (int i = 0; i < Cut.Length; i++)
             {
-                var st = all[Cut[i].step]; st.Speed = Mathf.Clamp(Cut[i].need / secs[i], 1f, 5f); st.End = secs[i] * st.Speed; steps.Add(st);
+                var st = Cut[i].step == RiseScene ? IconicRise(all[3]) : Cut[i].step == InsideScene ? IconicInside() : all[Cut[i].step];
+                st.Speed = Mathf.Clamp(Cut[i].need / secs[i], 1f, 5f); st.End = secs[i] * st.Speed; steps.Add(st);
             }
             Debug.Log("[Alatau] video scenes (s): " + string.Join(" | ", secs.Select((v, i) => $"{i + 1}: {v:0.0} ×{steps[i].Speed:0.0}")) + $" = {secs.Sum():0.0} s");
             video = true; videoDone = false; running = true; paused = false;
             if (clip != null) { if (voice == null) { voice = gameObject.AddComponent<AudioSource>(); voice.playOnAwake = false; voice.spatialBlend = 0f; } voice.clip = clip; voice.Play(); }
             Go(0);
         }
-        /// <summary>Scene lengths from the voice-over: the longest pauses are the breaks between paragraphs (11 paragraphs → 10 breaks);
-        /// the 10th paragraph (energy + AI) is split at its own longest pause. The last scene holds 1.5 s after the voice ends.</summary>
-        static float[] VoiceCuts(AudioClip clip, int n)
+        /// <summary>Video scene: Iconic rises to 2028, the year of its construction monitoring (the tour step goes on to 2030).</summary>
+        static Step IconicRise(Step s) => new Step { Seg = s.Seg, Zone = s.Zone, Module = s.Module, Year = 2026, Dur = 24f, AnimFrom = 2026, AnimTo = 2028, NoCard = s.NoCard,
+            Enter = s.Enter, Story = s.Story, Title = () => "Iconic Complex: the tower and its quarter, 2026 → 2028" };
+        /// <summary>Video scene of three paragraphs, in real time: into the tower (floors at different stages), the construction
+        /// monitoring (overview, the 4D schedule playing up to the survey date, plan and actual by floor), the site cameras.</summary>
+        static Step IconicInside() => new Step { Seg = 1, Zone = 0, Module = "construction", Year = 2028, Dur = 42f,
+            Title = () => "Iconic Complex: inside the tower · construction monitoring",
+            Enter = () => IconicInterior.Instance?.Enter("iconic"),
+            Shots = new[] {
+                At(5.6f, () => InsideFloor(IconicFloors.PServices)),
+                At(9.4f, () => InsideFloor(IconicFloors.PFrame)),
+                At(12.5f, () => IconicMonitor.Instance?.Show("iconic")),
+                At(15.8f, () => { IconicMonitor.Instance?.VideoTab(1); IconicMonitor.Instance?.VideoPlay(0.8f); }),
+                At(20.2f, () => IconicMonitor.Instance?.VideoTab(0)),
+                At(34.3f, () => IconicMonitor.Instance?.VideoTab(2)) } };
+        /// <summary>Inside the tower: the highest floor at a given stage of its works.</summary>
+        static void InsideFloor(int phase)
         {
-            try
-            {
-                int ch = Mathf.Max(1, clip.channels), sr = clip.frequency, len = clip.samples;
-                var data = new float[len * ch]; if (!clip.GetData(data, 0)) return null;
-                int win = Mathf.Max(1, sr / 50); int nw = len / win; if (nw < 100) return null;
-                var rms = new float[nw];
-                for (int w = 0; w < nw; w++) { double a = 0; for (int k = w * win; k < (w + 1) * win; k++) { float v = data[k * ch]; a += v * v; } rms[w] = (float)Math.Sqrt(a / win); }
-                var sorted = rms.OrderBy(v => v).ToArray(); float thr = Mathf.Max(0.004f, sorted[(int)(nw * 0.9f)] * 0.1f);
-                int first = Array.FindIndex(rms, v => v > thr), last = Array.FindLastIndex(rms, v => v > thr); if (first < 0 || last <= first) return null;
-                var runs = new List<(int a, int b)>();                 // silent runs inside the speech, in windows
-                for (int w = first; w <= last; w++) if (rms[w] <= thr) { int a = w; while (w <= last && rms[w] <= thr) w++; if (w - a >= 10) runs.Add((a, w)); }
-                if (runs.Count < 10) return null;
-                var paras = runs.OrderByDescending(r => r.b - r.a).Take(10).OrderBy(r => r.a).ToList();
-                var cuts = paras.Select(r => (r.a + r.b) * 0.5f).ToList();
-                // the energy + AI paragraph (between breaks 9 and 10) splits at its longest inner pause
-                float p0 = cuts[8], p1 = cuts[9];
-                var inner = runs.Where(r => r.a > p0 + 5 && r.b < p1 - 5).OrderByDescending(r => r.b - r.a).FirstOrDefault();
-                cuts.Insert(9, inner.b > 0 ? (inner.a + inner.b) * 0.5f : (p0 + p1) * 0.5f);
-                var secs = new float[n]; float prev = 0f;
-                for (int i = 0; i < n - 1; i++) { float c = cuts[i] * win / (float)sr; secs[i] = c - prev; prev = c; }
-                secs[n - 1] = clip.length - prev + 1.5f;
-                return secs.All(v => v > 1.5f) ? secs : null;
-            }
-            catch (Exception e) { Debug.LogWarning("[Alatau] video cuts: " + e.Message); return null; }
+            var ii = IconicInterior.Instance; var l = LS?.Get("iconic"); if (ii == null || !IconicInterior.Active || l == null) return;
+            float p = LandmarkSystem.Progress(l, LandmarkSystem.YearNow);
+            for (int i = IconicShape.Levels - 1; i >= 0; i--) if (IconicFloors.Phase(i, p, l.Height, out _) == phase) { ii.SetFloor(i); return; }
         }
-
         // ------------------------------------------------------------------ helpers
         static MapCamera Cam => Camera.main != null ? Camera.main.GetComponent<MapCamera>() : null;
         static LandmarkSystem LS => LandmarkSystem.Instance;
@@ -330,16 +333,24 @@ namespace AlatauCity.DigitalTwin
         }
         public void Stop()
         {
-            running = false; video = false; free = false; Time.timeScale = 1f; Notifier.TourToasts = false; SmartCityModule.TourHide(); if (voice != null) voice.Stop(); box?.RemoveFromClassList("video"); CityTimeline.StopGrowth(); if (box != null) box.style.display = DisplayStyle.None; story?.Hide(); TwinUI.Instance?.Middle?.RemoveFromClassList("tour-nocard"); host?.RemoveFromClassList("tour-on"); TwinUI.Instance?.Middle?.RemoveFromClassList("tour-on"); TwinUI.Instance?.Middle?.RemoveFromClassList("tour-gfa"); ReleaseCard();
+            if (IconicMonitor.Open) IconicMonitor.Instance.Close(); if (IconicInterior.Active) IconicInterior.Instance.ExitNow();
+            bool wasVideo = video; running = false; video = false; free = false; Time.timeScale = 1f; if (wasVideo) { VideoNav(false); TwinUI.Instance?.HidePopups(); } Notifier.TourToasts = false; SmartCityModule.TourHide(); if (voice != null) voice.Stop(); box?.RemoveFromClassList("video"); CityTimeline.StopGrowth(); if (box != null) box.style.display = DisplayStyle.None; story?.Hide(); TwinUI.Instance?.Middle?.RemoveFromClassList("tour-nocard"); host?.RemoveFromClassList("tour-on"); TwinUI.Instance?.Middle?.RemoveFromClassList("tour-on"); TwinUI.Instance?.Middle?.RemoveFromClassList("tour-gfa"); ReleaseCard();
             if (TwinState.Scenario != Scenario.Base) TwinState.Scenario = Scenario.Base;
             TwinState.SetDistrict(-1);
             TourFx.Instance?.Reset(); LrtLayer.Showcase = false;
             TwinState.SetModule("overview");             // panels built for the presentation (one district only) are rebuilt for normal work
             NavRefresh();
+            if (wasVideo) { NavReset(); tourSteps = null; }
+            if (wasVideo && langBefore != null && Loc.Language != langBefore) TwinState.SetLanguage(langBefore);   // the video is in English; the presenter's language comes back
+            if (wasVideo) UiTranslator.Persist = true;
+            langBefore = null;
         }
         void Go(int i)
         {
             idx = Mathf.Clamp(i, 0, steps.Count - 1); t = 0; var s = steps[idx]; CityTimeline.StopGrowth();
+            if (IconicMonitor.Open) IconicMonitor.Instance.Close();      // a step leaves the tower and its monitoring window at once
+            if (IconicInterior.Active) IconicInterior.Instance.ExitNow();
+            if (video) { VideoNav(false); TwinUI.Instance?.HidePopups(); }
             Time.timeScale = video ? s.Speed : 1f;
             TwinState.Playing = false; ConstructionModule.TourOverlays = false; LrtLayer.Showcase = false; Notifier.TourToasts = false; SmartCityModule.TourHide(); TourFx.Instance?.Reset(); if (TwinState.Selected != null) TwinState.SetSelected(null);
             if (LS != null && LS.Selected != null) LS.Select(null, false);    // each step opens its own passport, if any
@@ -351,6 +362,7 @@ namespace AlatauCity.DigitalTwin
             TwinUI.Instance?.Middle?.EnableInClassList("tour-gfa", s.Gfa);
             TwinUI.Instance?.Middle?.EnableInClassList("tour-nocard", s.NoCard);
             try { s.Enter?.Invoke(); } catch (Exception e) { Debug.LogWarning("[Alatau] tour step " + idx + ": " + e.Message); }
+            HideCard(s);                                                 // the step's object opened its passport: hidden before the first frame
             Caption();
             if (story != null) { if (s.Story != null) story.Show(s.Story); else story.Hide(); }
             NavRefresh();
@@ -412,6 +424,15 @@ namespace AlatauCity.DigitalTwin
         void JumpZone(int z) { int i = steps.FindIndex(s => s.Zone == z); if (i >= 0) Go(i); }
         void Next() { if (idx >= steps.Count - 1) { if (!free) Stop(); } else Go(idx + 1); }
 
+        /// <summary>The interface was rebuilt (a new language): the caption, the dashboard and the story come back on it.</summary>
+        void Rehost(Step s)
+        {
+            if (!running || (box != null && box.panel != null)) return;
+            Caption();
+            TwinUI.Instance?.Middle?.EnableInClassList("tour-gfa", s.Gfa); TwinUI.Instance?.Middle?.EnableInClassList("tour-nocard", s.NoCard);
+            if (story != null) { if (s.Story != null) story.Show(s.Story); else story.Hide(); }
+        }
+
         void Update()
         {
             if (Input.GetKeyDown(KeyCode.F5) && !MapCamera.Typing) { Toggle(); return; }
@@ -425,8 +446,8 @@ namespace AlatauCity.DigitalTwin
             // presenter shortcut: Shift + 1..8 jumps to the start of a part (Город, Gate, Golden, Growing, Green, ЛРТ, Двойник, Итог)
             if (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift))
                 for (int d = 0; d < 8; d++) if (Input.GetKeyDown(KeyCode.Alpha1 + d)) { int j = steps.FindIndex(x => x.Seg == d); if (j >= 0) { Go(j); return; } }
-            if (box == null || box.parent == null) Caption();
             var s = steps[idx];
+            Rehost(s);
             TourFx.Paused = paused;
             if (!paused && !(free && t >= s.EndT))                      // navigator: a step holds on its last frame, it does not move on
             {
@@ -448,6 +469,7 @@ namespace AlatauCity.DigitalTwin
                 }
                 if (t > 0.6f && t - Time.deltaTime <= 0.6f) Caption();     // modules refresh their summaries after the first frames
                 if (s.Shots != null) foreach (var (st, act) in s.Shots) if (t >= st && t - Time.deltaTime < st) { try { act(); } catch (Exception e) { Debug.LogWarning("[Alatau] tour shot: " + e.Message); } }
+                Rehost(s);                                              // a shot that switches the language rebuilds the interface: back on it in the same frame
                 if (t >= s.EndT) { if (free) t = s.EndT; else if (video && idx == steps.Count - 1) { paused = true; TourFx.Paused = true; videoDone = true; } else { Next(); return; } }   // the video holds its last frame
             }
             if (bar != null) bar.style.width = Length.Percent(100f * Mathf.Clamp01(t / s.EndT));
@@ -458,7 +480,14 @@ namespace AlatauCity.DigitalTwin
                 if (!paused) story.Tick();
             }
             FitCard();
-            if (s.NoCard) { var card = TwinUI.Instance?.Middle?.Q(className: "card"); if (card != null && card.style.display != DisplayStyle.None) card.style.display = DisplayStyle.None; }   // the dashboard takes the passport's place
+            HideCard(s);
+        }
+        void LateUpdate() { if (running && idx < steps.Count) HideCard(steps[idx]); }   // a passport the interface opened later in the frame
+        /// <summary>The dashboard takes the passport's place.</summary>
+        static void HideCard(Step s)
+        {
+            if (!s.NoCard) return;
+            var card = TwinUI.Instance?.Middle?.Q(className: "card"); if (card != null && card.style.display != DisplayStyle.None) card.style.display = DisplayStyle.None;
         }
     }
 }

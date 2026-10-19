@@ -490,9 +490,10 @@ namespace AlatauCity.DigitalTwin.Landmarks
             if (IconicInterior.Active) { flyT = -1f; return; }                                  // inside the tower: the interior drives the camera
             if (mc.IsFlying) { if (flyT >= 0f) flyT = -1f; mc.holdLift = false; return; }       // someone else (home view, district, tour) moves the camera
             if (MapCamera.UserMoved) { flyT = -1f; idle = 0f; return; }                         // the user takes over; the orbit waits
+            float dt = TwinTour.VideoMode ? TwinState.RealDelta : Time.deltaTime;               // the recorded video: the camera keeps its pace whatever the scene's speed-up
             if (flyT >= 0f)
             {
-                flyT += Time.deltaTime / flyDur; float t = Mathf.Clamp01(flyT);
+                flyT += dt / flyDur; float t = Mathf.Clamp01(flyT);
                 float e = t * t * (3f - 2f * t);                    // ease in/out
                 float lead = 1f - Mathf.Pow(1f - t, 2.2f);          // the target centres early, the zoom follows
                 float le = lead * lead * (3f - 2f * lead);
@@ -507,13 +508,13 @@ namespace AlatauCity.DigitalTwin.Landmarks
             var oc = orbitAt ?? sel.World; var site = new Vector3(oc.x, 0f, oc.z); var cur = mc.target; cur.y = 0f;
             bool near = Vector3.Distance(cur, site) < sel.Radius * 4f + 200f;
             mc.holdLift = near;
-            idle += Time.deltaTime;
+            idle += dt;
             if (!OrbitOn || !near || idle < 2.5f || TwinTour.Running && TwinTour.HoldCamera) return;
             // orbit: ramps up softly, drifts back to the object's centre and to its mid-height pivot
             float spd = 6f * Mathf.Clamp01((idle - 2.5f) / 1.5f);
-            float k = 1f - Mathf.Exp(-1.2f * Time.deltaTime);
+            float k = 1f - Mathf.Exp(-1.2f * dt);
             var tgt = Vector3.Lerp(cur, site, k);
-            mc.SetPose(tgt, mc.distance, mc.yaw + spd * Time.deltaTime, mc.pitch, Mathf.Lerp(mc.lift, orbitLift >= 0f ? orbitLift : FrameLift(sel), k));
+            mc.SetPose(tgt, mc.distance, mc.yaw + spd * dt, mc.pitch, Mathf.Lerp(mc.lift, orbitLift >= 0f ? orbitLift : FrameLift(sel), k));
         }
         // close-up: the orbit circles the point looked at, at its height
         Vector3? orbitAt; float orbitLift = -1f;

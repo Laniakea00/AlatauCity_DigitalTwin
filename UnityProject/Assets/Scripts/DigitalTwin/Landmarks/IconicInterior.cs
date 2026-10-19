@@ -138,7 +138,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 eye.y = IconicShape.FloorY(floor) + 1.62f;
             }
             Pivot();
-            Begin(0.7f, cutNow, CutFor());
+            Begin(TwinTour.VideoMode ? 1.6f : 0.7f, cutNow, CutFor());
             Refresh(true);
         }
         /// <summary>For the monitoring window (while Suspended): show floor i as built at the shown date, or hide the floor model.</summary>
@@ -282,11 +282,15 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 var r = Quaternion.Euler(mc.pitch, mc.yaw, 0f); rot = r; pos = mc.target - r * Vector3.forward * mc.distance;
             }
             else if (walk) { pos = model.TransformPoint(eye); rot = Quaternion.Euler(wpitch, wyaw, 0f); }
-            else { rot = Quaternion.Euler(opitch, oyaw, 0f); pos = pivot - rot * Vector3.forward * odist; }
+            else
+            {
+                if (TwinTour.VideoMode) oyaw += TwinState.RealDelta * 4f;          // the recorded video: a slow turn around the floor
+                rot = Quaternion.Euler(opitch, oyaw, 0f); pos = pivot - rot * Vector3.forward * odist;
+            }
             float cut = cutTo;
             if (tr >= 0f)
             {
-                tr += Time.unscaledDeltaTime / Mathf.Max(trDur, 0.01f); float t = Mathf.Clamp01(tr), e = t * t * (3f - 2f * t);
+                tr += TwinState.RealDelta / Mathf.Max(trDur, 0.01f); float t = Mathf.Clamp01(tr), e = t * t * (3f - 2f * t);
                 // the camera falls in along an arc (no straight line through the facade), the cut follows
                 var mid = Vector3.Lerp(trPos, pos, e) + Vector3.up * Mathf.Sin(t * Mathf.PI) * Mathf.Min(Vector3.Distance(trPos, pos) * 0.12f, 60f);
                 pos = mid; rot = Quaternion.Slerp(trRot, rot, e);
@@ -298,7 +302,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             cam.nearClipPlane = walk ? 0.12f : 0.6f; cam.farClipPlane = 60000f;
             // a wider lens at eye level (a room, not a map), back to the map's lens outside
             if (fov0 < 0f) fov0 = cam.fieldOfView;
-            cam.fieldOfView = Mathf.MoveTowards(cam.fieldOfView, walk && !leaving ? 64f : fov0, Time.unscaledDeltaTime * 30f);
+            cam.fieldOfView = Mathf.MoveTowards(cam.fieldOfView, walk && !leaving ? 64f : fov0, TwinState.RealDelta * 30f);
             if (!leaving) Refresh(false);
         }
         float fov0 = -1f;
@@ -314,7 +318,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
         void HandleInput()
         {
             if (IconicMonitor.Open || IconicMonitor.ClosedFrame >= Time.frameCount - 1) { dragging = false; return; }   // the monitoring window has the input
-            bool keys = !MapCamera.Typing; float dt = Time.unscaledDeltaTime;
+            bool keys = !MapCamera.Typing; float dt = TwinState.RealDelta;
             if (keys && Input.GetKeyDown(KeyCode.Escape)) { escFrame = Time.frameCount; if (walk) ToggleWalk(); else Exit(); return; }
             if (keys && (Input.GetKeyDown(KeyCode.PageUp) || Input.GetKeyDown(KeyCode.RightBracket))) { SetFloor(NextFloor(+1)); }
             if (keys && (Input.GetKeyDown(KeyCode.PageDown) || Input.GetKeyDown(KeyCode.LeftBracket))) { SetFloor(NextFloor(-1)); }

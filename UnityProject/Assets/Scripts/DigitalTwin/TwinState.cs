@@ -39,6 +39,9 @@ namespace AlatauCity.DigitalTwin
         public static void SetLanguage(string l) { if (l == Language) return; Language = l; Loc.Language = l; OnLanguageChanged?.Invoke(l); }
 
         public static bool Playing;
+        /// <summary>Seconds of this frame that do not follow the tour speed-up (Time.timeScale), taken from the game clock: when the video is
+        /// recorded the Unity Recorder advances it by a fixed step per frame while Time.unscaledDeltaTime is the wall clock, uneven.</summary>
+        public static float RealDelta => Time.timeScale > 1e-4f ? Time.deltaTime / Time.timeScale : Time.unscaledDeltaTime;
 
         public static event Action<int> OnYearChanged;
         public static event Action<Scenario> OnScenarioChanged;

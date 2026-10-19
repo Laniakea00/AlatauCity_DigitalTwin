@@ -38,7 +38,7 @@ namespace AlatauCity.DigitalTwin
             Shader.SetGlobalFloat(ScenIdx, (int)TwinState.Scenario);
             if (layers.TryGetValue("traffic", out var t) && t.enabled) UpdateTraffic();
             // a local jam over the traffic layer (situational centre): red builds up around the incident, turns green after the decision
-            float dt = Mathf.Min(Time.unscaledDeltaTime, 0.1f);
+            float dt = Mathf.Min(TwinState.RealDelta, 0.1f);
             jamNow = Mathf.MoveTowards(jamNow, jamTarget, dt * 0.7f); clearNow = Mathf.MoveTowards(clearNow, clearTarget, dt * 0.22f);
             Shader.SetGlobalVector(JamId, new Vector4(jamC.x, jamC.y, jamR, jamNow * (1f - clearNow)));
             Shader.SetGlobalFloat(JamClearId, clearNow);

@@ -58,9 +58,9 @@ namespace AlatauCity.DigitalTwin.UI
             if (!Data.TwinData.Ready || !CityStats.Ready || TwinUI.Instance == null) return;
             if (year != TwinState.Year) ResetDay(TwinState.Year);
             Attach();
-            if (toast != null && toastLeft > 0f) { toastLeft -= Time.unscaledDeltaTime; if (toastLeft <= 0f) { toast.RemoveFromClassList("show"); toast.style.opacity = 0f; } }
+            if (toast != null && toastLeft > 0f) { toastLeft -= TwinState.RealDelta; if (toastLeft <= 0f) { toast.RemoveFromClassList("show"); toast.style.opacity = 0f; } }
             if (TwinTour.Running) return;                 // the presentation decides when an event comes
-            wait -= Time.unscaledDeltaTime;
+            wait -= TwinState.RealDelta;
             if (wait <= 0f) { wait = 30f + Random.value * 15f; Push(true); }
         }
 

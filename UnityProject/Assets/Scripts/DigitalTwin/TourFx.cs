@@ -67,11 +67,20 @@ namespace AlatauCity.DigitalTwin
             if (glide == null || Paused) return;
             var cam = Cam; if (cam == null) return;
             if (MapCamera.UserMoved || Landmarks.LandmarkSystem.Instance?.Selected != null) { glide = null; return; }          // the presenter takes the camera: the glide gives way
-            if (cam.IsFlying) cam.StopFly();                       // a district / module change may start its own flight: the presentation's glide wins
+            bool vid = TwinTour.VideoMode;
+            if (cam.IsFlying && !vid) cam.StopFly();               // a district / module change may start its own flight: the presentation's glide wins
             glide.T += Time.deltaTime;
             float u = Mathf.Clamp01(glide.T / glide.Dur), e = u * u * (3f - 2f * u);
             var p = Vector2.Lerp(glide.A, glide.B, e);
             float d = Mathf.Lerp(glide.D0, glide.D1, e), y = Mathf.Lerp(glide.Yaw0, glide.Yaw1, e), pt = Mathf.Lerp(glide.P0, glide.P1, e);
+            if (vid)
+            {
+                // the recorded video: the camera follows the glide with the eased fly-to of the video (from the last scene's view it rises
+                // over the city on a long way instead of rushing low across it); set every frame, so the glide wins over other flights
+                cam.FlyTo(new MapCamera.View { name = "glide", target = new Vector3(p.x, CityGround.HeightAt(p.x, p.y), p.y), distance = d, yaw = y, pitch = pt });
+                if (u >= 1f) glide = null;
+                return;
+            }
             // blend in from where the camera was
             float bl = Mathf.Clamp01(glide.T / 3f); bl = bl * bl * (3f - 2f * bl);
             var tgt = Vector3.Lerp(glide.StartT, new Vector3(p.x, 0, p.y), bl);

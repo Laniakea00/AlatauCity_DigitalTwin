@@ -69,7 +69,7 @@ namespace AlatauCity.DigitalTwin.UI
         void Tick()
         {
             if (panel == null) return;
-            float dt = Mathf.Min(Time.unscaledDeltaTime, 0.05f) * Time.timeScale; if (TourFx.Paused) dt = 0; t += dt;   // follows the video mode speed-up
+            float dt = Mathf.Min(TwinState.RealDelta, 0.05f) * Time.timeScale; if (TourFx.Paused) dt = 0; t += dt;   // follows the video mode speed-up
             // 1. typing: the question in the language of the screen, typed in the same time whatever its length
             var qs = UiTranslator.Tr(Question);
             int n = Mathf.Clamp(Mathf.FloorToInt((t - 0.6f) / (0.075f * Question.Length / Mathf.Max(qs.Length, 1))), 0, qs.Length); q.text = qs.Substring(0, n);

@@ -27,13 +27,19 @@ namespace AlatauCity.DigitalTwin
         Vector3 dragStart; bool dragging, pressedOnMap; Camera cam;
         // smooth fly-to
         Vector3 goT; float goD, goY, goP; bool flying;
+        Vector3 vT; float vD, vY, vP; int flyFrame;      // fly-to speeds of the recorded video (eased moves), the last frame it moved
         public bool IsDragging => dragging;
         public bool IsFlying => flying;
         /// <summary>Drops a fly-to in progress (a landmark fly-in takes over the camera).</summary>
         public void StopFly() { flying = false; }
         public bool PressedOnMap => pressedOnMap;
         void Start() { cam = GetComponent<Camera>(); Apply(); }
-        public void FlyTo(View v) { if (v == null) return; Yield(); goT = v.target; goD = v.distance; goY = v.yaw; goP = v.pitch; flying = true; }
+        public void FlyTo(View v)
+        {
+            if (v == null) return; Yield();
+            if (!flying && Time.frameCount - flyFrame > 1) { vT = Vector3.zero; vD = vY = vP = 0f; }   // from rest; a move that goes on keeps its speed
+            goT = v.target; goD = v.distance; goY = v.yaw; goP = v.pitch; flying = true;
+        }
         /// <summary>Someone moves the map camera while the camera is inside Iconic Complex: leave the tower first.</summary>
         static void Yield() { if (Landmarks.IconicInterior.Active && !Landmarks.IconicInterior.Driving) Landmarks.IconicInterior.Instance.ExitNow(); }
         /// <summary>Nearest zoom: a selected landmark can be looked at from close by (facade, cranes, the working level).</summary>
@@ -81,7 +87,18 @@ namespace AlatauCity.DigitalTwin
             }
             else dragging = false;
             if (!Input.GetMouseButton(0) && !Input.GetMouseButton(1) && !Input.GetMouseButtonUp(0) && !Input.GetMouseButtonUp(1)) pressedOnMap = false;
-            if (flying)
+            if (flying && TwinTour.VideoMode)
+            {
+                // the recorded video: the move starts and ends softly and takes the same time whatever the speed-up of the scene. A long way
+                // rises over the city and the ground never runs past faster than 0.8 view distances a second: no low rush across the map;
+                // the zoom keeps to about a factor of 3 a second (no snap back from a close-up)
+                const float st = 0.4f; float udt = TwinState.RealDelta; flyFrame = Time.frameCount;
+                float way = new Vector2(goT.x - target.x, goT.z - target.z).magnitude;
+                target = Vector3.SmoothDamp(target, goT, ref vT, st, 0.8f * distance, udt); distance = Mathf.SmoothDamp(distance, Mathf.Max(goD, way * 0.7f), ref vD, st, 1.2f * distance, udt);
+                yaw = Mathf.SmoothDampAngle(yaw, goY, ref vY, st, Mathf.Infinity, udt); pitch = Mathf.SmoothDamp(pitch, goP, ref vP, st, Mathf.Infinity, udt);
+                if ((target - goT).magnitude < 1f && Mathf.Abs(distance - goD) < 1f) flying = false;
+            }
+            else if (flying)
             {
                 float k = 1f - Mathf.Exp(-4f * dt);
                 target = Vector3.Lerp(target, goT, k); distance = Mathf.Lerp(distance, goD, k); yaw = Mathf.LerpAngle(yaw, goY, k); pitch = Mathf.Lerp(pitch, goP, k);

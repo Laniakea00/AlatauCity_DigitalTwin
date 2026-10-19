@@ -349,6 +349,11 @@ namespace AlatauCity.DigitalTwin.Landmarks
             IconicInterior.Suspended = false;
             if (ui != null) MapCamera.BlockInput = ui.PointerOverChrome;
         }
+        // ------------------------------------------------------------------ the recorded video (TwinTour video mode)
+        float playStop = -1f;
+        public void VideoTab(int t) { if (open) SetTab(t); }
+        /// <summary>The 4D schedule plays from <paramref name="back"/> years before the survey date up to it and stops there.</summary>
+        public void VideoPlay(float back) { if (!open) return; SetDate(Report - back, true); playStop = Report; playing = true; dirty = true; }
         void RestoreYear() { if (prevYear > 0 && TwinState.Year != prevYear) TwinState.Year = prevYear; prevYear = -1; }
         void OnDestroy() { if (monRT != null) monRT.Release(); if (bgRT != null) bgRT.Release(); foreach (var rt in camRT) if (rt != null) rt.Release(); }
 
@@ -471,7 +476,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
         {
             if (!open) return;
             if (!IconicInterior.Active) { Close(); return; }
-            float dt = Time.unscaledDeltaTime; phase += dt;
+            float dt = TwinState.RealDelta; phase += dt;
             if (!MapCamera.Typing)
             {
                 if (Input.GetKeyDown(KeyCode.Escape)) { if (view == View.Cam) SetView(View.Floor); else { Close(); return; } }
@@ -483,6 +488,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             if (playing)
             {
                 SetDate(date + dt * Speed);
+                if (playStop > 0f && date >= playStop) { SetDate(playStop); playing = false; playStop = -1f; dirty = true; }
                 if (date >= T1 - 1e-4f) playing = false;
             }
             if (!scrubbing) SyncCityYear();
@@ -506,8 +512,9 @@ namespace AlatauCity.DigitalTwin.Landmarks
         void LateUpdate()
         {
             if (!open || mon == null || model == null) return;
-            float dt = Time.unscaledDeltaTime;
+            float dt = TwinState.RealDelta;
             Vector3 pos; Quaternion rot; float fov = 40f;
+            if (TwinTour.VideoMode && view != View.Cam) yaw += dt * 3f;        // the recorded video: the model turns slowly
             if (view == View.Cam)
             {
                 CamPose(camIx, out pos, out rot, true, camYawOff, camPitchOff); fov = camFov;
@@ -1148,7 +1155,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             for (int i = 0; i < 4; i++) tileBox[i]?.EnableInClassList("on", view == View.Cam && camIx == i);
             int wf = WorkFloor(shownP);
             string vs = view == View.Complex ? (obj >= 0 ? "КОМПЛЕКС · " + Pt(obj).Name.ToUpper() : "КОМПЛЕКС") : view == View.Tower ? (obj >= 0 && obj != TI ? Pt(obj).Name.ToUpper() : IconicShape.P.Tower.ToUpper()) : view == View.Floor ? IconicFloors.Name(Mathf.Max(focusFloor, 0)).ToUpper() : CamId[camIx] + " · " + CamName[camIx].ToUpper();
-            hud.text = "4D · " + (planMode ? "ПЛАН" : fc ? "ПРОГНОЗ" : "ФАКТ") + " НА " + Day(date) + " · " + vs;
+            hud.text = UiTranslator.Tr("4D · " + (planMode ? "ПЛАН" : fc ? "ПРОГНОЗ" : "ФАКТ") + " НА " + Day(date) + " · " + vs);
 
             // the selected work
             aTitle.text = w.Code + " " + w.Name;
@@ -1242,7 +1249,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
                     pin.style.left = Length.Percent(vp.x * 100f); pin.style.top = Length.Percent((1f - vp.y) * 100f);
                     var w = works[sel]; int ph = IconicFloors.Phase(focusFloor, Mathf.Min(shownP, 0.998f), H, out float fr);
                     string what = w.Phase > 0 && ph == w.Phase ? (w.Core ? "Ядро · подъём опалубки" : w.Phase == 1 ? "Армирование и опалубка" : w.Name) : IconicFloors.PhaseNow[ph];
-                    pinText.text = IconicFloors.Name(focusFloor) + " · " + what + (ph > 0 && ph < IconicFloors.PReady ? " · " + Mathf.RoundToInt(fr * 100f) + " %" : "");
+                    pinText.text = UiTranslator.Tr(IconicFloors.Name(focusFloor) + " · " + what + (ph > 0 && ph < IconicFloors.PReady ? " · " + Mathf.RoundToInt(fr * 100f) + " %" : ""));   // set every frame, after the interface was translated
                 }
             }
             pin.style.display = on ? DisplayStyle.Flex : DisplayStyle.None;

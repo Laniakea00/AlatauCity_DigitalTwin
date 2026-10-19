@@ -12,7 +12,7 @@ namespace AlatauCity.DigitalTwin.UI
         public static FeedRig Instance;
         public static RenderTexture Texture => Instance != null ? Instance.rt : null;
         Camera cam; RenderTexture rt; float next; int users;
-        Vector3 pos; float heading, pitch = 14f, span = 28f; float t0;
+        Vector3 pos; float heading, pitch = 14f, span = 28f; float ptz;
 
         public static FeedRig Ensure()
         {
@@ -31,7 +31,7 @@ namespace AlatauCity.DigitalTwin.UI
         public void Look(SmartCity.Cctv c)
         {
             if (c == null) return;
-            pos = c.World; heading = c.Heading; t0 = Time.unscaledTime;
+            pos = c.World; heading = c.Heading; ptz = 0f;
             // the view looks down at the street in front of the camera, not into the sky
             float g = CityGround.HeightAt(pos.x, pos.z); float h = Mathf.Max(18f, pos.y - g);
             pitch = Mathf.Clamp(Mathf.Atan2(h, 340f) * Mathf.Rad2Deg, 5f, 20f);
@@ -42,11 +42,11 @@ namespace AlatauCity.DigitalTwin.UI
         void LateUpdate()
         {
             if (users <= 0) return;
-            next -= Time.unscaledDeltaTime; if (next > 0f) return; next = 0.1f;
+            float rd = TwinState.RealDelta; ptz += rd; next -= rd; if (next > 0f) return; next = 0.1f;
             var main = Camera.main; if (main == null) return;
             cam.CopyFrom(main); cam.enabled = false; cam.targetTexture = rt; cam.fieldOfView = 52f;
             cam.nearClipPlane = 1f; cam.farClipPlane = 20000f;
-            float yaw = heading + Mathf.Sin((Time.unscaledTime - t0) * 0.18f) * span;   // PTZ: slow pan left — right
+            float yaw = heading + Mathf.Sin(ptz * 0.18f) * span;   // PTZ: slow pan left — right
             cam.transform.SetPositionAndRotation(pos, Quaternion.Euler(pitch, yaw, 0f));
             try { cam.Render(); } catch (Exception e) { Debug.LogWarning("[Alatau] feed: " + e.Message); users = 0; }
         }

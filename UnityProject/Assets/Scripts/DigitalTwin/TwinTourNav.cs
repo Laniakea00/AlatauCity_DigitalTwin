@@ -96,10 +96,10 @@ namespace AlatauCity.DigitalTwin
             var mr = new VisualElement(); mr.AddToClassList("tnav-chips"); c.Add(mr);
             mr.Add(Widgets.Btn("Весь город", () => NavMap(Overview), "small", "ghost"));
             for (int d = 0; d < 4; d++) { int dd = d; var b = Widgets.Btn(CityStats.DistrictIds[d], () => NavMap(() => FrameZone(dd)), "small", "ghost"); b.style.color = CityStats.DistrictColors[d]; mr.Add(b); }
-            int seg = -1;
-            for (int i = 0; i < steps.Count; i++)
+            int seg = -1; var list = video && tourSteps != null ? tourSteps : steps;      // the video shows the whole tour, not its own scenes
+            for (int i = 0; i < list.Count; i++)
             {
-                var s = steps[i];
+                var s = list[i];
                 if (s.Seg != seg) { seg = s.Seg; Head(c, SegName[seg], seg >= 1 && seg <= 4 ? CityStats.DistrictColors[seg - 1] : seg == 5 ? LrtC : (Color?)null); }
                 string title; try { title = s.Title != null ? s.Title() : ""; } catch { title = ""; }
                 int ii = i; var it = new VisualElement(); it.AddToClassList("tnav-item");
@@ -125,6 +125,17 @@ namespace AlatauCity.DigitalTwin
             }
             ui.BlockWhileHovered(navPop); navHost.Add(navPop);
         }
+        /// <summary>The video's navigator scene: the bar (and the list, while «list» is on) without the navigator's own state.</summary>
+        void VideoNav(bool on, string now = null, bool list = true)
+        {
+            if (!on) { if (navBar != null && !navOpen) { navBar.style.display = DisplayStyle.None; if (navPop != null) navPop.style.display = DisplayStyle.None; TwinUI.Instance?.Middle?.RemoveFromClassList("tnav-on"); } return; }
+            NavEnsure(); if (navBar == null) return;
+            navBar.style.display = DisplayStyle.Flex; ShowList(list); TwinUI.Instance?.Middle?.AddToClassList("tnav-on");
+            if (navNow != null && now != null) navNow.text = now;
+            navBack?.SetEnabled(!list);
+        }
+        /// <summary>The bar and the list are built again next time (the video lists the whole tour, the navigator its steps).</summary>
+        void NavReset() { navBar?.RemoveFromHierarchy(); navPop?.RemoveFromHierarchy(); navBar = null; navPop = null; navItems.Clear(); }
         static void Head(VisualElement c, string text, Color? col)
         {
             var h = new VisualElement { pickingMode = PickingMode.Ignore }; h.AddToClassList("tnav-head");
@@ -133,7 +144,7 @@ namespace AlatauCity.DigitalTwin
         }
         void NavRefresh()
         {
-            if (navBar == null) return;
+            if (navBar == null || video) return;
             if (navNow != null)
             {
                 string now = "Карта";
