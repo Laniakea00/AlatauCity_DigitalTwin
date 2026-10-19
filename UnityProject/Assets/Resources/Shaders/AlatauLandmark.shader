@@ -32,6 +32,9 @@ Shader "AlatauCity/Landmark"
         float _Reveal, _Build, _Ghost, _Hi, _Facade, _Land, _Glow, _H, _Park;
         // buildings of a complex (LandmarkSystem.Parts): x reveal, y build, z facade, w landscaping · x glow, y height, z outline, w progress
         float4 _PartA[8], _PartB[8];
+        // BIM look of the construction monitoring (4D page), set only around its own camera: 0 off, 1 built parts as flat slate
+        // solids and what is not built yet as a light wire lattice of the design model, 2 the same without the lattice
+        float _AlatauBim;
         // fm = facade metres (xy) and material (zw); lp = local height, building of the complex; win = stage window inside the building
         struct Input { float4 color : COLOR; float4 fm; float2 lp; float4 win; float3 worldPos; float3 worldNormal; float4 screenPos; };
         void vert(inout appdata_full v, out Input o)
@@ -75,7 +78,16 @@ Shader "AlatauCity/Landmark"
             bool green = IN.fm.zw.y < -4.5 && IN.fm.zw.y > -5.5;
             bool parkTree = IN.fm.zw.y < -8.5;
             bool keep = pid <= 0 && (parkTree || green);
-            if (!keep) clip(rev - IN.lp.x);
+            bool bim = _AlatauBim > 0.5;
+            bool wire = bim && _AlatauBim < 1.5 && pid > 0 && !keep && rev - IN.lp.x < 0.0;
+            if (bim && IN.fm.zw.y < -6.5) clip(-1.0);                         // BIM: no trees
+            if (!keep && !wire) clip(rev - IN.lp.x);
+            // BIM lines: a floor every 4 m and a grid line every 6 m along the facade (on walls), screen-width thin
+            float bimWall = 1.0 - saturate(abs(n.y) * 3.0);
+            float bimFloor = 1.0 - saturate(abs(frac(IN.lp.x / 4.0 + 0.5) - 0.5) * 4.0 / max(lyW * 1.2, 1e-4));
+            float bimGrid = 1.0 - saturate(abs(frac(uv.x / 6.0 + 0.5) - 0.5) * 6.0 / max(fw.x * 1.2, 1e-4));
+            float bimLine = max(bimFloor, bimGrid) * bimWall;
+            if (wire) clip(bimLine - 0.3);
             if (_Ghost > 0.01)
             {
                 float2 sp = IN.screenPos.xy / max(IN.screenPos.w, 1e-4) * _ScreenParams.xy;
@@ -228,6 +240,22 @@ Shader "AlatauCity/Landmark"
             float rim = pow(1.0 - saturate(dot(n, view)), 4.0);
             emit += hiP * (rim * 0.7 + 0.03) * float3(0.85, 0.30, 0.95);
             o.Albedo = a; o.Emission = emit + a * amb; o.Specular = spec; o.Alpha = 1;
+            if (bim)
+            {
+                // flat slate solids shaded by facing; the ground of the plot dark; a frame without its facade concrete-light; the
+                // working level keeps its orange edge; the design model not built yet glows as a thin blue lattice
+                float3 sl = float3(0.40, 0.45, 0.53);
+                if (IN.lp.x < 1.2 && n.y > 0.6) sl = float3(0.17, 0.19, 0.23);
+                else if (bld > 0.5 && IN.lp.x > fcd && IN.lp.x > 1.2) sl = float3(0.63, 0.65, 0.68);
+                float bsh = 0.58 + 0.30 * saturate(n.y * 0.5 + 0.5) + 0.14 * saturate(dot(n, normalize(float3(0.45, 0.25, -0.35))));
+                float3 bc = sl * bsh * (1.0 - 0.22 * bimLine);
+                float edgeB = bld > 0.5 ? saturate(1.0 - (rev - IN.lp.x) / 1.6) * bimWall : 0.0;
+                bc = lerp(bc, float3(0.98, 0.52, 0.10), edgeB);
+                float rimB = pow(1.0 - saturate(dot(n, view)), 3.0);
+                o.Albedo = bc * 0.22; o.Specular = 0;
+                o.Emission = bc * 0.82 + float3(0.55, 0.70, 0.95) * rimB * 0.12 + hiP * (rimB * 0.7 + 0.03) * float3(0.85, 0.30, 0.95);
+                if (wire) { o.Albedo = 0; o.Emission = float3(0.42, 0.62, 0.92) * (0.45 + 0.4 * bimLine); }
+            }
         }
         ENDCG
     }

@@ -304,80 +304,92 @@ namespace AlatauCity.DigitalTwin.Landmarks
             if (!built) return;
             float y = YearNow;
             HoverPick();
-            foreach (var n in nodes.Values)
+            foreach (var n in nodes.Values) Apply(n, y, Time.deltaTime, false);
+            if (Input.GetKeyDown(KeyCode.Escape) && Selected != null && !MapCamera.Typing && !IconicInterior.EscTaken) Select(null, false);
+        }
+        /// <summary>Shows landmark id as of date y in the next picture taken (the construction monitoring compares two surveys in one
+        /// frame: it renders the second date, then calls ApplyAt(id, YearNow) to put the first one back). No hand-over light, nothing moves.</summary>
+        public void ApplyAt(string id, float y) { if (built && nodes.TryGetValue(id, out var n)) Apply(n, y, 0f, true); }
+        /// <summary>The stages of one landmark at date y for the shader, its site and cranes. probe: a picture of another date (ApplyAt),
+        /// the hand-over light and what remembers the last frame are left alone.</summary>
+        void Apply(Node n, float y, float dt, bool probe)
+        {
+            float p = Progress(n.L, y);
+            bool ghost = p <= 0f && ShowPlanned;
+            bool on = p > 0f || ghost;
+            if (n.Go.activeSelf != on) n.Go.SetActive(on);
+            // completion: a sweep of light runs up the building once, in the moment it is handed over
+            if (!probe)
             {
-                float p = Progress(n.L, y);
-                bool ghost = p <= 0f && ShowPlanned;
-                bool on = p > 0f || ghost;
-                if (n.Go.activeSelf != on) n.Go.SetActive(on);
-                // completion: a sweep of light runs up the building once, in the moment it is handed over
                 if (n.lastP >= 0f && n.lastP < 0.999f && p >= 0.999f) n.glow = 0f;
                 n.lastP = p;
-                if (n.glow >= 0f) { n.glow += Time.deltaTime / 2.6f; if (n.glow > 1f) n.glow = -1f; }
-                if (!on) continue;
-                float target = (n.L == Selected ? 0.12f : 0f) + (n.L == Hovered ? 0.45f : 0f);
-                n.hi = Mathf.MoveTowards(n.hi, Mathf.Min(target, 0.9f), Time.deltaTime * 3f);
-                bool building = !ghost && p < 0.999f;
-                float H = n.L.Height;
-                // stages: site + excavation → frame rises → facade follows bottom-up → paving and planting → handed over
-                float frame = H * Mathf.Clamp01((p - 0.08f) / 0.62f), facade = H * Mathf.Clamp01((p - 0.25f) / 0.65f), land = Mathf.Clamp01((p - 0.85f) / 0.13f);
-                n.R.GetPropertyBlock(n.B);
-                float reveal = ghost || !building ? 100000f : Mathf.Max(frame, 0.6f);
-                if (CutAt >= 0f && n.L.Id == CutId) reveal = Mathf.Min(reveal, CutAt);
-                n.B.SetFloat(RevealId, reveal);
-                n.B.SetFloat(BuildId, building ? 1f : 0f);
-                n.B.SetFloat(FacadeId, building ? facade : 100000f);
-                n.B.SetFloat(LandId, building ? land : 1f);
-                n.B.SetFloat(GlowId, n.glow);
-                n.B.SetFloat(HeightId, H);
-                n.B.SetFloat(GhostId, ghost ? 1f : 0f);
-                n.B.SetFloat(HiId, n.hi);
-                if (n.L.Parts != null) Parts(n, y, ghost);
-                n.R.SetPropertyBlock(n.B);
-                if (n.Flyer != null) { bool f = !ghost && !building; if (!f && n.Flyer.gameObject.activeSelf) n.Flyer.gameObject.SetActive(false); if (f) Fly(n, Time.deltaTime); }
-                // site: hoarding and cranes while building (the cranes leave once the facade is closed)
-                if (n.Site != null)
+                if (n.glow >= 0f) { n.glow += dt / 2.6f; if (n.glow > 1f) n.glow = -1f; }
+            }
+            if (!on) return;
+            float target = (n.L == Selected ? 0.12f : 0f) + (n.L == Hovered ? 0.45f : 0f);
+            n.hi = Mathf.MoveTowards(n.hi, Mathf.Min(target, 0.9f), dt * 3f);
+            bool building = !ghost && p < 0.999f;
+            float H = n.L.Height;
+            // stages: site + excavation → frame rises → facade follows bottom-up → paving and planting → handed over
+            float frame = H * Mathf.Clamp01((p - 0.08f) / 0.62f), facade = H * Mathf.Clamp01((p - 0.25f) / 0.65f), land = Mathf.Clamp01((p - 0.85f) / 0.13f);
+            n.R.GetPropertyBlock(n.B);
+            float reveal = ghost || !building ? 100000f : Mathf.Max(frame, 0.6f);
+            if (CutAt >= 0f && n.L.Id == CutId) reveal = Mathf.Min(reveal, CutAt);
+            n.B.SetFloat(RevealId, reveal);
+            n.B.SetFloat(BuildId, building ? 1f : 0f);
+            n.B.SetFloat(FacadeId, building ? facade : 100000f);
+            n.B.SetFloat(LandId, building ? land : 1f);
+            n.B.SetFloat(GlowId, probe ? -1f : n.glow);
+            n.B.SetFloat(HeightId, H);
+            n.B.SetFloat(GhostId, ghost ? 1f : 0f);
+            n.B.SetFloat(HiId, n.hi);
+            if (n.L.Parts != null) Parts(n, y, ghost, dt, probe);
+            n.R.SetPropertyBlock(n.B);
+            if (n.Flyer != null && !probe) { bool f = !ghost && !building; if (!f && n.Flyer.gameObject.activeSelf) n.Flyer.gameObject.SetActive(false); if (f) Fly(n, dt); }
+            // site: hoarding and cranes while building (the cranes leave once the facade is closed)
+            if (n.Site != null)
+            {
+                bool siteOn = building && p > 0f;
+                if (n.Site.activeSelf != siteOn) n.Site.SetActive(siteOn);
+                if (siteOn)
                 {
-                    bool siteOn = building && p > 0f;
-                    if (n.Site.activeSelf != siteOn) n.Site.SetActive(siteOn);
-                    if (siteOn)
+                    // the cranes serve the tallest building (the tower of a complex): they climb with its frame and leave with its facade
+                    float tp = n.L.Parts != null ? TowerP(n.L, y) : p, th = n.L.Parts != null && n.L.Main >= 0 ? n.L.Parts[n.L.Main].H : H;
+                    bool cranes = tp > 0f && tp < 0.93f;
+                    float top = Mathf.Max(th * Mathf.Clamp01((tp - 0.08f) / 0.62f) + 14f, 34f);
+                    foreach (var c in n.Cranes)
                     {
-                        // the cranes serve the tallest building (the tower of a complex): they climb with its frame and leave with its facade
-                        float tp = n.L.Parts != null ? TowerP(n.L, y) : p, th = n.L.Parts != null && n.L.Main >= 0 ? n.L.Parts[n.L.Main].H : H;
-                        bool cranes = tp > 0f && tp < 0.93f;
-                        float top = Mathf.Max(th * Mathf.Clamp01((tp - 0.08f) / 0.62f) + 14f, 34f);
-                        foreach (var c in n.Cranes)
-                        {
-                            if (c.Mast.gameObject.activeSelf != cranes) { c.Mast.gameObject.SetActive(cranes); c.Head.gameObject.SetActive(cranes); }
-                            if (!cranes) continue;
-                            c.MastR.GetPropertyBlock(c.B); c.B.SetFloat(RevealId, top); c.B.SetFloat(BuildId, 0f); c.B.SetFloat(GlowId, -1f); c.B.SetFloat(LandId, 1f); c.B.SetFloat(FacadeId, 100000f); c.MastR.SetPropertyBlock(c.B);
-                            c.Yaw += c.Speed * Time.deltaTime * (0.6f + 0.4f * Mathf.Sin(Time.time * 0.21f + c.Speed));
-                            c.Head.localPosition = c.Mast.localPosition + Vector3.up * (top - 0.3f);
-                            c.Head.localRotation = Quaternion.Euler(0f, c.Yaw, 0f);
-                        }
+                        if (c.Mast.gameObject.activeSelf != cranes) { c.Mast.gameObject.SetActive(cranes); c.Head.gameObject.SetActive(cranes); }
+                        if (!cranes) continue;
+                        c.MastR.GetPropertyBlock(c.B); c.B.SetFloat(RevealId, top); c.B.SetFloat(BuildId, 0f); c.B.SetFloat(GlowId, -1f); c.B.SetFloat(LandId, 1f); c.B.SetFloat(FacadeId, 100000f); c.MastR.SetPropertyBlock(c.B);
+                        c.Yaw += c.Speed * dt * (0.6f + 0.4f * Mathf.Sin(Time.time * 0.21f + c.Speed));
+                        c.Head.localPosition = c.Mast.localPosition + Vector3.up * (top - 0.3f);
+                        c.Head.localRotation = Quaternion.Euler(0f, c.Yaw, 0f);
                     }
                 }
             }
-            if (Input.GetKeyDown(KeyCode.Escape) && Selected != null && !MapCamera.Typing && !IconicInterior.EscTaken) Select(null, false);
         }
         /// <summary>Stages of every building of a complex for the shader: each rises, gets its facade and its grounds on its own dates
         /// (part 0, the plot, follows the whole complex). Not started → not drawn; handed over → a sweep of light runs up it.</summary>
-        void Parts(Node n, float y, bool ghost)
+        void Parts(Node n, float y, bool ghost, float dt, bool probe)
         {
             var l = n.L; int main = l.Main;
             for (int i = 0; i < l.Parts.Count && i < 7; i++)
             {
                 var pt = l.Parts[i]; float pp = PartP(l, i, y); int k = i + 1;
-                if (n.LastPP[k] >= 0f && n.LastPP[k] < 0.999f && pp >= 0.999f) n.GlowP[k] = 0f;
-                n.LastPP[k] = pp;
-                if (n.GlowP[k] >= 0f) { n.GlowP[k] += Time.deltaTime / 2.6f; if (n.GlowP[k] > 1f) n.GlowP[k] = -1f; }
+                if (!probe)
+                {
+                    if (n.LastPP[k] >= 0f && n.LastPP[k] < 0.999f && pp >= 0.999f) n.GlowP[k] = 0f;
+                    n.LastPP[k] = pp;
+                    if (n.GlowP[k] >= 0f) { n.GlowP[k] += dt / 2.6f; if (n.GlowP[k] > 1f) n.GlowP[k] = -1f; }
+                }
                 bool b = !ghost && pp < 0.999f; float h = pt.H;
                 float fr = h * Mathf.Clamp01((pp - 0.08f) / 0.62f), fa = h * Mathf.Clamp01((pp - 0.25f) / 0.65f), la = Mathf.Clamp01((pp - 0.85f) / 0.13f);
                 if (pt.Land) { fr = 100000f; fa = 100000f; la = Mathf.Clamp01((pp - 0.05f) / 0.9f); }
                 float rv = ghost || !b ? 100000f : pp <= 0f ? 0f : Mathf.Max(fr, 0.6f);
                 if (CutAt >= 0f && l.Id == CutId && i == main) rv = Mathf.Min(rv, CutAt);
                 n.PA[k] = new Vector4(rv, b ? 1f : 0f, b ? fa : 100000f, b ? la : 1f);
-                n.PB[k] = new Vector4(n.GlowP[k], h, HiObj == l.Id && HiPart == i ? 1f : 0f, ghost ? 1f : pp);      // w: progress, for the pieces' own windows
+                n.PB[k] = new Vector4(probe ? -1f : n.GlowP[k], h, HiObj == l.Id && HiPart == i ? 1f : 0f, ghost ? 1f : pp);      // w: progress, for the pieces' own windows
             }
             n.PA[0] = new Vector4(-1f, 0f, 0f, 0f);                // slot 0 unused: part 0 takes the object's own values
             n.B.SetVectorArray(PartAId, n.PA); n.B.SetVectorArray(PartBId, n.PB);
