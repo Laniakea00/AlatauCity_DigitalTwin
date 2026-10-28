@@ -19,7 +19,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
         // the sections; the index is what the recorded video asks for (VideoTab 0, 1, 2)
         const int TObj = 0, T4D = 1, TVid = 2, TInv = 3, TSurv = 4;
         static readonly (string icon, string name, int tab)[] Rail =
-            { ("house", "Объект", TObj), ("history", "Съёмки", TSurv), ("box", "4D", T4D), ("video", "Видео", TVid), ("presentation", "Инвестору", TInv) };
+            { ("house", "Объект", TObj), ("gauge", "Аналитика", TAn), ("history", "Съёмки", TSurv), ("box", "4D", T4D), ("video", "Видео", TVid), ("presentation", "Инвестору", TInv) };
         static readonly string[] District = { "Gate District", "Golden District", "Growing District", "Green District" };
 
         VisualElement overlay, body, pin, top, gantt, track, strip, viewSw, dimSw, tools;
@@ -103,6 +103,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             BuildStrip();
             BuildSurveyBar();
             BuildVideo();                                       // the camera wall covers the whole page
+            BuildAnalytics();                                   // so does the analytics
 
             (mid.parent ?? mid).Add(overlay);                 // the root of the interface: it carries the style sheet, the window covers the header too
             RebuildLists(); SetTab(tab); Refresh();
@@ -170,10 +171,10 @@ namespace AlatauCity.DigitalTwin.Landmarks
             for (int i = 0; i < railBtns.Count; i++) railBtns[i].EnableInClassList("on", Rail[i].tab == t);
             Vis(objL, t == TObj); Vis(objR, t == TObj); Vis(tools, t == TObj);
             Vis(svL, t == TSurv); Vis(svR, t == TSurv); Vis(svBar, t == TSurv); Vis(svTools, t == TSurv); Vis(svOver, t == TSurv);
-            if (t != TSurv) { Vis(chrono, false); Vis(cmpClip, false); Vis(cmpDiv, false); Vis(chipL, false); Vis(chipR, false); }
+            if (t != TSurv) { Vis(chrono, false); Vis(diffLeg, false); Vis(cmpClip, false); Vis(cmpDiv, false); Vis(chipL, false); Vis(chipR, false); }
             Vis(d4L, t == T4D); Vis(d4R, t == T4D); Vis(gantt, t == T4D && ganttOn); Vis(stg, t == T4D && !ganttOn);
-            Vis(strip, t == T4D || t == TInv); Vis(inv, t == TInv);
-            Vis(top, t != TVid); Vis(viewSw, t == TObj || t == TInv); Vis(dimSw, t == TSurv || t == T4D);
+            Vis(strip, t == T4D || t == TInv); Vis(inv, t == TInv); Vis(anPage, t == TAn);
+            Vis(top, t != TVid && t != TAn); Vis(viewSw, t == TObj || t == TInv); Vis(dimSw, t == TSurv || t == T4D);
             Vis(vidPage, t == TVid && view != View.Cam); Vis(camBar, t == TVid && view == View.Cam);
             body?.EnableInClassList("mon-t4d", t == T4D && !ganttOn);
             body?.EnableInClassList("mon-tsurv", t == TSurv);         // the right column stands left of the tool rail: the top bar keeps clear of it
@@ -200,7 +201,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
         {
             if (overlay == null || works.Count == 0) return;
             bool fc = date > Report + 0.002f;
-            headDate.text = (tab == TSurv ? "съёмка " : fc ? "прогноз на " : planMode ? "план на " : "факт на ") + Day(date);
+            headDate.text = (tab == TAn ? "аналитика на " : tab == TSurv ? "съёмка " : fc ? "прогноз на " : planMode ? "план на " : "факт на ") + Day(tab == TAn ? Report : date);
             stripDate.text = Day(date);
             stripMode.text = planMode ? "показан план" : fc ? "прогноз после съёмки" : "факт по съёмке";
             playIcon.style.backgroundImage = new StyleBackground(Resources.Load<Texture2D>("UI/Icons/i_" + (playing ? "pause" : "play")));
@@ -210,7 +211,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             for (int i = 0; i < dimBtns.Count; i++) dimBtns[i].EnableInClassList("active", (i == 1) == (view == View.Plan));
             string vs = view == View.Complex ? (obj >= 0 ? "КОМПЛЕКС · " + Pt(obj).Name.ToUpper() : "КОМПЛЕКС") : view == View.Tower ? (obj >= 0 && obj != TI ? Pt(obj).Name.ToUpper() : IconicShape.P.Tower.ToUpper())
                 : view == View.Floor ? IconicFloors.Name(Mathf.Max(focusFloor, 0)).ToUpper() : view == View.Plan ? "ПЛАН УЧАСТКА" : CamId[camIx] + " · " + CamName[camIx].ToUpper();
-            hud.text = UiTranslator.Tr(tab == TSurv ? (view == View.Plan ? "ОРТОФОТОПЛАН · " : "3D-МОДЕЛЬ ПО СЪЁМКЕ · ") + Day(date) + (svB >= 0 ? " · СРАВНЕНИЕ С " + Day(surveys[svB]) : "")
+            hud.text = UiTranslator.Tr(tab == TSurv ? (view == View.Plan ? "ОРТОФОТОПЛАН · " : "3D-МОДЕЛЬ ПО СЪЁМКЕ · ") + Day(date) + (DiffOn ? " · ИЗМЕНЕНИЯ С " + Day(diffY0) : svB >= 0 ? " · СРАВНЕНИЕ С " + Day(surveys[svB]) : "")
                 : (tab == T4D ? "BIM 4D · " : "4D · ") + (planMode ? "ПЛАН" : fc ? "ПРОГНОЗ" : "ФАКТ") + " НА " + Day(date) + " · " + vs);   // set after the interface was translated
             var os = new OS[L.Parts.Count]; for (int i = 0; i < os.Length; i++) os[i] = Obj(i, date);
             RefreshObjects(os);
@@ -346,12 +347,12 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 r.Add(Widgets.Btn("Просмотреть", go, "small"));
             }
             N(now.AddMinutes(-4), "truck", "Въехал бетоновоз", "КПП-1 · CAM-05", Blue, () => OpenCam(5));
-            N(now.AddMinutes(-17), "truck", "Выехал самосвал с грунтом", "КПП-1 · CAM-05", Green, () => OpenCam(5));
             N(now.AddMinutes(-38), "hard_hat", "Подъём опалубки ядра на этаж", "CAM-07 · кран над захваткой", Orange, () => OpenCam(0));
-            N(now.AddMinutes(-56), "truck", "Въехал автокран 50 т", "КПП-1 · CAM-05", Blue, () => OpenCam(5));
             int worst = -1, wd = 3;
             for (int i = 0; i < L.Parts.Count; i++) { var o = Obj(i, Report); if (o.Fact > 0f && o.Fact < 0.999f && o.Days > wd) { wd = o.Days; worst = i; } }
             if (worst >= 0) { int k = worst; N(now.Date.AddHours(8).AddMinutes(25), "triangle_alert", "Отставание " + wd + " дн. · " + Pt(k).Name, "по съёмке " + Day(Report), new Color(0.96f, 0.65f, 0.14f), () => { SetTab(T4D); SelectObj(k, true); }); }
+            if (anCrew >= 0) { Sum(trades[anCrew], out int need, out int have); N(now.Date.AddHours(8).AddMinutes(40), "user_x", $"Не хватает {Loc.N0(need - have)} человек · {Pt(anCrew).Name}", "видеоаналитика · аналитика", new Color(0.96f, 0.65f, 0.14f), () => SetTab(TAn)); }
+            if (anTot.Over > 0f) N(now.Date.AddHours(8).AddMinutes(15), "wallet", $"Прогноз стоимости {SMln(anTot.Over)} к бюджету", NetOver > 0f ? "резерва не хватает · аналитика" : "в пределах резерва · аналитика", NetOver > 0f ? new Color(1f, 0.35f, 0.31f) : new Color(0.96f, 0.65f, 0.14f), () => SetTab(TAn));
             N(now.Date.AddHours(8).AddMinutes(10), "history", "Загружена съёмка " + Day(Report), "ортофотоплан и 3D-модель площадки", Blue, () => SetTab(TSurv));
         }
         void OpenCam(int i) { SetTab(TVid); camIx = i; camYawOff = camPitchOff = 0f; camFov = 58f; view = View.Cam; crewSeen = -1; SetTab(TVid); }
@@ -384,19 +385,22 @@ namespace AlatauCity.DigitalTwin.Landmarks
         // ================================================================== Съёмки
         readonly List<float> surveys = new List<float>();
         int svA, svB = -1, svTool; float split = 0.5f;
-        bool svPlan = true, lyBase = true, lyBim = true, lyGcp = true, lyDiff = true;
+        bool svPlan = false, lyBase = true, lyBim = true, lyGcp = true, lyDiff = true;
         VisualElement cmpClip, cmpDiv, svOver, svBar, svTools, chrono, chronoList, lyList, zoneChart, chgList;
         Image photoB; Label chipL, chipR, chipA, chipB, attrib, lyText, zoneTitle, zP, zF, zD, chgSub, chronoText;
         readonly List<Button> lyBtns = new List<Button>(); readonly List<Button> svToolBtns = new List<Button>();
         bool pickB;
         Camera mon2; RenderTexture monRT2;
-        /// <summary>The surveys of the site: a flight every two months back from the last one (at most eight), not before the works start.</summary>
+        /// <summary>The surveys of the site as on its QTwin page, from the start of the works to the end: the plot before the works, then a
+        /// flight every four months or so, the last one at the hand-over. Opens on the last one, the finished complex.</summary>
         void MakeSurveys()
         {
             surveys.Clear();
-            for (int k = 0; k < 8; k++) { float d = Report - k * (2f / 12f); if (d < L.Begin + 0.06f) break; surveys.Insert(0, d); }
-            if (surveys.Count == 0) surveys.Add(Report);
-            svA = surveys.Count - 1; svB = -1; split = 0.5f;
+            // from the plot before the works to the handover, about every four months
+            float a = L.Begin - 0.2f, b = L.Finish + 0.05f; int n = Mathf.Clamp(Mathf.RoundToInt((b - a) * 3f), 4, 14);
+            for (int k = 0; k <= n; k++) surveys.Add(a + (b - a) * k / n);
+            svA = 0; for (int k = 1; k < surveys.Count; k++) if (Mathf.Abs(surveys[k] - Report) < Mathf.Abs(surveys[svA] - Report)) svA = k;
+            Report = surveys[svA]; svB = -1; split = 0.5f; svDiff = false; diffY0 = diffY1 = -2f;
         }
         float LastSurvey(float d) { float s = surveys.Count > 0 ? surveys[0] : Report; foreach (var x in surveys) if (x <= d + 1e-4f) s = x; return s; }
         static float Gsd(int i) => 2.4f + 0.3f * ((i * 7) % 4);
@@ -416,6 +420,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             cmpDiv.RegisterCallback<PointerUpEvent>(e => { if (cmpDiv.HasPointerCapture(e.pointerId)) cmpDiv.ReleasePointer(e.pointerId); });
             chipL = new Label { pickingMode = PickingMode.Ignore }; chipL.AddToClassList("mon-chip"); body.Add(chipL);
             chipR = new Label { pickingMode = PickingMode.Ignore }; chipR.AddToClassList("mon-chip"); chipR.AddToClassList("cur"); body.Add(chipR);
+            BuildDiffLegend();
         }
         void BuildSurvey()
         {
@@ -428,7 +433,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             Layer("Ортофотоплан и город", () => lyBase, v => lyBase = v);
             Layer("BIM-контуры зданий", () => lyBim, v => lyBim = v);
             Layer("Контрольные точки (GCP)", () => lyGcp, v => lyGcp = v);
-            Layer("Изменения между съёмками", () => lyDiff, v => lyDiff = v);
+            Layer("Прирост над зданиями", () => lyDiff, v => lyDiff = v);
             MonitorCard(svL);
             var zc = Card(svL);
             zoneTitle = Head(zc, "chart_line", "Прогресс зоны");
@@ -481,6 +486,14 @@ namespace AlatauCity.DigitalTwin.Landmarks
         void BuildSurveyBar()
         {
             svBar = new VisualElement(); svBar.AddToClassList("mon-svbar"); body.Add(svBar);
+            diffBtn = new Button(() => { svDiff = !svDiff; diffBtn.EnableInClassList("on", svDiff); if (svDiff) Vis(chrono, false); dirty = true; }) { focusable = false };
+            diffBtn.AddToClassList("mon-gitbtn");
+            var gb = new VisualElement { pickingMode = PickingMode.Ignore }; gb.AddToClassList("mon-tgl-box"); diffBtn.Add(gb);
+            var gp = new Label("+") { pickingMode = PickingMode.Ignore }; gp.AddToClassList("mon-git-p"); diffBtn.Add(gp);
+            var gm = new Label("−") { pickingMode = PickingMode.Ignore }; gm.AddToClassList("mon-git-m"); diffBtn.Add(gm);
+            diffBtn.Add(new Label("Что изменилось") { pickingMode = PickingMode.Ignore });
+            svBar.Add(diffBtn);
+            var sep = new VisualElement { pickingMode = PickingMode.Ignore }; sep.AddToClassList("mon-svbar-sep"); svBar.Add(sep);
             var cl = new Label("Сравнение") { pickingMode = PickingMode.Ignore }; cl.AddToClassList("mon-svbar-k"); svBar.Add(cl);
             var a = new Button(() => OpenChrono(false, true)) { focusable = false }; a.AddToClassList("mon-dchip"); a.AddToClassList("cur");
             a.Add(TwinUI.Icon("calendar", 14)); chipA = new Label { pickingMode = PickingMode.Ignore }; a.Add(chipA); svBar.Add(a);
@@ -512,7 +525,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 var tx = new VisualElement { pickingMode = PickingMode.Ignore }; tx.style.flexGrow = 1; r.Add(tx);
                 var d = new Label(Day(surveys[k])) { pickingMode = PickingMode.Ignore }; d.AddToClassList("mon-work"); tx.Add(d);
                 var s = new Label("ортофото " + Loc.N1(Gsd(k)) + " см/пикс · 3D-модель · " + Loc.N0(Shots(k)) + " снимков") { pickingMode = PickingMode.Ignore }; s.AddToClassList("mon-src"); tx.Add(s);
-                var tag = new Label(k == svA ? "текущий" : k == svB ? "сравнение" : "") { pickingMode = PickingMode.Ignore }; tag.AddToClassList("mon-tag"); if (tag.text.Length > 0) r.Add(tag);
+                var tag = new Label(k == svA ? "текущий" : k == svB ? "сравнение" : k == surveys.Count - 1 ? "сдача объекта" : k == 0 ? "до начала работ" : "") { pickingMode = PickingMode.Ignore }; tag.AddToClassList("mon-tag"); if (tag.text.Length > 0) r.Add(tag);
                 chronoList.Add(r);
             }
         }
@@ -526,7 +539,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
         void RefreshSurvey()
         {
             chipA.text = Day(surveys[svA]) + "  текущий";
-            chipB.text = svB >= 0 ? Day(surveys[svB]) : "Выберите дату";
+            chipB.text = svB >= 0 ? Day(surveys[svB]) : svDiff && svA > 0 ? Day(surveys[svA - 1]) + " · предыдущая" : "Выберите дату";
             chronoText.text = "Хронология съёмок · " + surveys.Count;
             attrib.text = "Ортофотоплан " + Day(surveys[svA]) + (svB >= 0 ? " и " + Day(surveys[svB]) : "") + " · " + Loc.N1(Gsd(svA)) + " см/пикс · сценарий двойника";
             // the zone: the building looked at, else the tower
@@ -553,6 +566,14 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 r.Add(Cell(Pct(a), "n")); r.Add(Cell(Pct(b), "n"));
                 var dl = Cell(b - a > 0.0005f ? "+" + Loc.N1((b - a) * 100f) + " п.п." : "—", "d"); dl.EnableInClassList("ok", b - a > 0.0005f); r.Add(dl);
             }
+            chgList.EnableInClassList("git", svDiff);
+            if (svDiff)
+                foreach (var (t, plus) in SiteChanges())
+                {
+                    var r = new VisualElement(); r.AddToClassList("mon-tr"); r.AddToClassList(plus ? "git-add" : "git-del"); chgList.Add(r);
+                    var c0 = new VisualElement(); c0.AddToClassList("w"); c0.AddToClassList("mon-td"); r.Add(c0);
+                    var nl = new Label((plus ? "+ " : "− ") + t) { pickingMode = PickingMode.Ignore }; nl.AddToClassList("mon-work"); c0.Add(nl);
+                }
         }
         /// <summary>What was built on building i between two surveys, in words (the tower: floors of the frame and of the facade).</summary>
         string ChangeText(int i, float a, float b)
@@ -576,10 +597,89 @@ namespace AlatauCity.DigitalTwin.Landmarks
             if (tab != TSurv || svB < 0 || body == null) return false;
             var b = body.worldBound; return Mathf.Abs(x - (b.xMin + b.width * split)) < 48f;
         }
+        // ---- "Что изменилось": two surveys like a diff before a push
+        bool svDiff; float diffY0 = -2f, diffY1 = -2f; string diffId;
+        Button diffBtn; VisualElement diffLeg, diffStat; Label diffHead, diffNote;
+        /// <summary>The diff is drawn: the surveys page with the filter on and a survey before the one shown.</summary>
+        bool DiffOn => svDiff && tab == TSurv && diffY0 >= 0f && open;
+        /// <summary>The earlier survey of the diff: the compared one, else the one before the shown one; −1 none (the first survey).</summary>
+        float DiffBase() => svB >= 0 ? surveys[svB] : svA > 0 ? surveys[svA - 1] : -1f;
+        /// <summary>Every frame: the stages of the earlier survey go to the shader when a date changes; the legend follows.</summary>
+        void Diff()
+        {
+            var ls = LandmarkSystem.Instance; if (ls == null || L == null) return;
+            bool on = svDiff && tab == TSurv && monRT != null;
+            // a diff reads from the older date to the newer one: the compared survey later than the shown one swaps them
+            if (on && svB > svA) { int a = svA; svA = svB; svB = a; SetDate(surveys[svA], true); }
+            if (diffId != null && diffId != L.Id) { ls.DiffFrom(diffId, -1f, -1f); diffY0 = diffY1 = -2f; }
+            float y0 = on ? DiffBase() : -1f, y1 = on && y0 >= 0f ? LandmarkSystem.YearNow : -1f;
+            if (Mathf.Abs(y0 - diffY0) > 1e-5f || Mathf.Abs(y1 - diffY1) > 1e-5f)
+            {
+                diffY0 = y0; diffY1 = y1; diffId = L.Id;
+                ls.DiffFrom(L.Id, y0 >= 0f ? y0 : -1f, y1);
+                DiffLegend();
+            }
+            Vis(diffLeg, on); if (on) diffLeg.BringToFront();
+        }
+        /// <summary>The changes of the site between the two dates: the hoarding and the tower cranes (true = appeared).</summary>
+        List<(string, bool)> SiteChanges()
+        {
+            var r = new List<(string, bool)>(); var ls = LandmarkSystem.Instance;
+            if (ls == null || diffY0 < 0f || !ls.DiffSite(L.Id, out bool s0, out bool s1, out bool c0, out bool c1, out int n)) return r;
+            if (!s0 && s1) r.Add(("Ограждение площадки установлено", true));
+            if (!c0 && c1 && n > 0) r.Add(("Башенные краны: " + n + " шт. смонтированы", true));
+            if (c0 && !c1 && n > 0) r.Add(("Башенные краны: " + n + " шт. демонтированы", false));
+            if (s0 && !s1) r.Add(("Ограждение и бытовой городок сняты", false));
+            return r;
+        }
+        void BuildDiffLegend()
+        {
+            diffLeg = new VisualElement { pickingMode = PickingMode.Ignore }; diffLeg.AddToClassList("mon-gitleg"); diffLeg.style.display = DisplayStyle.None; body.Add(diffLeg);
+            var h = new VisualElement { pickingMode = PickingMode.Ignore }; h.AddToClassList("mon-gitleg-h"); diffLeg.Add(h);
+            diffHead = new Label { pickingMode = PickingMode.Ignore }; diffHead.AddToClassList("mon-gitleg-t"); h.Add(diffHead);
+            diffStat = new VisualElement { pickingMode = PickingMode.Ignore }; diffStat.AddToClassList("mon-gitleg-stat"); h.Add(diffStat);
+            var k = new VisualElement { pickingMode = PickingMode.Ignore }; k.AddToClassList("mon-gitleg-k"); diffLeg.Add(k);
+            foreach (var (cls, t) in new[] { ("add", "Появилось: каркас, конструкции"), ("fin", "Появилось: фасад, благоустройство"), ("del", "Убрано: краны, ограждение"), ("same", "Без изменений") })
+            {
+                var it = new VisualElement { pickingMode = PickingMode.Ignore }; it.AddToClassList("mon-gitleg-i"); k.Add(it);
+                var sw = new VisualElement { pickingMode = PickingMode.Ignore }; sw.AddToClassList("mon-gitleg-sw"); sw.AddToClassList(cls); it.Add(sw);
+                it.Add(new Label(t) { pickingMode = PickingMode.Ignore });
+            }
+            diffNote = new Label { pickingMode = PickingMode.Ignore }; diffNote.AddToClassList("mon-gitleg-n"); diffLeg.Add(diffNote);
+        }
+        /// <summary>The head of the legend: the two dates and the summary of the change, + in blue and − in red, like a diff stat.</summary>
+        void DiffLegend()
+        {
+            if (diffLeg == null) return;
+            diffStat.Clear();
+            if (diffY0 < 0f)
+            {
+                diffHead.text = "ЧТО ИЗМЕНИЛОСЬ · " + Day(date);
+                diffNote.text = "Первая съёмка, до начала работ: сравнивать не с чем. Выберите дату позже."; Vis(diffNote, true);
+                return;
+            }
+            Vis(diffNote, false);
+            diffHead.text = "ЧТО ИЗМЕНИЛОСЬ · " + Day(diffY0) + " → " + Day(diffY1);
+            var st = new List<(string, bool)>();
+            float a = FactP(TI, diffY0), b = FactP(TI, diffY1);
+            int f0 = Count(a, IconicFloors.PFacade), f1 = Count(b, IconicFloors.PFacade), g0 = Count(a, IconicFloors.PFacade + 1), g1 = Count(b, IconicFloors.PFacade + 1);
+            if (f1 > f0) st.Add(("+" + (f1 - f0) + " эт. каркаса", true));
+            if (g1 > g0) st.Add(("+" + (g1 - g0) + " эт. фасада", true));
+            for (int i = 0; i < L.Parts.Count; i++)
+            {
+                float p0 = FactP(i, diffY0), p1 = FactP(i, diffY1);
+                if (p0 <= 0f && p1 > 0f) st.Add(("+ " + Pt(i).Short + ": старт", true));
+                else if (p0 < 0.999f && p1 >= 0.999f) st.Add(("+ " + Pt(i).Short + ": сдан", true));
+            }
+            foreach (var (t, plus) in SiteChanges()) if (!plus) st.Add(("− " + (t.StartsWith("Башенные") ? "краны" : "ограждение"), false));
+            if (st.Count == 0) st.Add(("без изменений", true));
+            foreach (var (t, plus) in st) { var l = new Label(t) { pickingMode = PickingMode.Ignore }; l.AddToClassList(plus ? "plus" : "minus"); diffStat.Add(l); }
+        }
         void SplitTo(float x) { var b = body.worldBound; split = Mathf.Clamp((x - b.xMin) / Mathf.Max(b.width, 1f), 0.03f, 0.97f); dirty = true; }
         void Compare()
         {
-            bool on = tab == TSurv && svB >= 0 && monRT != null;
+            Diff();
+            bool on = tab == TSurv && svB >= 0 && monRT != null && !svDiff;
             Vis(cmpClip, on); Vis(cmpDiv, on); Vis(chipL, on); Vis(chipR, on);
             if (!on) return;
             if (mon2 == null) { var g = new GameObject("Iconic monitoring · second survey"); g.transform.SetParent(transform, false); mon2 = g.AddComponent<Camera>(); mon2.enabled = false; }
@@ -966,7 +1066,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
         float Crew(float d, bool fact)
         {
             float s = 0f;
-            for (int i = 0; i < L.Parts.Count; i++) { float q = fact ? FactP(i, d) : PlanP(i, d); if (q > 0f && q < 1f) s += Pt(i).Capex * 3.4f * Mathf.Pow(Mathf.Sin(q * Mathf.PI), 0.7f); }
+            for (int i = 0; i < L.Parts.Count; i++) { float q = fact ? FactP(i, d) : PlanP(i, d); if (q > 0f && q < 1f) s += Pt(i).Capex * 3.4f * Mathf.Pow(Mathf.Sin(q * Mathf.PI), 0.7f) * (fact ? 1f - Short(i, d) : 1f); }
             return s;
         }
         float crewPeak = -1f;

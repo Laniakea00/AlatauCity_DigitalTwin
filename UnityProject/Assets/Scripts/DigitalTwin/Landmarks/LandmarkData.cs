@@ -17,6 +17,9 @@ namespace AlatauCity.DigitalTwin.Landmarks
         public float X, Z, Yaw;               // site (city metres), heading of the long side
         public float Height, Radius;          // for the camera: top of the model, half-size of the site
         public float PadW, PadD;              // the levelled plot the model stands on (local x × z, metres)
+        /// <summary>&gt; 0: the landmark brings the district round it (Iconic: the Gate District of its QTwin page, IconicDistrict) — no
+        /// generic buildings, film trees or city roads inside the district's area once it stands. 0 = none.</summary>
+        public float Ring;
         public float ViewYaw = 210f, ViewPitch = 20f;
         public List<(string k, string v)> Facts = new List<(string, string)>();
         public string Source, SourceDate;
@@ -66,6 +69,8 @@ namespace AlatauCity.DigitalTwin.Landmarks
             return si == 1 ? StatusText[1] + " " + Mathf.RoundToInt(LandmarkSystem.Progress(l, TwinState.Year) * 100f) + " %" : StatusText[si];
         }
         public static string StatusOf(Landmark l) => StatusText[StatusIdx(l)];
+        /// <summary>Today's status from the sources (the construction monitoring map shows the city as designed, the statuses as of today).</summary>
+        public static int NowIdx(Landmark l) => (int)l.Status;
         public static string ClsOf(Landmark l) => StatusCls[StatusIdx(l)];
         /// <summary>Status in the year the map shows: built by then → «Работает», under way → «Строится», otherwise today's status.</summary>
         public static int StatusIdx(Landmark l)
@@ -88,28 +93,28 @@ namespace AlatauCity.DigitalTwin.Landmarks
             {
                 Id = "iconic", Name = "Iconic Complex", Short = "Iconic Complex", Company = "Caspian Group · ТОО «Alatau City Iconic Complex» · архитектор SOM",
                 Purpose = "«Вертикальный район»: офисы, премиальные резиденции, отель 5*, ритейл и культурные пространства", Model = "iconic",
-                District = 0, Status = LStatus.Preparation, StatusNote = "на 26.08.2026 — подготовка к строительству; старт заявлялся на май 2026",
-                StartYear = 2027, EndYear = 2030, YearOfficial = true, X = -2567, Z = -20654, Yaw = 105.2f, PadW = 270f, PadD = 200f, Height = 272f, Radius = 135f, ViewYaw = 205f, ViewPitch = 14f,
+                District = 0, Status = LStatus.Construction, StatusNote = "стройка начата 26.10.2026",
+                StartYear = 2026, EndYear = 2030, YearOfficial = true, X = -3170, Z = -19080, Yaw = 270f, PadW = 270f, PadD = 200f, Ring = 1f, Height = 272f, Radius = 170f, ViewYaw = 25f, ViewPitch = 14f,
                 Source = "SOM, Forbes.kz, primeminister.kz", SourceDate = "05.03.2026 / 23.04.2026 / 26.08.2026"
-            }.F("Площадь", "276 800 м²").F("Главная башня", "272 м · 56 этажей — офисы и резиденции").F("Вторая башня", "80 м — отель 5* и брендированные резиденции")
-             .F("Ритейл", "51 890 м² — два низких корпуса до 32 м с зелёными кровлями").F("Офисы и жильё", "офисы 57 600 м² · резиденции 40 300 м² · отель 21 806 м²").F("Конструкции", "сейсмостойкий каркас с демпферами").F("Инвестиции", "> $800 млн (по другим данным > $1 млрд), без бюджетных денег")
+            }.F("Площадь", "276 800 м²").F("Главная башня", "272 м · 56 этажей — офисы и резиденции").F("Вторая башня", "80 м · 21 этаж — ступенчатая «пирамида» с озеленёнными террасами: отель 5* и брендированные резиденции")
+             .F("Подиум", "18 м · 3 этажа · ≈ 58 000 м² — два павильона-клина с садами на кровле, бассейн на террасе, площадь с амфитеатром").F("Офисы и жильё", "офисы 57 600 м² · резиденции 40 300 м² · отель 21 806 м²").F("Конструкции", "сейсмостойкий каркас с демпферами").F("Инвестиции", "> $800 млн (по другим данным > $1 млрд), без бюджетных денег")
              .F("Токенизация", "Iconic Tower — до $50 млн на KASE (план до конца 2026)").F("Сроки", "сдача конец 2029 – начало 2030").Stage2("культурный центр на площади", 2037, 2039)
              // the buildings of the complex with their own dates: the hotel opens two years before the tower (first revenue), the east retail
              // block a quarter before it, the west one and the grounds after it (scenario of the twin; the tower keeps the published dates)
              .Part(new LPart { Id = "t1", Name = "Башня T1", Short = "T1", Use = "офисы и премиальные резиденции", Size = "272 м · 56 этажей · 97 900 м²", Tower = true,
-                               A = 2026.0f, B = 2030.0f, H = 272f, Capex = 480f, Delay = 0.14f, Recover = true, Focus = new Vector3(36f, 110f, 34f), Dist = 560f, Pitch = 16f,
+                               A = 2026.82f, B = 2030.0f, H = 272f, Capex = 480f, Delay = 0.14f, Recover = true, Focus = new Vector3(-84f, 110f, 46f), Dist = 560f, Pitch = 16f,
                                Deal = "предпродажи резиденций 38 % · аренда офисов 24 %", Risk = "Каркас отстаёт из-за зимнего бетонирования; вторая смена на армировании закрывает отставание" })
-             .Part(new LPart { Id = "t2", Name = "Отель T2", Short = "T2", Use = "отель 5* и брендированные резиденции", Size = "80 м · 21 806 м² · 220 номеров",
-                               A = 2026.25f, B = 2028.37f, H = 84f, Capex = 150f, Delay = -0.04f, Focus = new Vector3(-80f, 30f, 44f), Dist = 270f, Pitch = 24f,
+             .Part(new LPart { Id = "t2", Name = "Отель T2", Short = "T2", Use = "отель 5* и брендированные резиденции", Size = "80 м · 21 этаж · террасы · 21 806 м² · 220 номеров",
+                               A = 2026.95f, B = 2028.6f, H = 81f, Capex = 150f, Delay = -0.04f, Focus = new Vector3(40f, 28f, 42f), Dist = 270f, Pitch = 24f,
                                Deal = "договор управления с международным оператором; продажи номеров открываются за 3 месяца до ввода", Risk = "Опережение: каркас закончен раньше — отель даёт первую выручку комплекса" })
-             .Part(new LPart { Id = "re", Name = "Ритейл · восточный корпус", Short = "Ритейл В", Use = "торговая галерея, рестораны, бассейн на кровле", Size = "до 26 м · ≈ 30 000 м²",
-                               A = 2026.7f, B = 2029.7f, H = 31f, Capex = 95f, Delay = 0.075f, Focus = new Vector3(63f, 10f, -48f), Dist = 240f, Pitch = 32f,
+             .Part(new LPart { Id = "re", Name = "Павильон · восточный", Short = "Павильон В", Use = "торговая галерея, рестораны, бассейн на террасе", Size = "клин до 32 м · 4 уровня · ≈ 30 000 м²",
+                               A = 2027.3f, B = 2029.7f, H = 32f, Capex = 95f, Delay = 0.075f, Focus = new Vector3(-66f, 12f, -50f), Dist = 240f, Pitch = 32f,
                                Deal = "предварительная аренда 61 %, якорный арендатор — супермаркет", Risk = "Поставка модулей витража задерживается на 4 недели — ввод сдвигается" })
-             .Part(new LPart { Id = "rw", Name = "Ритейл · западный корпус", Short = "Ритейл З", Use = "магазины, фуд-холл, сад на кровле", Size = "до 22 м · ≈ 22 000 м²",
-                               A = 2028.5f, B = 2030.7f, H = 27f, Capex = 70f, Focus = new Vector3(-72f, 10f, -48f), Dist = 240f, Pitch = 32f,
+             .Part(new LPart { Id = "rw", Name = "Павильон · западный", Short = "Павильон З", Use = "магазины, фуд-холл, сад на кровле", Size = "клин до 22 м · 3 уровня · ≈ 28 000 м²",
+                               A = 2028.5f, B = 2030.7f, H = 22f, Capex = 70f, Focus = new Vector3(66f, 10f, -50f), Dist = 240f, Pitch = 32f,
                                Deal = "предварительная аренда 35 %", Risk = "Старт после ввода отеля: бригады и краны переходят с T2" })
-             .Part(new LPart { Id = "gr", Name = "Сад, площадь и аллеи", Short = "Сад", Use = "общественное пространство, открытое городу", Size = "≈ 3,5 га · фонтан, амфитеатр, аллеи", Land = true,
-                               A = 2029.45f, B = 2030.4f, H = 9f, Capex = 18f, Focus = new Vector3(0f, 0f, 20f), Dist = 380f, Pitch = 46f,
+             .Part(new LPart { Id = "gr", Name = "Площадь, амфитеатр и сад", Short = "Площадь", Use = "общественное пространство, открытое городу", Size = "≈ 5 га · амфитеатр, фонтаны, деревья", Land = true,
+                               A = 2029.45f, B = 2030.4f, H = 9f, Capex = 18f, Focus = new Vector3(0f, 0f, -46f), Dist = 380f, Pitch = 46f,
                                Deal = "входит в стоимость комплекса; повышает арендные ставки ритейла", Risk = "Начинается после снятия кранов с башни; посадка деревьев весной" }));
             L.Add(new Landmark
             {
@@ -142,29 +147,29 @@ namespace AlatauCity.DigitalTwin.Landmarks
             {
                 Id = "kaist", Name = "KAIST Kazakhstan · кампус", Short = "KAIST Kazakhstan", Company = "KAIST (Южная Корея) · ACA",
                 Purpose = "Технологический университет и кампус до 40 тыс. студентов (Академгородок)", Model = "campus",
-                District = 1, Status = LStatus.Concept, StatusNote = "прорабатывается",
-                StartYear = 2029, EndYear = 2032, YearOfficial = false, X = -1457, Z = -12698, Yaw = 45.6f, PadW = 420f, PadD = 360f, Height = 69f, Radius = 210f, ViewYaw = 190f, ViewPitch = 22f,
+                District = 1, Status = LStatus.Preparation, StatusNote = "подготовка площадки, старт стройки — 12.12.2026",
+                StartYear = 2026, EndYear = 2030, YearOfficial = false, X = -1457, Z = -12698, Yaw = 45.6f, PadW = 420f, PadD = 360f, Height = 69f, Radius = 210f, ViewYaw = 190f, ViewPitch = 22f,
                 Source = "Kazinform, Kapital.kz", SourceDate = "29.09.2025 / 09.2026"
-            }.F("Студенты", "до 40 000 (кампус Golden)").F("Сроки", "не объявлены (в демо — 2032)").Stage2("общежития и лаборатории", 2034, 2037)
-             // the buildings of the campus with their own dates (scenario of the twin): the main hall opens for the September 2030 intake, the
-             // laboratories a year later, the north teaching block and the sports ground start after the survey
+            }.F("Студенты", "до 40 000 (кампус Golden)").F("Сроки", "в демо — 12.2026 → 06.2030").Stage2("общежития и лаборатории", 2034, 2037)
+             // the buildings of the campus with their own dates (scenario of the twin, as on the campus's monitoring page): the park and the
+             // lake first, the main hall ready for the September 2029 intake, B1 and the laboratories after it, the north block last; handover 14.06.2030
              .Part(new LPart { Id = "b1", Name = "Библиотечная башня B1", Short = "B1", Use = "библиотека, аудитория, лаборатории", Size = "69 м · 13 этажей · ≈ 19 000 м²", Tower = true,
-                               A = 2028.0f, B = 2032.0f, H = 69f, Capex = 95f, Delay = 0.14f, Recover = true, Focus = new Vector3(150f, 30f, 20f), Dist = 240f, Pitch = 18f,
+                               A = 2027.05f, B = 2029.75f, H = 69f, Capex = 95f, Delay = 0.1f, Recover = true, Focus = new Vector3(150f, 30f, 20f), Dist = 240f, Pitch = 18f,
                                Deal = "гранты на оборудование лабораторий; читальные залы открыты району", Risk = "Каркас отстаёт из-за зимнего бетонирования; вторая смена закрывает отставание" })
              .Part(new LPart { Id = "mh", Name = "Главный корпус", Short = "Главный", Use = "аудитории, ректорат, культурный центр", Size = "150 × 56 м · 39 м · ≈ 34 000 м²",
-                               A = 2028.15f, B = 2030.62f, H = 40f, Capex = 120f, Delay = -0.03f, Focus = new Vector3(-20f, 14f, -122f), Dist = 280f, Pitch = 26f,
-                               Deal = "приём первых 3 000 студентов в сентябре 2030", Risk = "Опережение: витражи смонтированы раньше — корпус готов к набору" })
+                               A = 2026.95f, B = 2028.95f, H = 40f, Capex = 120f, Delay = -0.03f, Focus = new Vector3(-20f, 14f, -122f), Dist = 280f, Pitch = 26f,
+                               Deal = "приём первых 3 000 студентов в сентябре 2029", Risk = "Опережение: витражи смонтированы раньше — корпус готов к набору" })
              .Part(new LPart { Id = "lab", Name = "Лабораторный корпус", Short = "Лаборатории", Use = "лаборатории с чистыми помещениями, мастерские", Size = "до 19 м · ≈ 28 000 м²",
-                               A = 2028.5f, B = 2031.7f, H = 19f, Capex = 110f, Delay = 0.095f, Focus = new Vector3(-160f, 9f, 25f), Dist = 270f, Pitch = 32f,
+                               A = 2027.45f, B = 2029.55f, H = 19f, Capex = 110f, Delay = 0.07f, Focus = new Vector3(-160f, 9f, 25f), Dist = 270f, Pitch = 32f,
                                Deal = "40 % площадей — партнёрские лаборатории компаний", Risk = "Оборудование чистых помещений поставляется с опозданием — ввод сдвигается" })
              .Part(new LPart { Id = "nb", Name = "Северный учебный корпус", Short = "Северный", Use = "аудитории и классы второй очереди", Size = "до 20 м · ≈ 26 000 м²",
-                               A = 2030.55f, B = 2032.7f, H = 20f, Capex = 70f, Focus = new Vector3(-15f, 9f, 128f), Dist = 290f, Pitch = 30f,
-                               Deal = "набор до 12 000 студентов", Risk = "Старт после ввода главного корпуса: бригады переходят с него" })
+                               A = 2028.7f, B = 2030.45f, H = 20f, Capex = 70f, Focus = new Vector3(-15f, 9f, 128f), Dist = 290f, Pitch = 30f,
+                               Deal = "набор до 12 000 студентов", Risk = "Стартует, когда главный корпус закрывает контур: бригады переходят с него" })
              .Part(new LPart { Id = "sp", Name = "Спортивное ядро", Short = "Спорт", Use = "стадион с беговыми дорожками, трибуна", Size = "овал 112 × 68 м · 1 200 мест",
-                               A = 2031.2f, B = 2032.4f, H = 10f, Capex = 15f, Focus = new Vector3(140f, 3f, -122f), Dist = 220f, Pitch = 40f,
+                               A = 2029.1f, B = 2029.85f, H = 10f, Capex = 15f, Focus = new Vector3(140f, 3f, -122f), Dist = 220f, Pitch = 40f,
                                Deal = "открыт для жителей района вечером и в выходные", Risk = "Работы по графику" })
              .Part(new LPart { Id = "pk", Name = "Парк и озеро", Short = "Парк", Use = "парк кампуса: озеро с островом и фонтанами, рощи, аллеи", Size = "≈ 9 га · озеро 1,4 га", Land = true,
-                               A = 2028.0f, B = 2028.45f, H = 20f, Capex = 12f, Focus = new Vector3(-15f, 4f, -5f), Dist = 320f, Pitch = 42f,
+                               A = 2026.95f, B = 2027.3f, H = 20f, Capex = 12f, Focus = new Vector3(-15f, 4f, -5f), Dist = 320f, Pitch = 42f,
                                Deal = "зелёный кампус с первого дня: участок не превращается в стройплощадку", Risk = "Выполнен до начала корпусов" }));
             L.Add(new Landmark
             {

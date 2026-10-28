@@ -27,19 +27,22 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 var dc = new VisualElement(); dc.AddToClassList("lm-chip"); var d = Widgets.Dot(CityStats.DistrictColors[l.District], true); dc.Add(d);
                 dc.Add(new Label(CityStats.DistrictIds[l.District] + " District")); chips.Add(dc);
             }
-            var stc = Widgets.Status(LandmarkCatalog.StatusOf(l), LandmarkCatalog.ClsOf(l)); chips.Add(stc);
+            int sNow = Modules.MonitoringModule.On ? LandmarkCatalog.NowIdx(l) : LandmarkCatalog.StatusIdx(l);
+            var stc = Widgets.Status(LandmarkCatalog.StatusText[sNow], LandmarkCatalog.StatusCls[sNow]); chips.Add(stc);
             card.Add(chips);
             var pu = new Label(l.Purpose); pu.AddToClassList("lm-purpose"); card.Add(pu);
 
             if (l.IsLrt) LrtBody(card, l);
             else
             {
-                // readiness in the shown year
-                int y = TwinState.Year; float pr = LandmarkSystem.Progress(l, y);
+                // readiness in the shown year (on the monitoring map: today)
+                bool mon = Modules.MonitoringModule.On;
+                int y = TwinState.Year; float pr = LandmarkSystem.Progress(l, mon ? Modules.MonitoringModule.Today : y);
                 var tl = new VisualElement(); tl.AddToClassList("lm-tl");
                 var tlh = new VisualElement(); tlh.AddToClassList("row"); tlh.style.justifyContent = Justify.SpaceBetween;
                 tlh.Add(new Label(l.StartYear.ToString()) { pickingMode = PickingMode.Ignore });
-                var mid = new Label(pr <= 0f ? $"в {y} году ещё не начат" : pr >= 0.999f ? $"в {y} году работает" : $"в {y} году готов на {Mathf.RoundToInt(pr * 100)} %") { pickingMode = PickingMode.Ignore };
+                var mid = new Label(mon ? "сейчас: " + l.StatusNote : pr <= 0f ? $"в {y} году ещё не начат" : pr >= 0.999f ? $"в {y} году работает" : $"в {y} году готов на {Mathf.RoundToInt(pr * 100)} %") { pickingMode = PickingMode.Ignore };
+                if (mon) { mid.style.whiteSpace = WhiteSpace.Normal; mid.style.flexShrink = 1; mid.style.unityTextAlign = TextAnchor.UpperCenter; mid.style.marginLeft = 8; mid.style.marginRight = 8; }
                 mid.AddToClassList(pr >= 0.999f ? "ok" : pr > 0 ? "warn" : "muted"); tlh.Add(mid);
                 tlh.Add(new Label(l.EndYear + (l.YearOfficial ? "" : "*")) { pickingMode = PickingMode.Ignore });
                 tl.Add(tlh);
@@ -49,7 +52,8 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 // the 5 figures an investor asks about first; the rest (and the sources) stay behind "Источники"
                 var facts = new VisualElement(); facts.AddToClassList("lm-facts"); card.Add(facts);
                 foreach (var (k, v) in KeyFacts(l)) facts.Add(Widgets.Fact(k, v));
-                Capacity(card, l, y);
+                if (!mon) Capacity(card, l, y);
+                if (mon) MonitorNote(card, l);
             }
             if (!TwinTour.Running)
             {
@@ -68,6 +72,18 @@ namespace AlatauCity.DigitalTwin.Landmarks
 
             var btns = new VisualElement(); btns.AddToClassList("lm-btns");
             var tp = TowerProfile.For(l.Id);
+            if (Modules.MonitoringModule.On)
+            {
+                // the monitoring map: the way into the monitoring first; the other objects only look and read
+                if (Modules.MonitoringModule.Watched(l)) btns.Add(Widgets.Btn("Открыть мониторинг стройки →", () => Modules.MonitoringModule.Monitor(l), "small", "primary"));
+                btns.Add(Widgets.Btn("Ближе", () => sys?.CloseUp(l), "small"));
+                var ob2 = Widgets.Btn(LandmarkSystem.OrbitOn ? "Облёт: вкл" : "Облёт: выкл", () => { sys?.ToggleOrbit(); Fill(card, l); }, "small");
+                if (LandmarkSystem.OrbitOn) ob2.AddToClassList("active");
+                btns.Add(ob2);
+                btns.Add(Widgets.Btn("К карте", () => sys?.Select(null, false), "small", "ghost"));
+                card.Add(btns);
+                return;
+            }
             if (tp != null && IconicInterior.Instance != null)
             {
                 // into the tower: the floor plan as it is being built in the shown year; the construction monitoring of the object
@@ -88,6 +104,22 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 var cam = Camera.main != null ? Camera.main.GetComponent<MapCamera>() : null; if (cam != null) cam.FlyTo(cam.overview);
             }, "small", "ghost"));
             card.Add(btns);
+        }
+
+        /// <summary>On the monitoring map: what the construction monitoring of this object shows, or that it is not connected yet.</summary>
+        static void MonitorNote(VisualElement card, Landmark l)
+        {
+            var box = new VisualElement(); box.AddToClassList("lm-cap"); box.AddToClassList("lm-monnote"); card.Add(box);
+            var hr = new VisualElement(); hr.AddToClassList("row"); box.Add(hr);
+            var h = new Label("МОНИТОРИНГ СТРОИТЕЛЬСТВА") { pickingMode = PickingMode.Ignore }; h.AddToClassList("lm-cap-h"); hr.Add(h);
+            var sp = new VisualElement { pickingMode = PickingMode.Ignore }; sp.style.flexGrow = 1; hr.Add(sp);
+            bool w = Modules.MonitoringModule.Watched(l);
+            var tag = new Label(w ? "подключён" : "не подключён") { pickingMode = PickingMode.Ignore }; tag.AddToClassList("lm-cap-tag"); tag.EnableInClassList("est", !w); tag.EnableInClassList("on", w);
+            hr.Add(tag);
+            var t = new Label(w ? "Съёмки дроном 2D и 3D по датам с начала стройки, «Что изменилось» между съёмками, BIM 4D план и факт по корпусам, камеры на площадке."
+                                : l.Status == LStatus.Construction ? "Объект строится: мониторинг подключается по запросу застройщика — те же съёмки, BIM 4D и камеры, что у Iconic Complex и KAIST."
+                                : "Мониторинг подключается с началом строительства: съёмки дроном, BIM 4D и камеры, как у Iconic Complex и KAIST.") { pickingMode = PickingMode.Ignore };
+            t.AddToClassList("note"); t.style.marginTop = 4; t.style.whiteSpace = WhiteSpace.Normal; box.Add(t);
         }
 
         /// <summary>Production capacity: design, the load and output in the shown year, jobs / revenue / export at full load.</summary>

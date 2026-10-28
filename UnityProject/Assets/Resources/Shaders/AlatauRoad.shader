@@ -3,6 +3,7 @@
 // uv2 = (half width of the carriageway, 0 = pavement ribbon / 1 = carriageway ribbon, length of the edge, lanes per direction;
 //        negative = a one-way carriageway with that many lanes: no centre line, lane lines across the whole width)
 // uv3 = year of opening in the four scenarios (picked by _AlatauScenIdx); the ribbon appears with the timeline like the buildings.
+// _AlatauMaket = (x, z, radius, on): round Iconic Complex the lane lines are strips of cool light, as on its presentation model.
 Shader "AlatauCity/Road"
 {
     SubShader
@@ -13,7 +14,7 @@ Shader "AlatauCity/Road"
         #pragma surface surf Lambert fullforwardshadows vertex:vert
         #pragma target 3.5
         #include "Assets/Shaders/AlatauFilm.cginc"
-        float _AlatauYear, _AlatauYearF, _AlatauGrow, _AlatauScenIdx;
+        float _AlatauYear, _AlatauYearF, _AlatauGrow, _AlatauScenIdx; float4 _AlatauMaket;
         struct Input { float2 road; float4 dims; float4 years; float3 worldPos; };
         void vert(inout appdata_full v, out Input o) { UNITY_INITIALIZE_OUTPUT(Input, o); o.road = v.texcoord.xy; o.dims = v.texcoord1; o.years = v.texcoord2; }
         float Line(float d, float halfW, float aa) { return saturate((halfW - abs(d)) / max(aa, 1e-4) + 0.5); }
@@ -48,6 +49,17 @@ Shader "AlatauCity/Road"
                 }
                 float edge = Line(ax - (hw - 0.30), 0.07, xw);
                 c = lerp(c, float3(0.93, 0.93, 0.91), saturate(centre + sep + edge) * fade * 0.9);
+                if (_AlatauMaket.w > 0.5)
+                {
+                    // the maket's light strips: solid lines along the kerbs and the centre, glowing blue-white, brighter after dark;
+                    // where a strip is thinner than a pixel its light is spread over the carriageway
+                    float inR = 1.0 - smoothstep(_AlatauMaket.z * 0.85, _AlatauMaket.z, distance(IN.worldPos.xz, _AlatauMaket.xy));
+                    float strip = saturate(Line(ax - (hw - 0.55), 0.14, xw) + (lanes > 1.5 ? Line(ax - 0.35, 0.12, xw) : 0.0));
+                    float near = saturate(1.5 - xw * 4.0);
+                    float glow = lerp(0.16, strip, near) * inR;
+                    o.Emission = float3(0.62, 0.82, 1.0) * glow * (0.9 + 2.2 * _AlatauNight);
+                    c = lerp(c, float3(0.80, 0.90, 1.0), strip * near * inR * 0.8);
+                }
             }
             else
             {

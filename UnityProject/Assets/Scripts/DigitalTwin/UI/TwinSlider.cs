@@ -4,7 +4,7 @@ using UnityEngine.UIElements;
 
 namespace AlatauCity.DigitalTwin.UI
 {
-    /// <summary>Year slider 2025–2050 with milestone ticks. Own element: styled by Twin.uss, no theme dependency.</summary>
+    /// <summary>Year slider MinYear–MaxYear (2026–2050) with milestone ticks. Own element: styled by Twin.uss, no theme dependency.</summary>
     public class TwinSlider : VisualElement
     {
         public int Min = TwinState.MinYear, Max = TwinState.MaxYear;

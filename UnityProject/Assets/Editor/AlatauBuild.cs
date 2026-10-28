@@ -31,6 +31,7 @@ namespace AlatauCity.EditorTools
             PlayerSettings.fullScreenMode = FullScreenMode.FullScreenWindow;
             PlayerSettings.defaultScreenWidth = 1920; PlayerSettings.defaultScreenHeight = 1080;
             PlayerSettings.resizableWindow = true; PlayerSettings.runInBackground = true;
+            NoSplash();
             Directory.CreateDirectory(Path.GetDirectoryName(Out));
             var opt = new BuildPlayerOptions { scenes = new[] { Scene }, locationPathName = Out, target = BuildTarget.StandaloneWindows64, options = BuildOptions.None };
             var r = BuildPipeline.BuildPlayer(opt);
@@ -38,6 +39,9 @@ namespace AlatauCity.EditorTools
             if (s.result == BuildResult.Succeeded) { Debug.Log($"[Alatau] Windows build OK: {Path.GetFullPath(Out)} · {s.totalSize / 1048576f:0} MB · {s.totalTime.TotalSeconds:0} s"); if (!ci) EditorUtility.RevealInFinder(Out); }
             else { Debug.LogError($"[Alatau] Windows build {s.result}: {s.totalErrors} errors"); if (ci) EditorApplication.Exit(1); }
         }
+
+        /// <summary>The twin opens straight away: no Unity splash screen («Made with Unity») before the first frame.</summary>
+        static void NoSplash() { PlayerSettings.SplashScreen.show = false; PlayerSettings.SplashScreen.showUnityLogo = false; }
 
         const string WebOut = "Builds/WebGL";
 
@@ -65,6 +69,7 @@ namespace AlatauCity.EditorTools
             PlayerSettings.SetUseDefaultGraphicsAPIs(BuildTarget.WebGL, false);
             PlayerSettings.SetGraphicsAPIs(BuildTarget.WebGL, new[] { GraphicsDeviceType.OpenGLES3 });   // WebGL 2
             PlayerSettings.runInBackground = true;
+            NoSplash();
             EditorUserBuildSettings.webGLBuildSubtarget = WebGLTextureSubtarget.DXT;               // desktop browsers
             if (Directory.Exists(WebOut)) Directory.Delete(WebOut, true);
             var opt = new BuildPlayerOptions { scenes = new[] { Scene }, locationPathName = WebOut, target = BuildTarget.WebGL, options = BuildOptions.None };

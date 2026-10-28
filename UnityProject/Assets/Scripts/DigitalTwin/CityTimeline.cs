@@ -1,11 +1,11 @@
 using UnityEngine;
 namespace AlatauCity.DigitalTwin
 {
-    /// <summary>4D timeline 2025-2050. The year lives in TwinState; this component only drives playback and keyboard shortcuts.
+    /// <summary>4D timeline 2026-2050. The year lives in TwinState; this component only drives playback and keyboard shortcuts.
     /// Space = play/pause, PageUp/PageDown or . , = step. Shader-side filtering: instant for all 57k buildings.</summary>
     public class CityTimeline : MonoBehaviour
     {
-        [Range(2025, 2050)] public int year = 2050;
+        [Range(TwinState.MinYear, TwinState.MaxYear)] public int year = 2050;
         public float secondsPerYear = 1.0f;
         float t; bool wasPlaying;
         static readonly int YearFId = Shader.PropertyToID("_AlatauYearF"), GrowId = Shader.PropertyToID("_AlatauGrow");

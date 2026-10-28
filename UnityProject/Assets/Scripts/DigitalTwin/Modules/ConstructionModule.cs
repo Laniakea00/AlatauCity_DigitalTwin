@@ -150,7 +150,9 @@ namespace AlatauCity.DigitalTwin.Modules
                     float inf = 0; foreach (var kvp in TwinData.CapexInfra[s]) inf += kvp.Value[i];
                     for (int k = 0; k < 4; k++) { float v = inf * InfraShare[k]; for (int dd = 0; dd < 4; dd++) v += TwinData.CapexSources[s][dd][k][i]; ser[k][i] = v; }
                 }
-                bChart.Plan = pl; bChart.Fact = fa; bChart.Money = ser; bChart.Year = Mathf.Max(y, Landmarks.LandmarkSystem.YearNow); bChart.Refresh();
+                // the chart starts in the first year of the timeline; the data start in 2025
+                int k0 = TwinState.MinYear - 2025; float[] Cut(float[] a) { var r = new float[a.Length - k0]; System.Array.Copy(a, k0, r, 0, r.Length); return r; }
+                bChart.Plan = Cut(pl); bChart.Fact = Cut(fa); bChart.Money = System.Array.ConvertAll(ser, Cut); bChart.Year = Mathf.Max(y, Landmarks.LandmarkSystem.YearNow); bChart.Refresh();
                 srcBar.Clear(); srcLeg.Clear(); int yi2 = TwinData.YI(y); float tot = 0; for (int k = 0; k < 4; k++) tot += ser[k][yi2];
                 string[] srcK = { "src_budget", "src_private", "src_ppp", "src_quasi" };
                 for (int k = 0; k < 4 && tot > 0; k++)

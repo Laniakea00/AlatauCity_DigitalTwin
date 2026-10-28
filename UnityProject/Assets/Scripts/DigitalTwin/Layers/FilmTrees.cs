@@ -36,6 +36,19 @@ namespace AlatauCity.DigitalTwin
         static long Key(int cx, int cz) => ((long)(cx + 100000) << 32) | (uint)(cz + 100000);
         static int C(float v) => Mathf.FloorToInt(v / Cell);
 
+        /// <summary>The trees of the film look (null until they are made): other layers draw their own plantings with them.</summary>
+        public static FilmTrees Instance;
+        void Awake() { Instance = this; }
+        /// <summary>Draws a batch of up to 1023 trees of species s (0 round crown, 1 poplar, 2 spruce) with their per-tree props
+        /// (_TreeYear, _TreeTint); false while the meshes are not made yet.</summary>
+        public bool DrawBatch(int s, Matrix4x4[] m, int count, MaterialPropertyBlock props, bool near, bool shadows)
+        {
+            if (!ready || failed || hi[s] == null) return false;
+            Graphics.DrawMeshInstanced(near ? hi[s] : lo[s], 0, mat, m, count, props,
+                shadows ? UnityEngine.Rendering.ShadowCastingMode.On : UnityEngine.Rendering.ShadowCastingMode.Off, true, 0, null);
+            return true;
+        }
+
         /// <summary>Called every frame by FilmLook while the film look is on.</summary>
         public void Draw(Camera cam, Vector3 focus, float distance)
         {

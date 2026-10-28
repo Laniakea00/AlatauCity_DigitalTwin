@@ -40,7 +40,7 @@ namespace AlatauCity.DigitalTwin.UI
         }
 
         static readonly Dictionary<string, string> ModuleIcon = new Dictionary<string, string>
-        { ["overview"] = "layout_grid", ["objects"] = "map_pin", ["construction"] = "hard_hat", ["prediction"] = "chart_line", ["infra"] = "network", ["situation"] = "radar", ["smartcity"] = "video", ["economy"] = "activity", ["ai"] = "sparkles" };
+        { ["overview"] = "layout_grid", ["objects"] = "map_pin", ["construction"] = "hard_hat", ["prediction"] = "chart_line", ["infra"] = "network", ["situation"] = "radar", ["smartcity"] = "video", ["economy"] = "activity", ["ai"] = "sparkles", ["monitoring"] = "scan_eye" };
 
         /// <summary>A white line icon from Resources/UI/Icons (Lucide), tinted by USS.</summary>
         public static VisualElement Icon(string name, float size = 18f)
@@ -60,6 +60,7 @@ namespace AlatauCity.DigitalTwin.UI
             modules.Add(new OverviewModule());
             modules.Add(new ObjectsModule());
             modules.Add(new ConstructionModule());
+            modules.Add(new MonitoringModule());
             modules.Add(new PredictionModule());
             modules.Add(new InfraModule());
             modules.Add(new SituationModule());
@@ -355,6 +356,9 @@ namespace AlatauCity.DigitalTwin.UI
         {
             if (card == null) return;
             card.RemoveFromClassList("lm-card");
+            // the monitoring mode: the passports of its marked objects only, never a building of the city
+            if (TwinState.Module == "monitoring" && (Landmarks.LandmarkSystem.Instance == null || !Modules.MonitoringModule.OnMap(Landmarks.LandmarkSystem.Instance.Selected)))
+            { middleEl?.EnableInClassList("lm-open", false); card.style.display = DisplayStyle.None; return; }
             var lsel = Landmarks.LandmarkSystem.Instance != null ? Landmarks.LandmarkSystem.Instance.Selected : null;
             middleEl?.EnableInClassList("lm-open", lsel != null);
             // a landmark (Iconic Complex, plants, LRT …) has its own passport

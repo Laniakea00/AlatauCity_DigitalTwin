@@ -33,12 +33,15 @@ namespace AlatauCity.DigitalTwin.Landmarks
             // the hand-over light sweep of each, and which part every triangle of the model belongs to (picking in the monitoring)
             public readonly Vector4[] PA = new Vector4[8], PB = new Vector4[8]; public readonly float[] LastPP = new float[8], GlowP = new float[8];
             public List<Vector2> PartUv; public int[] Tris;
+            // the diff of two surveys (DiffFrom): the site then and now, the hoarding's own block for its colour
+            public bool Site0, Site1, Cr0, Cr1; public MeshRenderer FenceR; public MaterialPropertyBlock FenceB;
         }
         readonly Dictionary<string, Node> nodes = new Dictionary<string, Node>();
         Material mat; bool built;
         static readonly int RevealId = Shader.PropertyToID("_Reveal"), BuildId = Shader.PropertyToID("_Build"), GhostId = Shader.PropertyToID("_Ghost"), HiId = Shader.PropertyToID("_Hi"),
             FacadeId = Shader.PropertyToID("_Facade"), LandId = Shader.PropertyToID("_Land"), GlowId = Shader.PropertyToID("_Glow"), HeightId = Shader.PropertyToID("_H"),
-            PartAId = Shader.PropertyToID("_PartA"), PartBId = Shader.PropertyToID("_PartB");
+            PartAId = Shader.PropertyToID("_PartA"), PartBId = Shader.PropertyToID("_PartB"),
+            DiffOnId = Shader.PropertyToID("_DiffOn"), DiffAId = Shader.PropertyToID("_DiffA"), DiffWId = Shader.PropertyToID("_DiffW"), DiffTintId = Shader.PropertyToID("_DiffTint");
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         static void Boot() { if (Instance == null) new GameObject("Landmarks (Alatau City projects)").AddComponent<LandmarkSystem>(); }
@@ -82,10 +85,16 @@ namespace AlatauCity.DigitalTwin.Landmarks
                     for (int bid = 0; bid < boundsN && bid < hidden.Length; bid++)
                     {
                         float x0 = bounds[bid * 4], z0 = bounds[bid * 4 + 1], x1 = bounds[bid * 4 + 2], z1 = bounds[bid * 4 + 3];
-                        if (x1 <= x0 || x1 < l.X - R || x0 > l.X + R || z1 < l.Z - R || z0 > l.Z + R) continue;
-                        if (!ObbHitsAabb(l.X, l.Z, ca, sa, hw, hd, x0, z0, x1, z1)) continue;
+                        if (x1 <= x0) continue;
+                        // a district round the landmark (Landmark.Ring, the Gate District of Iconic Complex): every building standing in its
+                        // area gives way to the district's own blocks the year they stand (existing ones when the works start)
+                        bool inGate = l.Ring > 0f && (IconicDistrict.InGate((x0 + x1) * 0.5f, (z0 + z1) * 0.5f) || IconicDistrict.InGate(x0, z0)
+                                                      || IconicDistrict.InGate(x1, z0) || IconicDistrict.InGate(x0, z1) || IconicDistrict.InGate(x1, z1));
+                        bool onPad = !(x1 < l.X - R || x0 > l.X + R || z1 < l.Z - R || z0 > l.Z + R) && ObbHitsAabb(l.X, l.Z, ca, sa, hw, hd, x0, z0, x1, z1);
+                        if (!inGate && !onPad) continue;
                         var bi = db?.Get(bid);
-                        byte code = bi != null && bi.Source == "existing_osm" ? (byte)Mathf.Clamp(l.StartYear - 2000, 2, 254) : (byte)1;
+                        bool existing = bi != null && bi.Source == "existing_osm";
+                        byte code = existing ? (byte)Mathf.Clamp(l.StartYear - 2000, 2, 254) : onPad ? (byte)1 : (byte)Mathf.Clamp(Mathf.CeilToInt(l.Finish) - 2000, 2, 254);
                         if (hidden[bid] == 0 || code < hidden[bid]) { if (hidden[bid] == 0) nh++; hidden[bid] = code; }
                     }
                 }
@@ -225,11 +234,13 @@ namespace AlatauCity.DigitalTwin.Landmarks
             var l = n.L; if (l.PadW <= 0f) return;
             var site = new GameObject("Site · " + l.Name); site.transform.SetParent(n.Go.transform, false); n.Site = site;
             var f = new GameObject("Hoarding"); f.transform.SetParent(site.transform, false);
-            f.AddComponent<MeshFilter>().sharedMesh = LandmarkSite.Fence(l.PadW, l.PadD); f.AddComponent<MeshRenderer>().sharedMaterial = mat;
+            f.AddComponent<MeshFilter>().sharedMesh = LandmarkSite.Fence(l.PadW, l.PadD); n.FenceR = f.AddComponent<MeshRenderer>(); n.FenceR.sharedMaterial = mat; n.FenceB = new MaterialPropertyBlock();
             float mastH = Mathf.Max(l.Height + 18f, 34f), jib = Mathf.Clamp(l.Height * 0.28f + 30f, 34f, 62f);
             var mastMesh = LandmarkSite.Mast(mastH); var headMesh = LandmarkSite.Head(jib);
             int i = 0;
-            foreach (var spot in LandmarkSite.CraneSpots(model, l.PadW, l.PadD, l.Height))
+            // KAIST: the three cranes of its page (by B1, the main hall, the laboratories); elsewhere free spots next to the highest part
+            var kq = l.Id == "kaist" ? QTwinData.Kaist() : null;
+            foreach (var spot in kq != null ? new List<Vector3>(kq.Cranes) : LandmarkSite.CraneSpots(model, l.PadW, l.PadD, l.Height))
             {
                 var cr = new Crane { B = new MaterialPropertyBlock(), Yaw = (l.Id.GetHashCode() & 255) + i * 140f, Speed = (i & 1) == 0 ? 5.5f : -4f };
                 var mg = new GameObject("Crane mast " + i); mg.transform.SetParent(site.transform, false); mg.transform.localPosition = spot;
@@ -262,6 +273,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 float dx = x - l.X, dz = z - l.Z, a = l.Yaw * Mathf.Deg2Rad, ca = Mathf.Cos(a), sa = Mathf.Sin(a);
                 float u = dx * ca - dz * sa, v = dx * sa + dz * ca;                 // local frame of the plot (as CityGround.Flatten)
                 if (Mathf.Abs(u) < l.PadW * 0.5f + margin && Mathf.Abs(v) < l.PadD * 0.5f + margin) return true;
+                if (l.Ring > 0f && IconicDistrict.InGate(x, z)) return true;                                     // its district's area
             }
             return false;
         }
@@ -369,6 +381,56 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 }
             }
         }
+        readonly Vector4[] diffA = new Vector4[8]; readonly float[] diffW = new float[8]; MaterialPropertyBlock headB;
+        /// <summary>"Что изменилось" of the construction monitoring: landmark id as of the earlier survey y0 goes to the shader beside
+        /// the current date y1 (shown only by a camera that sets _AlatauDiff); the site then and now is remembered for DiffSite.
+        /// y0 &lt; 0: off. Called when the dates change, not every frame (it applies both dates).</summary>
+        public void DiffFrom(string id, float y0, float y1)
+        {
+            if (!built || !nodes.TryGetValue(id, out var n)) return;
+            if (y0 < 0f)
+            {
+                if (n.R != null) { n.R.GetPropertyBlock(n.B); n.B.SetFloat(DiffOnId, 0f); n.R.SetPropertyBlock(n.B); }
+                return;
+            }
+            Apply(n, y0, 0f, true);
+            bool was = n.Go.activeSelf && Progress(n.L, y0) > 0f;
+            n.R.GetPropertyBlock(n.B);
+            for (int k = 0; k < 8; k++) { diffA[k] = was ? n.PA[k] : new Vector4(-1000f, 1f, -1000f, 0f); diffW[k] = was ? n.PB[k].w : 0f; }
+            diffA[0] = was ? new Vector4(n.B.GetFloat(RevealId), n.B.GetFloat(BuildId), n.B.GetFloat(FacadeId), n.B.GetFloat(LandId)) : new Vector4(-1000f, 1f, -1000f, 0f);
+            n.Site0 = n.Site != null && n.Site.activeSelf; n.Cr0 = n.Site0 && n.Cranes.Count > 0 && n.Cranes[0].Mast.gameObject.activeSelf;
+            Apply(n, y1, 0f, true);
+            n.Site1 = n.Site != null && n.Site.activeSelf; n.Cr1 = n.Site1 && n.Cranes.Count > 0 && n.Cranes[0].Mast.gameObject.activeSelf;
+            n.R.GetPropertyBlock(n.B);
+            n.B.SetFloat(DiffOnId, 1f); n.B.SetVectorArray(DiffAId, diffA); n.B.SetFloatArray(DiffWId, diffW);
+            n.R.SetPropertyBlock(n.B);
+        }
+        /// <summary>The site in the diff: whether the hoarding and the cranes stood at the earlier survey and stand now.</summary>
+        public bool DiffSite(string id, out bool site0, out bool site1, out bool cr0, out bool cr1, out int cranes)
+        {
+            site0 = site1 = cr0 = cr1 = false; cranes = 0;
+            if (!nodes.TryGetValue(id, out var n)) return false;
+            site0 = n.Site0; site1 = n.Site1; cr0 = n.Cr0; cr1 = n.Cr1; cranes = n.Cranes.Count; return true;
+        }
+        /// <summary>Around the render of the monitoring camera: the hoarding and the cranes of both dates are shown and coloured (new
+        /// blue, gone red, standing grey); off puts the site back as it is now.</summary>
+        public void DiffShow(string id, bool on)
+        {
+            if (!nodes.TryGetValue(id, out var n) || n.Site == null) return;
+            float fence = !on ? 0f : n.Site1 && n.Site0 ? 3f : n.Site1 ? 1f : n.Site0 ? 2f : 0f;
+            float crane = !on ? 0f : n.Cr1 && n.Cr0 ? 3f : n.Cr1 ? 1f : n.Cr0 ? 2f : 0f;
+            bool siteOn = on ? n.Site0 || n.Site1 : n.Site1, crOn = on ? n.Cr0 || n.Cr1 : n.Cr1;
+            if (n.Site.activeSelf != siteOn) n.Site.SetActive(siteOn);
+            if (headB == null) headB = new MaterialPropertyBlock();
+            if (n.FenceR != null) { if (n.FenceB == null) n.FenceB = new MaterialPropertyBlock(); n.FenceR.GetPropertyBlock(n.FenceB); n.FenceB.SetFloat(DiffTintId, fence); n.FenceR.SetPropertyBlock(n.FenceB); }
+            foreach (var c in n.Cranes)
+            {
+                if (c.Mast.gameObject.activeSelf != crOn) { c.Mast.gameObject.SetActive(crOn); c.Head.gameObject.SetActive(crOn); }
+                c.MastR.GetPropertyBlock(c.B); c.B.SetFloat(DiffTintId, crane); c.MastR.SetPropertyBlock(c.B);
+                var hr = c.Head.GetComponent<MeshRenderer>();
+                if (hr != null) { hr.GetPropertyBlock(headB); headB.SetFloat(DiffTintId, crane); hr.SetPropertyBlock(headB); }
+            }
+        }
         /// <summary>Stages of every building of a complex for the shader: each rises, gets its facade and its grounds on its own dates
         /// (part 0, the plot, follows the whole complex). Not started → not drawn; handed over → a sweep of light runs up it.</summary>
         void Parts(Node n, float y, bool ghost, float dt, bool probe)
@@ -470,6 +532,8 @@ namespace AlatauCity.DigitalTwin.Landmarks
         public static bool OrbitOn = true;
         // cinematic fly: log-distance zoom, the target leads a little, ease in/out; then the orbit (paused while the user moves the camera)
         float flyT = -1f, flyDur, idle; Vector3 f0, f1; float d0, d1, y0, y1, p0, p1, l0, l1;
+        /// <summary>The camera is on its way to an object (FlyTo).</summary>
+        public bool Flying => flyT >= 0f;
 
         /// <summary>Distance at which the whole object fills about 80 % of the frame.</summary>
         static float FrameDistance(Landmark l)

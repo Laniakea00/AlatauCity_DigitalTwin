@@ -11,7 +11,7 @@ namespace AlatauCity.DigitalTwin.UI
         public float[] Plan = new float[0], Fact = new float[0];
         public float[][] Money = new float[0][];
         public Color[] MoneyColors = new Color[0];
-        /// <summary>Shown year (fractional while animating), 2025..2050.</summary>
+        /// <summary>Shown year (fractional while animating), TwinState.MinYear..MaxYear; the arrays start in MinYear.</summary>
         public float Year { get => year; set { year = value; PlaceTags(); } }
         float year = 2050f;
 
@@ -20,7 +20,7 @@ namespace AlatauCity.DigitalTwin.UI
         static readonly Color Grid = new Color(1f, 1f, 1f, 0.06f), Muted = new Color(0.56f, 0.56f, 0.56f), White = new Color(0.98f, 0.98f, 0.98f),
                               PlanC = new Color(0.70f, 0.70f, 0.70f), GapC = new Color(1f, 0.33f, 0.27f), Bar = new Color(0.36f, 0.62f, 0.98f);
         readonly Label topT, botT, planL, factL; readonly Label[] xl = new Label[4];
-        static readonly int[] XYears = { 2025, 2030, 2040, 2050 };
+        static readonly int[] XYears = { TwinState.MinYear, 2030, 2040, 2050 };
 
         public BuildChart()
         {
@@ -52,7 +52,7 @@ namespace AlatauCity.DigitalTwin.UI
             topT.text = "ВВОД ПЛОЩАДЕЙ · до " + mM.ToString(mM >= 10 ? "0" : "0.#") + " млн м²"; topT.style.left = PadL; topT.style.top = t0 - 15;
             botT.text = "ДЕНЬГИ В ГОД · до " + (mR >= 1000 ? (mR / 1000f).ToString("0.#") + " трлн ₸" : mR.ToString("0") + " млрд ₸"); botT.style.left = PadL; botT.style.top = b0 - 15;
             float pw = w - PadL - PadR;
-            for (int i = 0; i < 4; i++) { float x = PadL + pw * (XYears[i] - 2025) / 25f; xl[i].text = XYears[i].ToString(); xl[i].style.left = Mathf.Clamp(x - 20, -4, w - 36); xl[i].style.top = h - PadB + 3; }
+            for (int i = 0; i < 4; i++) { float x = PadL + pw * (XYears[i] - TwinState.MinYear) / (float)(TwinState.MaxYear - TwinState.MinYear); xl[i].text = XYears[i].ToString(); xl[i].style.left = Mathf.Clamp(x - 20, -4, w - 36); xl[i].style.top = h - PadB + 3; }
             PlaceTags();
         }
 
@@ -61,7 +61,7 @@ namespace AlatauCity.DigitalTwin.UI
             float w = resolvedStyle.width, h = resolvedStyle.height; int n = Plan.Length; if (!(w > 0) || !(h > 0) || n < 2 || Fact.Length != n) { planL.text = factL.text = ""; return; }
             planL.text = "план"; factL.text = "факт";
             Panels(h, out float t0, out float t1, out _, out _); float pw = w - PadL - PadR, mM = MaxM2();
-            float yi = Mathf.Clamp(Year - 2025f, 0f, n - 1f), xn = PadL + pw * yi / (n - 1f);
+            float yi = Mathf.Clamp(Year - TwinState.MinYear, 0f, n - 1f), xn = PadL + pw * yi / (n - 1f);
             int a = Mathf.FloorToInt(yi), b = Mathf.Min(a + 1, n - 1);
             float fy = t0 + (t1 - t0) * (1 - Mathf.Clamp01(Mathf.Lerp(Fact[a], Fact[b], yi - a) / mM));
             float py = t0 + (t1 - t0) * (1 - Mathf.Clamp01(Plan[n - 1] / mM));
@@ -77,7 +77,7 @@ namespace AlatauCity.DigitalTwin.UI
             float pw = w - PadL - PadR, mM = MaxM2(), mR = MaxMoney();
             float X(float i) => PadL + pw * i / (n - 1f);
             float Y(float v) => t0 + (t1 - t0) * (1 - Mathf.Clamp01(v / mM));
-            float yi = Mathf.Clamp(Year - 2025f, 0f, n - 1f);
+            float yi = Mathf.Clamp(Year - TwinState.MinYear, 0f, n - 1f);
             float FactAt(float t) { int a = Mathf.FloorToInt(t), b = Mathf.Min(a + 1, n - 1); return Mathf.Lerp(Fact[a], Fact[b], t - a); }
             float PlanAt(float t) { int a = Mathf.FloorToInt(t), b = Mathf.Min(a + 1, n - 1); return Mathf.Lerp(Plan[a], Plan[b], t - a); }
 

@@ -97,7 +97,7 @@ namespace AlatauCity.DigitalTwin.Modules
             var last = Widgets.Fact("Кто платит", "частные и ГЧП " + Mathf.RoundToInt(100f * e.CapexPrivate / Mathf.Max(e.Capex, 1f)) + " % · бюджет и квазигоссектор " + Mathf.RoundToInt(100f * e.CapexBudget / Mathf.Max(e.Capex, 1f)) + " %");
             last.style.borderBottomWidth = 0; pgsFacts.Add(last);
             float sum = 0; for (int i = 0; i < CityStats.Years; i++) sum += CityEconomy.Of(TwinState.MinYear + i).Capex;
-            pgsNote.text = $"За 2025–2050 в стройку города вкладывается {CityEconomy.Trln(sum)} ({CityEconomy.Usd(sum)}). В первые годы стройка — основа экономики города, к 2040-м её доля падает: город начинает зарабатывать сам.";
+            pgsNote.text = $"За 2026–2050 в стройку города вкладывается {CityEconomy.Trln(sum)} ({CityEconomy.Usd(sum)}). В первые годы стройка — основа экономики города, к 2040-м её доля падает: город начинает зарабатывать сам.";
 
             // budget
             var inc = new float[CityStats.Years]; var exp = new float[CityStats.Years];

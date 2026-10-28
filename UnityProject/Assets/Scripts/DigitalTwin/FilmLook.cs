@@ -24,6 +24,8 @@ namespace AlatauCity.DigitalTwin
         static void Boot() { new GameObject("Film look").AddComponent<FilmLook>(); }
 
         /// <summary>Facade family of a building kind (see AlatauFilm.cginc).</summary>
+        /// <summary>Radius around Iconic Complex drawn like its presentation model (white buildings, planted roofs), metres.</summary>
+        public const float MaketR = 750f;
         public static int StyleOf(string kind)
         {
             switch (kind)
@@ -84,8 +86,13 @@ namespace AlatauCity.DigitalTwin
             if (db != null)
             {
                 var px = new Color32[256 * 256];
+                // around Iconic the district looks as on the presentation model shown with it: white buildings, planted roofs (style 10)
+                Landmarks.Landmark icl = null; foreach (var q in Landmarks.LandmarkCatalog.All()) if (q.Id == "iconic") icl = q; var ic = icl != null ? new Vector2(icl.X, icl.Z) : new Vector2(-3170f, -19080f);
                 foreach (var b in db.Buildings) if (b != null && b.Bid >= 0 && b.Bid < px.Length)
-                    px[b.Bid] = new Color32((byte)StyleOf(b.Kind), (byte)((uint)(b.Bid * 2654435761u) >> 24), (byte)Mathf.Clamp(b.Floors, 1, 255), 255);
+                {
+                    int st = (new Vector2(b.X, b.Z) - ic).sqrMagnitude < MaketR * MaketR && b.Source != "existing_osm" ? 10 : StyleOf(b.Kind);
+                    px[b.Bid] = new Color32((byte)st, (byte)((uint)(b.Bid * 2654435761u) >> 24), (byte)Mathf.Clamp(b.Floors, 1, 255), 255);
+                }
                 var tex = new Texture2D(256, 256, TextureFormat.RGBA32, false, true) { name = "Alatau building style", filterMode = FilterMode.Point, wrapMode = TextureWrapMode.Clamp };
                 tex.SetPixels32(px); tex.Apply(false, false); Shader.SetGlobalTexture(StyleId, tex);
             }

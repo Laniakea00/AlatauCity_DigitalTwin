@@ -82,50 +82,50 @@ namespace AlatauCity.DigitalTwin.Landmarks
         {
             curPart = TI; string T = Pt(TI).Name;
             // T1: the tower is followed floor by floor; the core leads the slabs by a floor, the facade starts at 25 % from the ground
-            At(W("1.1", "Ограждение и котлован", T, 0f, 0.06f, 0, 1, "Ограждение площадки, стена в грунте, котлован под башню и подземный паркинг, водопонижение", Geo), 36f, 2f, 34f, 230f, 42f);
-            At(W("1.2", "Сваи и фундаментная плита", T, 0.03f, 0.085f, 0, 1, "Буронабивные сваи, плита башни 4 м, бетон В40, четыре захватки с непрерывным бетонированием", Hid), 36f, 2f, 34f, 200f, 46f);
-            W("1.3", "Ядро: самоподъёмная опалубка", T, 0.072f, PhEnd(1) - 0.012f, 1, 0, "Монолитное ядро с лифтовыми шахтами; самоподъёмная опалубка идёт на этаж впереди перекрытий", Scan).Core = true;
-            W("1.4", "Перекрытия и колонны", T, PhStart(1), PhEnd(1), 1, 0, "Колонны и плиты 56 этажей и двух уровней короны, бетон В40, захватка — один этаж", Conc);
-            W("1.5", "Фасад: модульный витраж", T, PhStart(2), PhEnd(2), 2, 0, "Модульный витраж с золотыми поясами на каждом этаже, монтаж краном и с фасадного подъёмника", "отметка прораба · облёт");
-            At(W("1.6", "Корона: стеклянный гребень и шпиль", T, PhEnd(1) - 0.05f, PhEnd(2) - 0.02f, 0, 1, "Стальной каркас короны выше 214 м, стеклянный гребень, шпиль и заградительный огонь на 272 м", Scan), 36f, 250f, 34f, 260f, 10f);
+            At(W("1.1", "Ограждение и котлован", T, 0f, 0.06f, 0, 1, "Ограждение площадки, стена в грунте, котлован под башню и подземный паркинг, водопонижение", Geo), -84f, 2f, 46f, 230f, 42f);
+            At(W("1.2", "Сваи и фундаментная плита", T, 0.03f, 0.085f, 0, 1, "Буронабивные сваи, плита башни 4 м, бетон В40, четыре захватки с непрерывным бетонированием", Hid), -84f, 2f, 46f, 200f, 46f);
+            W("1.3", "Ядро: самоподъёмная опалубка", T, 0.072f, PhEnd(1) - 0.012f, 1, 0, "Монолитное ядро у вертикальной грани; самоподъёмная опалубка идёт на этаж впереди перекрытий", Scan).Core = true;
+            W("1.4", "Перекрытия и колонны", T, PhStart(1), PhEnd(1), 1, 0, "Колонны и плиты 56 этажей и двух технических уровней, бетон В40, захватка — один этаж", Conc);
+            W("1.5", "Фасад: витраж с ромбической сеткой", T, PhStart(2), PhEnd(2), 2, 0, "Витраж с ромбической сеткой световых линий и белые плиты-консоли на каждом этаже, монтаж краном и с фасадного подъёмника", "отметка прораба · облёт");
+            At(W("1.6", "Вершина-лезвие и шпиль", T, PhEnd(1) - 0.05f, PhEnd(2) - 0.02f, 0, 1, "Сужение башни выше 214 м до лезвия шириной 5 м, стальной шпиль и заградительный огонь на 272 м", Scan), -59f, 250f, 45f, 260f, 10f);
             W("1.7", "Инженерные сети", T, PhStart(3), PhEnd(3), 3, 0, "Вентиляция, спринклеры, холодоснабжение, кабельные лотки", Fore);
             W("1.8", "Перегородки", T, PhStart(4), PhEnd(4), 4, 0, "Каркас из профиля, гипсокартон в два слоя, шпаклёвка", Fore);
             W("1.9", "Отделка", T, PhStart(5), PhEnd(5), 5, 0, "Полы, потолки, окраска, отделка лобби и общественных зон", Fore);
-            At(W("1.10", "Демонтаж кранов, лобби и навес", T, PhEnd(2) - 0.02f, PhEnd(2) + 0.06f, 0, 1, "Разборка башенных кранов сверху вниз, золотой навес лобби, входная группа со стороны площади", Fly), 6f, 6f, -10f, 160f, 24f);
+            At(W("1.10", "Демонтаж кранов и входная группа", T, PhEnd(2) - 0.02f, PhEnd(2) + 0.06f, 0, 1, "Разборка башенных кранов сверху вниз, входная группа со стороны площади", Fly), -84f, 12f, 9f, 160f, 24f);
             W("1.11", "Оснащение и мебель", T, PhStart(6), PhEnd(6), 6, 0, "Мебель офисов и резиденций, оборудование ресторанов и спа", Plan);
             W("1.12", "Пусконаладка и сдача", T, 0.90f, 1f, 0, 5, "Пусконаладка инженерных систем, приёмка и ввод в эксплуатацию", Plan);
 
-            // T2 hotel: a frame that steps down to the west, so the lower terraces are waterproofed and planted while the frame still rises
+            // T2: the stepped hotel; its levels step back from the far end, so the lower terraces are sealed while the frame still rises
             Wk(1, 1, "Котлован и водопонижение", 0f, 0.05f, "Котлован отеля, крепление стен, водопонижение", Geo);
-            Wk(1, 2, "Фундаментная плита", 0.03f, 0.09f, "Плита на сваях под оба крыла, бетон В35", Hid);
-            Wk(1, 3, "Каркас: ядро и уступы 1–9", 0.08f, 0.40f, "Монолитный каркас обоих крыльев до 40 м, ядра лестниц и лифтов на этаж впереди", Conc, -80f, 20f, 44f);
-            Wk(1, 4, "Каркас: уступы 10–18 и кровля", 0.38f, 0.72f, "Уступы до 80 м, техническая кровля с вентиляцией", Conc, -50f, 60f, 44f);
-            Wk(1, 5, "Витраж с бронзовым стеклом", 0.25f, 0.90f, "Витражи номеров снизу вверх, следом за каркасом на 3–4 уступа", "отметка прораба · облёт");
-            Wk(1, 6, "Террасы: гидроизоляция и сады", Wbs.T2Terr, "Гидроизоляция уступов, грунт, газон и деревья — нижние террасы раньше верхних", Fly, -100f, 30f, 30f);
-            Wk(1, 7, "Каскад: сад и деревянные ламели", Wbs.T2Cascade, "Сад-каскад между крыльями и деревянные ламели по его краям", Fly, -70f, 40f, 44f, 160f, 40f);
+            Wk(1, 2, "Фундаментная плита", 0.03f, 0.09f, "Плита на сваях под отель, бетон В35", Hid);
+            Wk(1, 3, "Каркас: уровни 1–10", 0.08f, 0.40f, "Монолитный каркас отеля до 37 м, ядро у грани к башне на этаж впереди", Conc, 50f, 20f, 42f);
+            Wk(1, 4, "Каркас: уровни 11–21 и вершина", 0.38f, 0.72f, "Уступы до 78 м, вершина у грани к башне", Conc, 12f, 60f, 42f);
+            Wk(1, 5, "Витраж за ламелями", 0.25f, 0.90f, "Витражи номеров уровень за уровнем, золотистые ламели, следом за каркасом на 3–4 уровня", "отметка прораба · облёт");
+            Wk(1, 6, "Террасы: гидроизоляция и озеленение", Wbs.T2Terr, "Гидроизоляция уступов, плиты-карнизы и кашпо с зеленью по краям террас — нижние раньше верхних", Fly, 55f, 30f, 42f);
+            Wk(1, 7, "Золотые рёбра у башни", Wbs.T2Cascade, "Золотистые рёбра буквой V на грани к башне — вторая половина «ворот»", Fly, -12f, 40f, 42f, 160f, 30f);
             Wk(1, 8, "Номера, рестораны и спа", 0.50f, 0.96f, "Инженерия гостиничного стандарта, отделка 220 номеров, оборудование ресторанов и спа", Fore);
             Wk(1, 9, "Пусконаладка и открытие", 0.92f, 1f, "Пусконаладка, сертификация гостиничного оператора, мягкое открытие", Plan);
 
-            // retail: the parking and the pit in one go, the high block first (it carries the pool), the low one a little later
+            // the pavilions: the parking and the pit in one go; their roofs slope up from the plaza in a planted wedge
             foreach (int r in new[] { 2, 3 })
             {
-                bool east = r == 2; float hx = east ? 42f : -47f, lx = east ? 99f : -95f, hh = east ? 26f : 22f;
-                Wk(r, 1, "Котлован и подземный паркинг", 0f, 0.12f, "Котлован, монолитный паркинг в два уровня под обоими корпусами", Geo);
-                Wk(r, 2, $"Каркас высокого корпуса · {hh:0} м", Rise(Wbs.RHigh), "Колонны и плиты с большими пролётами галереи, атриум", Conc, hx, hh * 0.5f, -48f);
-                Wk(r, 3, "Каркас низкого корпуса · 14 м", Rise(Wbs.RLow), "Монолитный каркас низкого корпуса, деформационный шов", Conc, lx, 7f, -48f);
-                Wk(r, 4, "Витражи и золотой пояс", Skin(Wbs.RHigh).x, Skin(Wbs.RLow).y, "Витражи галереи и витрины, золотой пояс по кровле, стеклянный парапет", "отметка прораба · облёт");
-                Wk(r, 5, "Бассейн на кровле", Wbs.RPool, "Чаша бассейна, деревянная палуба, шезлонги и кадки с деревьями", Fly, hx, hh, -48f, 140f, 44f);
-                Wk(r, 6, "Сад на кровле", Wbs.RGarden, "Гидроизоляция, грунт, газоны и деревья на кровле низкого корпуса", Fly, lx, 14f, -48f, 140f, 44f);
-                Wk(r, 7, east ? "Галерея: эскалаторы и инженерия" : "Фуд-холл и инженерия", 0.45f, 0.95f, east ? "Эскалаторы, вентиляция торговых площадей, пожарная автоматика" : "Вытяжка фуд-холла, вентиляция, пожарная автоматика", Fore);
-                Wk(r, 8, "Отделка арендаторов и открытие", 0.85f, 1f, "Отделка помещений арендаторами, приёмка, открытие", Plan);
+                bool east = r == 2; float fx = east ? -78f : 78f, fz = -58f;
+                Wk(r, 1, "Котлован и подземный паркинг", 0f, 0.12f, "Котлован, монолитный паркинг в два уровня под павильоном", Geo);
+                Wk(r, 2, "Каркас павильона", Rise(Wbs.RHigh), "Колонны и плиты торговых этажей, наклонные балки кровли с большими пролётами", Conc, fx, 8f, fz);
+                Wk(r, 3, "Наклонная зелёная кровля", Rise(Wbs.RLow), east ? "Кровля-клин поднимается от площади до 32 м: гидроизоляция, грунт, газон и кустарник" : "Кровля-клин поднимается от площади до 22 м: гидроизоляция, грунт, газон и кустарник", Fly, fx, 20f, fz);
+                Wk(r, 4, "Витрины и деревянный софит", Skin(Wbs.RHigh).x, Skin(Wbs.RLow).y, "Витрины галереи к площади, деревянный подшивной потолок козырька", "отметка прораба · облёт");
+                if (east) Wk(r, 5, "Бассейн на террасе", Wbs.RPool, "Бассейн, настил и шезлонги на террасе восточного павильона", Fly, -63f, 6f, -50f, 160f, 44f);
+                else Wk(r, 5, "Сад на кровле", Wbs.RGarden, "Дорожки, газон и деревья на кровле западного павильона", Fly, fx, 12f, fz, 160f, 44f);
+                Wk(r, 6, east ? "Галерея: эскалаторы и инженерия" : "Фуд-холл и инженерия", 0.45f, 0.95f, east ? "Эскалаторы, вентиляция торговых площадей, пожарная автоматика" : "Вытяжка фуд-холла, вентиляция, пожарная автоматика", Fore);
+                Wk(r, 7, "Отделка арендаторов и открытие", 0.85f, 1f, "Отделка помещений арендаторами, приёмка, открытие", Plan);
             }
 
-            // grounds: the networks first, then the promenade, the allée and the squares, the planting last (spring)
+            // the plot: the networks first, then the paving, the lawn islands with their groves, lamps and benches, the trees along the edge last (spring)
             Wk(4, 1, "Подземные сети и основание", 0f, 0.30f, "Ливнёвка, полив, кабели освещения, щебёночное основание под мощение", Hid);
-            Wk(4, 2, "Променад по периметру", Wbs.GProm, "Гранитное мощение полосой 12 м вокруг участка", Fly);
-            Wk(4, 3, "Аллея с фонтаном", Wbs.GAllee, "Аллея между башней и отелем, газоны, круглая чаша фонтана", Fly, -13f, 1f, 44f, 160f, 50f);
-            Wk(4, 4, "Партер и площадь с бассейном", Wbs.GSquare, "Партер с газонами севернее башни, площадь с длинным бассейном, фонари и скамьи", Fly, 70f, 1f, 55f, 200f, 46f);
-            Wk(4, 5, "Посадка деревьев и живой изгороди", Wbs.GTrees, "Двойные ряды деревьев в решётках, стриженая изгородь, газоны — весной", Plan);
+            Wk(4, 2, "Мощение участка", Wbs.GProm, "Светлый гранит по площади и вокруг павильонов", Fly);
+            Wk(4, 3, "Газоны и сад", Wbs.GAllee, "Газоны, цветники и рощи сада у площади", Fly, 0f, 1f, -60f, 160f, 50f);
+            Wk(4, 4, "Амфитеатр, фонари и скамьи", Wbs.GSquare, "Ступени амфитеатра площади, зонтики, фонари и скамьи", Fly, 23f, 1f, -44f, 200f, 46f);
+            Wk(4, 5, "Деревья по краю участка", Wbs.GTrees, "Деревья в решётках по краю участка — весной", Plan);
         }
         /// <summary>KAIST campus: the library and research tower (its floors are followed like the Iconic tower), the main hall lifted on
         /// columns, the laboratory comb, the curved north block, the sports oval and the park with the lake laid out first.</summary>
@@ -248,10 +248,9 @@ namespace AlatauCity.DigitalTwin.Landmarks
             return o;
         }
         static Color ClsColor(string c) => c == "ok" ? new Color(0.20f, 0.78f, 0.35f) : c == "warn" ? new Color(0.96f, 0.65f, 0.14f) : c == "bad" ? new Color(1f, 0.35f, 0.31f) : new Color(0.55f, 0.55f, 0.55f);
-        /// <summary>Share of a building's budget spent at progress p: slow at the start, most during frame and envelope (an S-curve).</summary>
-        static float Spend(float p) { p = Mathf.Clamp01(p); return p * p * (3f - 2f * p); }
         float Capex() { float s = 0f; foreach (var p in L.Parts) s += p.Capex; return s; }
-        float Spent(float d, bool fact) { float s = 0f; for (int i = 0; i < L.Parts.Count; i++) s += L.Parts[i].Capex * Spend(fact ? FactP(i, d) : PlanP(i, d)); return s; }
+        /// <summary>The works done in the complex at date d, at the prices of the estimate (Spend: by the cost items of every building).</summary>
+        float Spent(float d, bool fact) { float s = 0f; for (int i = 0; i < L.Parts.Count; i++) s += L.Parts[i].Capex * Spend(i, fact ? FactP(i, d) : PlanP(i, d)); return s; }
         static string Usd(float m) => m >= 1000f ? "$" + Loc.N1(m / 1000f) + " млрд" : "$" + Mathf.RoundToInt(m) + " млн";
         static string Cls(int days) => days <= 3 ? "ok" : days <= 21 ? "warn" : "bad";
         static string Dev(St s) => s.Plan <= 0f && s.Fact <= 0f ? "—" : s.Days <= 3 ? "в срок" : "−" + s.Days + " дн.";
@@ -306,7 +305,8 @@ namespace AlatauCity.DigitalTwin.Landmarks
             var ii = IconicInterior.Instance; var ls = LandmarkSystem.Instance; if (ii == null || ls == null || !ls.Ready || open) return;
             if (TowerProfile.For(id) == null) return;
             L = ls.Get(id); if (L == null || L.Parts == null || L.Main < 0) return; H = L.Height;
-            int stage = L.StartYear + 1; Report = stage + 72f / 365f; T0 = Mathf.Floor(L.Begin); T1 = Mathf.Max(Mathf.Ceil(L.Finish + 0.05f), L.EndYear + 1f);
+            // the survey shown first is the one in the middle of the works (MakeSurveys snaps it to a survey date); the list runs to the handover
+            Report = L.Begin + 0.5f * (L.Finish - L.Begin); int stage = Mathf.FloorToInt(Report); T0 = Mathf.Floor(L.Begin); T1 = Mathf.Max(Mathf.Ceil(L.Finish + 0.05f), L.EndYear + 1f);
             var lm = L; shiftFn = (l, i, y) => l == lm ? DelayAt(i, y) : 0f;
             prevYear = TwinState.Year;
             if (TwinState.Year != stage) TwinState.Year = stage;
@@ -314,7 +314,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             if (!wasInside) ii.Enter(id);
             if (!IconicInterior.Active || IconicShape.P.Id != id) { RestoreYear(); return; }
             model = ls.ModelOf(id); main = Camera.main; if (model == null || main == null) { RestoreYear(); return; }
-            MakeWorks(); MakeSurveys(); crewPeak = -1f; ganttOn = false; d4Plan = false; svPlan = true; svTool = 0; rN = 0; vidGroup = 0;
+            MakeWorks(); MakeSurveys(); MakeAnalytics(); crewPeak = -1f; ganttOn = false; d4Plan = false; svPlan = false; svTool = 0; rN = 0; vidGroup = 0;
             open = true; playing = false; planMode = false; scrubbing = false; tab = 0; date = Report; obj = -1;
             focusFloor = -1; floorT = 0f; uiT = 0f; zoomK = 1f; camYawOff = camPitchOff = 0f; camFov = 58f;
             IconicInterior.Suspended = true; ii.HidePanel();
@@ -338,7 +338,8 @@ namespace AlatauCity.DigitalTwin.Landmarks
             if (overlay != null) { ui?.ForgetChrome(overlay); overlay.RemoveFromHierarchy(); overlay = null; }
             Unfreeze();
             if (mon != null) { mon.enabled = false; mon.targetTexture = null; mon.orthographic = false; }
-            Isolate(false); Shader.SetGlobalFloat(BimId, 0f);
+            Isolate(false); Shader.SetGlobalFloat(BimId, 0f); Shader.SetGlobalFloat(DiffId, 0f);
+            if (L != null) LandmarkSystem.Instance?.DiffFrom(L.Id, -1f, -1f); svDiff = false; diffY0 = diffY1 = -2f;
             LandmarkSystem.YearOverride = -1f; LandmarkSystem.FactShift = null; LandmarkSystem.HiObj = null; LandmarkSystem.HiPart = -1;
             HideRigs(); RestoreYear();
             var ii = IconicInterior.Instance;
@@ -476,7 +477,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             float dt = TwinState.RealDelta; phase += dt;
             if (!MapCamera.Typing)
             {
-                if (Input.GetKeyDown(KeyCode.Escape)) { if (view == View.Cam) CamBack(); else { Close(); return; } }
+                if (Input.GetKeyDown(KeyCode.Escape)) { if (tab == TAn && AnDocOpen) CloseDoc(); else if (view == View.Cam) CamBack(); else { Close(); return; } }
                 if (Input.GetKeyDown(KeyCode.Space)) TogglePlay();
                 if (Input.GetKeyDown(KeyCode.RightArrow)) { playing = false; SetDate(date + 1f / 12f); }
                 if (Input.GetKeyDown(KeyCode.LeftArrow)) { playing = false; SetDate(date - 1f / 12f); }
@@ -571,7 +572,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 if (monRT != null)
                 {
                     if (mon.targetTexture != monRT) mon.targetTexture = monRT;
-                    bool live = !(tab == TVid && view != View.Cam);          // the camera wall covers the picture: no need to draw it
+                    bool live = !(tab == TVid && view != View.Cam) && tab != TAn;          // the camera wall covers the picture: no need to draw it
                     if (mon.enabled != live) mon.enabled = live;
                     if (photo.image != monRT) photo.image = monRT;
                 }
@@ -613,8 +614,16 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 isoGos.Clear(); isoLayers.Clear();
             }
         }
-        void OnEnable() { Camera.onPreRender += PreCam; Camera.onPostRender += PostCam; }
-        void OnDisable() { Camera.onPreRender -= PreCam; Camera.onPostRender -= PostCam; Shader.SetGlobalFloat(BimId, 0f); }
+        static readonly int DiffId = Shader.PropertyToID("_AlatauDiff");
+        void OnEnable() { Camera.onPreCull += PreCull; Camera.onPreRender += PreCam; Camera.onPostRender += PostCam; }
+        void OnDisable() { Camera.onPreCull -= PreCull; Camera.onPreRender -= PreCam; Camera.onPostRender -= PostCam; Shader.SetGlobalFloat(BimId, 0f); Shader.SetGlobalFloat(DiffId, 0f); }
+        // "Что изменилось": the colours of the diff and the site of both dates (cranes, hoarding) for this camera only, before it culls
+        bool diffShown;
+        void PreCull(Camera c)
+        {
+            if (c != mon || !DiffOn) return;
+            Shader.SetGlobalFloat(DiffId, 1f); LandmarkSystem.Instance?.DiffShow(L.Id, true); diffShown = true;
+        }
         // the plan looks straight down from high above: no haze on it (fog off around its render)
         bool fogWas, fogOff;
         void PreCam(Camera c)
@@ -627,6 +636,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
         {
             if (c != mon) return;
             Shader.SetGlobalFloat(BimId, 0f);
+            if (diffShown) { Shader.SetGlobalFloat(DiffId, 0f); LandmarkSystem.Instance?.DiffShow(L.Id, false); diffShown = false; }
             if (fogOff) { RenderSettings.fog = fogWas; fogOff = false; }
         }
 
@@ -690,8 +700,12 @@ namespace AlatauCity.DigitalTwin.Landmarks
                         break;
                     }
                 case 1:
-                    eye = kaist ? new Vector3(-40f, 14f, -50f) : new Vector3(-14f, 14f, -40f);
-                    look = new Vector3(IconicShape.Xr - (kaist ? 20f : 30f), top * 0.55f, IconicShape.Cz); foot = new Vector3(eye.x, 0.3f, eye.z); break;
+                    // Iconic: a mast on the podium roof in front of the tower, looking up its lamella face
+                    {
+                        float ry = kaist ? 0.3f : LandmarkModels.RoofAt(-120f, 80f);
+                        eye = kaist ? new Vector3(-40f, 14f, -50f) : new Vector3(-120f, ry + 7f, 80f);
+                        look = new Vector3(IconicShape.Xr - (kaist ? 20f : 30f), top * 0.55f, IconicShape.Cz); foot = new Vector3(eye.x, ry, eye.z); break;
+                    }
                 case 2:
                     {
                         // the cage of the facade hoist on the east face, at the floor where the curtain wall goes up; its mast is tied to the frame
@@ -718,10 +732,10 @@ namespace AlatauCity.DigitalTwin.Landmarks
                     eye = new Vector3(-L.PadW * 0.5f + 9f, 26f, -L.PadD * 0.5f + 9f); look = new Vector3(L.PadW * 0.08f, Mathf.Min(top * 0.35f, 40f), L.PadD * 0.05f);
                     foot = new Vector3(eye.x, 0.3f, eye.z); break;
                 case 5:
-                    // the gate of the site: trucks in and out; Iconic's is on the south side between the two retail blocks,
-                    // looking in over the west lot towards the hotel
+                    // the gate of the site: trucks in and out; Iconic's is on the square behind the podium, between the tower and
+                    // the pyramid, looking in at the gap between them
                     if (kaist) { eye = new Vector3(L.PadW * 0.5f - 6f, 6.5f, -L.PadD * 0.5f + 4f); look = new Vector3(L.PadW * 0.5f - 40f, 1f, -L.PadD * 0.5f + 34f); }
-                    else { eye = new Vector3(-4f, 9f, -L.PadD * 0.5f + 2f); look = new Vector3(-36f, 0f, -L.PadD * 0.5f + 52f); }
+                    else { eye = new Vector3(12f, 24f, -L.PadD * 0.5f + 2f); look = new Vector3(12f, 50f, -40f); }
                     foot = new Vector3(eye.x, 0.3f, eye.z); break;
                 default:
                     if (kaist) { eye = new Vector3(62f, 34f, -86f); look = new Vector3(IconicShape.Xr - 20f, Mathf.Max(top - 10f, 8f), IconicShape.Cz); foot = new Vector3(eye.x, 0.3f, eye.z); }
@@ -730,7 +744,8 @@ namespace AlatauCity.DigitalTwin.Landmarks
                         // on the top slab of the hotel as its frame rises, on its roof once it is topped out
                         float hp = PlanP(1, date); if (!planMode) hp = FactP(1, date);
                         float fr = Mathf.Max(Pt(1).H * 0.95f * Mathf.Clamp01((hp - 0.08f) / 0.62f), 0.3f);
-                        eye = new Vector3(-38f, fr + 6f, 22f); look = new Vector3(IconicShape.Xr - 30f, Mathf.Max(top - 12f, 10f), IconicShape.Cz);
+                        var ap = LandmarkModels.T2Apex;                                     // the steps of the hotel rise to its top near the tower
+                        eye = new Vector3(ap.x + 5f, fr + 5f, ap.y); look = new Vector3(IconicShape.Xr - 30f, Mathf.Max(top - 12f, 10f), IconicShape.Cz);
                         foot = new Vector3(eye.x, fr, eye.z); m = hp >= 0.72f ? Mount.Roof : Mount.Mast;
                     }
                     break;
@@ -1153,7 +1168,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
         /// <summary>The labels over the buildings in the view of the complex: what each building is, its readiness and delay. Click: look at it.</summary>
         void ObjPins()
         {
-            bool show = (view == View.Complex || view == View.Tower || view == View.Plan) && monRT != null && tab != TVid && !(tab == TSurv && lyDiff);
+            bool show = (view == View.Complex || view == View.Tower || view == View.Plan) && monRT != null && tab != TVid && tab != TAn && !(tab == TSurv && lyDiff);
             for (int i = 0; i < opins.Count; i++)
             {
                 var pe = opins[i]; bool on = show && (view == View.Complex || i == obj);

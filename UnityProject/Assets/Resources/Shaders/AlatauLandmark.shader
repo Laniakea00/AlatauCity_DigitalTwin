@@ -1,7 +1,13 @@
 // Landmarks (Iconic Complex, plants, campus, LRT …): hand-built procedural models with a small set of surface materials.
 // Vertex data (LandmarkKit): COLOR = base colour, uv0 = facade metres (along, up), uv1.x = material id, uv1.y = its parameter.
 // Materials: 0 solid (plaster / concrete), 1 glass curtain wall (param = floor height), 2 profiled metal, 3 flat roof, 4 paving,
-//            5 light (emissive), 6 planting, 7 water, 8 horizontal fins over glass (param = fin spacing), 9 dark steel / rails.
+//            5 light (emissive), 6 planting, 7 water, 8 horizontal fins over glass (param = fin spacing), 9 dark steel / rails,
+//            10 lit lattice glass (Iconic, param = width of a diamond of the lattice), 11 white housing of the presentation model
+//            (plaster with punched windows on a 3 m bay, param = floor height, uv.y from the building's ground), 12 golden lamellas over
+//            warm glass (param = lamella spacing), 13 perforated copper (param = hole spacing, uv = plan metres), 14 carriageway with
+//            lines of light (uv.x across from the centre line, param = half width), 15 the surfaces of the QTwin page of Iconic Complex
+//            (its BIM model and the Gate District round it, param = the page's surface tag; AlatauQTwin.cginc) and of the campus page
+//            of KAIST (param = its tag + 40).
 // Per object (MaterialPropertyBlock): _Reveal = metres above the object's base still visible (construction rises), _Build = 1 while
 // under construction (bare frame near the top, orange edge), _Ghost = screen-door "planned" look, _Hi = hover / selection rim.
 // Works in the plain maket look and in the film look (_AlatauFilm: sky reflections, night windows) like AlatauCity/Lit.
@@ -29,12 +35,17 @@ Shader "AlatauCity/Landmark"
         #pragma surface surf Soft fullforwardshadows vertex:vert addshadow noambient
         #pragma target 3.5
         #include "Assets/Shaders/AlatauFilm.cginc"
+        #include "Assets/Shaders/AlatauQTwin.cginc"
         float _Reveal, _Build, _Ghost, _Hi, _Facade, _Land, _Glow, _H, _Park;
         // buildings of a complex (LandmarkSystem.Parts): x reveal, y build, z facade, w landscaping · x glow, y height, z outline, w progress
         float4 _PartA[8], _PartB[8];
         // BIM look of the construction monitoring (4D page), set only around its own camera: 0 off, 1 built parts as flat slate
         // solids and what is not built yet as a light wire lattice of the design model, 2 the same without the lattice
         float _AlatauBim;
+        // "Что изменилось" of the surveys (git-like diff of two dates), drawn only by the monitoring camera (_AlatauDiff around its
+        // render). On the monitored object (_DiffOn): _DiffA[k] the stages of building k at the earlier survey (x reveal, y build,
+        // z facade, w landscaping; [0] the object's own), _DiffW[k] its progress then. Site pieces carry _DiffTint: 1 new, 2 gone, 3 same.
+        float _AlatauDiff, _DiffOn, _DiffTint; float4 _DiffA[8]; float _DiffW[8];
         // fm = facade metres (xy) and material (zw); lp = local height, building of the complex; win = stage window inside the building
         struct Input { float4 color : COLOR; float4 fm; float2 lp; float4 win; float3 worldPos; float3 worldNormal; float4 screenPos; };
         void vert(inout appdata_full v, out Input o)
@@ -49,29 +60,39 @@ Shader "AlatauCity/Landmark"
             c.rgb += _LightColor0.rgb * (pow(saturate(dot(s.Normal, hv)), 140.0) * s.Specular * atten * 1.6);
             return c;
         }
+        // a piece with its own stage window (LandmarkKit.Win): columns, a transfer slab, a wing, a sector of an arc … rises from y0 to y1
+        // while the building goes from a to b (progress pw), then gets its facade and its grounds; finished after its window
+        void AWin(float4 win, float pw, bool treeTag, inout float rev, inout float bld, inout float fcd, inout float lnd)
+        {
+            if (win.y <= win.x + 1e-4) return;
+            float q = saturate((pw - win.x) / (win.y - win.x));
+            float h0 = win.z, h1 = win.w;
+            if (q <= 0.0) { rev = -1000.0; bld = 1.0; lnd = 0.0; }
+            else if (q >= 0.999) { rev = 100000.0; bld = 0.0; fcd = 100000.0; lnd = 1.0; }
+            else if (treeTag) { rev = 100000.0; bld = 1.0; lnd = q; }       // trees: planted one by one over the window
+            else { rev = max(h0 + (h1 - h0) * saturate(q / 0.6), h0 + 0.6); bld = 1.0; fcd = h0 + (h1 - h0) * saturate((q - 0.3) / 0.6); lnd = saturate((q - 0.8) / 0.2); }
+        }
         void surf(Input IN, inout SurfaceOutput o)
         {
             // every derivative first, before any branch
             float2 uv = IN.fm.xy, fw = fwidth(uv); float lyW = fwidth(IN.lp.x);
+            float2 qfw = fwidth(IN.worldPos.xz); float qfl = length(qfw);
+            float2 kxz = mul(unity_WorldToObject, float4(IN.worldPos, 1.0)).xz, kfw = fwidth(kxz);     // plan metres of the object (KAIST)
             float3 n = normalize(IN.worldNormal), view = normalize(_WorldSpaceCameraPos - IN.worldPos);
             // the building of a complex this fragment belongs to (uv2.x, LandmarkKit.Part): its own stages, 0 = the object's values
             float rev = _Reveal, bld = _Build, fcd = _Facade, lnd = _Land, glw = _Glow, hgt = _H, hiP = _Hi;
+            // the same at the earlier survey of the diff
+            float4 dE0 = _DiffA[0];
+            float revE = dE0.x, bldE = dE0.y, fcdE = dE0.z, lndE = dE0.w;
             int pid = (int)round(IN.lp.y);
             if (pid > 0 && pid < 8)
             {
-                float4 pa = _PartA[pid], pb = _PartB[pid];
+                float4 pa = _PartA[pid], pb = _PartB[pid], de = _DiffA[pid];
                 rev = pa.x; bld = pa.y; fcd = pa.z; lnd = pa.w; glw = pb.x; hgt = pb.y; hiP = max(hiP, pb.z * 0.4);
-                // a piece with its own stage window (LandmarkKit.Win): columns, a transfer slab, a wing, a sector of an arc … rises
-                // from y0 to y1 while the building goes from a to b, then gets its facade and its grounds; finished after its window
-                if (IN.win.y > IN.win.x + 1e-4)
-                {
-                    float q = saturate((pb.w - IN.win.x) / (IN.win.y - IN.win.x));
-                    float h0 = IN.win.z, h1 = IN.win.w;
-                    if (q <= 0.0) { rev = -1000.0; bld = 1.0; lnd = 0.0; }
-                    else if (q >= 0.999) { rev = 100000.0; bld = 0.0; fcd = 100000.0; lnd = 1.0; }
-                    else if (IN.fm.zw.y < -6.5) { rev = 100000.0; bld = 1.0; lnd = q; }       // trees: planted one by one over the window
-                    else { rev = max(h0 + (h1 - h0) * saturate(q / 0.6), h0 + 0.6); bld = 1.0; fcd = h0 + (h1 - h0) * saturate((q - 0.3) / 0.6); lnd = saturate((q - 0.8) / 0.2); }
-                }
+                revE = de.x; bldE = de.y; fcdE = de.z; lndE = de.w;
+                bool treeTag = IN.fm.zw.y < -6.5;
+                AWin(IN.win, pb.w, treeTag, rev, bld, fcd, lnd);
+                AWin(IN.win, _DiffW[pid], treeTag, revE, bldE, fcdE, lndE);
             }
             // early landscape (LandmarkKit.GreenTag / ParkTreeTag) of the plot itself (part 0): lawns, paths, water and trees laid out
             // before the buildings — not cut by the rising frame and not an earth site. Inside a building of a complex they follow it.
@@ -81,7 +102,12 @@ Shader "AlatauCity/Landmark"
             bool bim = _AlatauBim > 0.5;
             bool wire = bim && _AlatauBim < 1.5 && pid > 0 && !keep && rev - IN.lp.x < 0.0;
             if (bim && IN.fm.zw.y < -6.5) clip(-1.0);                         // BIM: no trees
-            if (!keep && !wire) clip(rev - IN.lp.x);
+            // the diff: what stands now and stood at the earlier survey; what stood then and is gone now is kept, as a red ghost
+            bool dOn = _AlatauDiff > 0.5 && (_DiffOn > 0.5 || _DiffTint > 0.5) && !bim;
+            bool dSite = _DiffTint > 0.5;
+            bool wasV = (keep && dE0.x > -999.0) || revE - IN.lp.x >= 0.0;
+            bool gone = dOn && (dSite ? _DiffTint > 1.5 && _DiffTint < 2.5 : !keep && rev - IN.lp.x < 0.0 && wasV);
+            if (!keep && !wire && !(gone && !dSite)) clip(rev - IN.lp.x);
             // BIM lines: a floor every 4 m and a grid line every 6 m along the facade (on walls), screen-width thin
             float bimWall = 1.0 - saturate(abs(n.y) * 3.0);
             float bimFloor = 1.0 - saturate(abs(frac(IN.lp.x / 4.0 + 0.5) - 0.5) * 4.0 / max(lyW * 1.2, 1e-4));
@@ -94,6 +120,12 @@ Shader "AlatauCity/Landmark"
                 float ign = frac(52.9829189 * frac(dot(floor(sp), float2(0.06711056, 0.00583715))));
                 clip((1.0 - 0.72 * _Ghost) - ign);
             }
+            // lattice of the Iconic facade (material 10): coordinates along the face (horizontal) and up, the same on every floor of a face
+            float2 latH = n.xz; float latL = length(latH);
+            float2 latT = latL > 1e-3 ? float2(-latH.y, latH.x) / latL : float2(1.0, 0.0);
+            float latP = max(IN.fm.w, 1.0);
+            float latA = (dot(IN.worldPos.xz, latT) + IN.worldPos.y / 2.6) / latP, latB = (dot(IN.worldPos.xz, latT) - IN.worldPos.y / 2.6) / latP;
+            float latWA = fwidth(latA), latWB = fwidth(latB);
             int id = (int)round(IN.fm.zw.x);
             bool tree = IN.fm.zw.y < -6.5;                                   // LandmarkKit.TreeTag: planted at the end of construction
             float prm = tree || keep || green ? 3.0 : max(IN.fm.zw.y, 0.05);
@@ -114,6 +146,21 @@ Shader "AlatauCity/Landmark"
             float night = _AlatauNight * film;
             float grain = ANoise(IN.worldPos.xz * 0.37 + IN.worldPos.y * 0.21);
 
+            bool qSoft = false;
+            if (id == 15)
+            {
+                // the QTwin page's own surfaces, worked out in linear light; metals put their colour into the reflection of the sky
+                int qt = (int)round(prm); QSurf q;
+                if (qt > 40) q = KaistSurface(qt - 40, pid, uv.x, uv.y, fw.x, fw.y, kxz, kfw, qfl, n, night);
+                else q = QTwinSurface(qt, pid, uv.x, uv.y, fw.x, fw.y, IN.worldPos.xz, qfw, qfl, n, night);
+                float3 f0 = lerp(float3(0.04, 0.04, 0.04), q.col, q.metal);
+                float gloss = (1.0 - q.rough) * (1.0 - q.rough);
+                a = pow(max(q.col * (1.0 - 0.8 * q.metal), 1e-5), 0.4545);
+                // the reflection in linear light, so gold reflects gold (not a grey sky over it); a fill as the page's hemisphere light
+                float3 refl = sky * sky * (f0 + (1.0 - f0) * fres) * gloss;
+                emit = pow(max(q.emis + refl, 1e-5), 0.4545) + a * 0.16;
+                spec = gloss * 0.6; qSoft = q.soft;
+            }
             if (id == 1 || id == 8)
             {
                 // glass curtain wall: slab bands per floor, thin mullions; (8) white horizontal fins in front of the glass
@@ -139,7 +186,125 @@ Shader "AlatauCity/Landmark"
                 a = lerp(farA, nearA, detail); emit = lerp(farE, nearE, detail);
                 spec = (1.0 - solidPart * detail) * 0.9;
             }
-            else if (id == 2)
+            else if (id == 10)
+            {
+                // lit lattice glass, as on the presentation model: warm-lit floors behind the glass, a diamond grid of light lines over the
+                // faces (2.6 times as tall as wide), faint mullions every 1.5 m; seen from afar the grid fades to its average brightness
+                float lw = 0.17 / latP;
+                float dA = abs(frac(latA + 0.5) - 0.5), dB = abs(frac(latB + 0.5) - 0.5);
+                float lineA = 1.0 - saturate((dA - lw) / max(latWA, 1e-4) + 0.5), lineB = 1.0 - saturate((dB - lw) / max(latWB, 1e-4) + 0.5);
+                float detail = saturate(1.6 - max(latWA, latWB) * 4.0);
+                float wallF = saturate(latL * 3.0);
+                float lat = lerp(lw * 4.0, max(lineA, lineB), detail) * wallF;
+                float mu = abs(frac(dot(IN.worldPos.xz, latT) / 1.5 + 0.5) - 0.5);
+                float mull = (1.0 - saturate((mu - 0.03) / max(latWA * latP / 1.5, 1e-4) + 0.5)) * detail;
+                float h = AHash2(floor(float2(dot(IN.worldPos.xz, latT) / 6.0, IN.worldPos.y / 3.75)) + 5.0);
+                float3 warmIn = a * lerp(float3(1.0, 0.86, 0.66), float3(1.0, 0.94, 0.82), h);
+                float mirror = (0.22 + 0.60 * fres) * (1.0 - 0.55 * night);
+                a = lerp(a * 0.42, float3(0.93, 0.90, 0.84), mull * 0.5);
+                emit = warmIn * (0.58 + 0.70 * night) * (1.0 - mull * 0.4) + sky * mirror
+                     + float3(1.0, 0.96, 0.86) * lat * (0.85 + 1.4 * night);
+                spec = 0.8 * (1.0 - lat);
+            }
+            else if (id == 11)
+            {
+                // white housing of the presentation model, uv.y = metres above the building's ground: a glazed ground floor of shops and
+                // cafés between pilasters, above it one window 1.5 × 1.85 m per 3 m bay and floor set in a reveal (a shadow along its top
+                // and one side), a faint groove at every slab, some bays with full-height French windows; the glass dark and mirroring
+                // the sky, a curtain behind some, lights on at night; from afar the grid fades to its average
+                const float gfH = 4.2;
+                float wallF = 1.0 - saturate(abs(n.y) * 3.0);
+                float yy = uv.y - gfH;
+                float2 cell = float2(uv.x / 3.0, yy / prm), cw = fw / float2(3.0, prm);
+                float2 q = frac(cell), idc = floor(cell);
+                float detail = saturate(1.4 - max(cw.x, cw.y) * 2.0);
+                float hb = AHash2(float2(floor(uv.x / 6.0), 3.0) + 31.0);
+                float tall = step(0.78, hb);                                         // a column of French windows
+                float wy0 = lerp(0.23, 0.08, tall), wy1 = 0.81;
+                float wx = 1.0 - saturate((abs(q.x - 0.5) - 0.25) / max(cw.x, 1e-4) + 0.5);
+                float wy = saturate((q.y - wy0) / max(cw.y, 1e-4) + 0.5) * (1.0 - saturate((q.y - wy1) / max(cw.y, 1e-4) + 0.5));
+                float w = wx * wy * wallF * step(0.0, yy);
+                float reveal = w * saturate(1.0 - (wy1 - q.y) / 0.07) + w * saturate(1.0 - (q.x - 0.25) / 0.05) * 0.6;
+                float groove = (1.0 - saturate(min(q.y, 1.0 - q.y) / max(cw.y * 1.2, 0.012))) * step(0.0, yy);
+                float h = AHash2(idc + 31.0);
+                float3 glass = float3(0.17, 0.20, 0.24) * (0.8 + 0.4 * h);
+                glass = lerp(glass, float3(0.62, 0.58, 0.52) * 0.55, step(0.72, AHash2(idc * 1.3 + 2.0)) * 0.7);     // curtains
+                float lit = step(1.0 - (0.10 + 0.50 * night), AHash2(idc * 2.1 + 7.0)) * night;
+                float3 lamp = lerp(float3(1.0, 0.80, 0.50), float3(1.0, 0.93, 0.78), h) * lit * 1.3;
+                float mirror = 0.22 + 0.62 * fres;
+                // ground floor: shop windows from 0.4 to 3.7 m between 0.6 m pilasters every 6 m
+                float gq = frac(uv.x / 6.0), gw = fw.x / 6.0;
+                float shop = (1.0 - saturate((abs(gq - 0.5) - 0.44) / max(gw, 1e-4) + 0.5)) * saturate((uv.y - 0.4) / max(fw.y, 1e-3)) * saturate((3.7 - uv.y) / max(fw.y, 1e-3)) * step(uv.y, gfH) * wallF;
+                float3 shopIn = float3(1.0, 0.86, 0.62) * (0.10 + 0.16 * AHash2(float2(floor(uv.x / 6.0), 7.0)));
+                float share = 0.50 * 0.58 * wallF * step(0.0, yy);
+                float3 plaster = a * (0.965 + 0.05 * grain) * (0.86 + 0.14 * saturate(uv.y / 7.0)) * (1.0 - 0.05 * groove * detail);
+                plaster *= 1.0 - 0.25 * reveal * detail;
+                float3 nearA = lerp(lerp(plaster, glass, w * (1.0 - reveal * 0.5)), float3(0.16, 0.17, 0.18), shop);
+                float3 farA = lerp(lerp(plaster, glass, share), float3(0.16, 0.17, 0.18), shop * 0.85);
+                a = lerp(farA, nearA, detail);
+                float3 winE = (sky * mirror + lamp) * w * (1.0 - reveal * 0.6);
+                float3 shopE = (shopIn * (1.0 + 4.0 * night) + sky * mirror * 0.5) * shop;
+                emit = lerp((sky * mirror * 0.45 + float3(1.0, 0.85, 0.6) * night * 0.3) * share + shopE * 0.85, winE + shopE, detail);
+                spec = lerp(share + shop * 0.6, w + shop, detail) * 0.8;
+            }
+            else if (id == 12)
+            {
+                // golden lamellas over warm-lit glass (Iconic, as on its model and the SOM renders): a light champagne blade every prm
+                // metres, the glass between glowing warm (more at night), faint mullions every 1.5 m; from afar the average
+                float wallF = 1.0 - saturate(abs(n.y) * 2.0);
+                float2 cell = float2(uv.x / 1.5, uv.y / prm), cw = fw / float2(1.5, prm);
+                float2 q = frac(cell);
+                float detail = saturate(1.4 - max(cw.x, cw.y) * 2.0);
+                float blade = 1.0 - saturate((abs(q.y - 0.5) - 0.19) / max(cw.y, 1e-4) + 0.5);
+                float mull = (1.0 - saturate((min(q.x, 1.0 - q.x) - 0.03) / max(cw.x, 1e-4) + 0.5)) * 0.5;
+                float h = AHash2(floor(float2(uv.x / 6.0, uv.y / 3.75)) + 9.0);
+                float3 bladeC = float3(0.92, 0.84, 0.68) * (0.95 + 0.08 * grain);
+                float3 warmIn = a * lerp(float3(1.0, 0.84, 0.62), float3(1.0, 0.93, 0.80), h);
+                float mirror = (0.16 + 0.55 * fres) * (1.0 - 0.6 * night);
+                float sol = saturate(blade + mull) * wallF, solFar = 0.40 * wallF;
+                float3 glassA = a * 0.28;
+                float3 glassE = warmIn * (0.40 + 0.85 * night) + sky * mirror;
+                a = lerp(lerp(glassA, bladeC, solFar), lerp(glassA, bladeC, sol), detail);
+                emit = lerp(glassE * (1.0 - solFar), glassE * (1.0 - sol), detail) + bladeC * night * 0.12 * lerp(solFar, sol, detail);
+                spec = lerp(0.45, (1.0 - sol) * 0.8, detail);
+            }
+            else if (id == 13)
+            {
+                // perforated copper of the tents: round holes on a staggered grid prm metres apart, larger toward the middle of a panel
+                // field, seams every 3 panels; by day the holes are dark, at night the halls' light shines through them
+                float2 pp = uv / prm, pw = fw / prm;
+                float odd = frac(floor(pp.y) * 0.5) * 2.0;
+                float2 g = frac(float2(pp.x + 0.5 * odd, pp.y)) - 0.5;
+                float rr = 0.18 + 0.14 * ANoise(uv * 0.025 + 5.0);
+                float hole = 1.0 - saturate((length(g) - rr) / max(max(pw.x, pw.y), 1e-4) + 0.5);
+                float detail = saturate(1.3 - max(pw.x, pw.y) * 2.5);
+                float2 sq = abs(frac(uv / (prm * 3.0)) - 0.5); float2 sw = fw / (prm * 3.0);
+                float seam = 1.0 - saturate((0.485 - max(sq.x, sq.y)) / max(max(sw.x, sw.y), 1e-4) + 0.5);
+                float3 plate = a * (0.92 + 0.10 * grain) * (1.0 - 0.10 * seam * detail);
+                float shareH = 3.1416 * rr * rr;
+                float3 holeC = float3(0.22, 0.16, 0.11);
+                float ho = lerp(shareH, hole, detail);
+                a = lerp(plate, holeC, ho);
+                emit = float3(1.0, 0.78, 0.48) * ho * (0.10 + 1.1 * night) + sky * (0.06 + 0.25 * fres) * (1.0 - ho);
+                spec = 0.45 * (1.0 - ho);
+            }
+            else if (id == 14)
+            {
+                // a carriageway of the presentation model's roads: uv.x = metres across from its centre line, uv.y = along, prm = half
+                // width; lanes of 3.5 m, edge lines and dashed lane lines that are strips of cool light, as on the model
+                float hw = prm, x = uv.x, ax = abs(x), xw = max(fw.x, 1e-4), v = uv.y;
+                float3 asph = float3(0.30, 0.305, 0.31) * (0.92 + 0.12 * grain) * (0.95 + 0.10 * ANoise(IN.worldPos.xz * 0.05));
+                float edgeL = 1.0 - saturate((abs(ax - (hw - 0.35)) - 0.08) / xw + 0.5);
+                float lp = (x + hw) / 3.5; float dl = abs(frac(lp + 0.5) - 0.5) * 3.5;
+                float lane = (1.0 - saturate((dl - 0.07) / xw + 0.5)) * step(1.75, x + hw) * step(1.75, hw - x) * step(frac(v / 9.0), 0.42);
+                float mark = saturate(edgeL + lane) * saturate(1.5 - xw * 5.0);
+                float far = saturate(xw * 3.0 - 0.3);
+                a = lerp(asph, float3(0.92, 0.92, 0.90), mark * 0.9);
+                emit = float3(0.62, 0.82, 1.0) * (mark + far * 0.10) * (0.30 + 1.8 * night);
+                spec = 0.1;
+            }
+            // (two chains: one long else-if chain overflows the parser of the surface shader analysis)
+            if (id == 2)
             {
                 // profiled metal: vertical ribs every 0.8 m
                 float rib = 1.0 - saturate((abs(frac(uv.x / 0.8) - 0.5) - 0.18) / max(fw.x / 0.8, 1e-4) + 0.5);
@@ -177,7 +342,7 @@ Shader "AlatauCity/Landmark"
             {
                 spec = 0.35; emit = sky * 0.08 * fres;
             }
-            else
+            else if (id == 0 || id > 15)
             {
                 // solid: plaster / precast panels with faint joints every floor height (param) and 3 m
                 float2 t = float2(frac(uv.x / 3.0), frac(uv.y / prm));
@@ -193,7 +358,7 @@ Shader "AlatauCity/Landmark"
             if (bld > 0.5 && !keep)
             {
                 bool ground = (IN.lp.x < 1.2 || _Park > 0.5) && n.y > 0.6 && !tree;
-                bool raised = !ground && IN.lp.x >= 1.2 && (id == 4 || (id == 6 && !tree) || id == 7);
+                bool raised = !ground && IN.lp.x >= 1.2 && (id == 4 || (id == 6 && !tree) || id == 7 || qSoft);
                 if (raised)
                 {
                     // terraces and roof gardens above the ground: a bare concrete slab until they are paved and planted (never soil in the air)
@@ -201,11 +366,11 @@ Shader "AlatauCity/Landmark"
                     float3 slabC = float3(0.64, 0.63, 0.60) * (0.92 + 0.10 * grain);
                     a = lerp(slabC, a, l2); emit *= l2; spec *= l2;
                 }
-                else if (ground || id == 4 || (id == 6 && !tree) || id == 7)
+                else if (ground || id == 4 || (id == 6 && !tree) || id == 7 || qSoft)
                 {
                     float tracks = smoothstep(0.35, 0.5, abs(frac(dot(IN.worldPos.xz, float2(0.083, 0.052))) - 0.5)) * 0.08;
                     float3 soil = float3(0.50, 0.42, 0.32) * (0.82 + 0.30 * grain + 0.10 * ANoise(IN.worldPos.xz * 0.05)) - tracks;
-                    float l = ground || id == 4 ? land : saturate(land * 1.5 - 0.5);
+                    float l = ground || id == 4 || qSoft ? land : saturate(land * 1.5 - 0.5);
                     a = lerp(soil, a, l); emit *= l; spec *= l;
                 }
                 else if (!tree && IN.lp.x > fcd && IN.lp.x > 1.2)
@@ -240,6 +405,41 @@ Shader "AlatauCity/Landmark"
             float rim = pow(1.0 - saturate(dot(n, view)), 4.0);
             emit += hiP * (rim * 0.7 + 0.03) * float3(0.85, 0.30, 0.95);
             o.Albedo = a; o.Emission = emit + a * amb; o.Specular = spec; o.Alpha = 1;
+            if (dOn)
+            {
+                // like a diff before a push: new in blue (the structure deep blue, the facade and the grounds light blue), gone in red,
+                // the rest grey and quiet so the change reads at a glance
+                float stE = st0, landE = saturate((lndE - stE) / max(1.0 - stE, 0.05));
+                bool flat = IN.lp.x < 1.2 && n.y > 0.6;
+                bool newS = dSite ? _DiffTint < 1.5 : !keep && !tree && IN.lp.x > revE + 0.05;
+                bool newF = !dSite && !newS && (((bld < 0.5 || IN.lp.x < fcd) && bldE > 0.5 && IN.lp.x > fcdE + 0.05 && !tree)
+                            || ((tree || flat || keep) && land > landE + 0.04));
+                if (tree && !dSite && !newS && landE * 1.15 < AHash2(floor(IN.worldPos.xz / 4.0))) newF = true;
+                float lum = dot(a, float3(0.30, 0.59, 0.11));
+                float3 grey = lerp(float3(0.50, 0.52, 0.55), lum.xxx, 0.30);        // a clay model: what did not change
+                float dLine = bimLine * 0.55;
+                if (gone)
+                {
+                    float2 sp = IN.screenPos.xy / max(IN.screenPos.w, 1e-4) * _ScreenParams.xy;
+                    float ign = frac(52.9829189 * frac(dot(floor(sp), float2(0.06711056, 0.00583715))));
+                    clip(0.62 - ign);
+                    o.Albedo = float3(0.95, 0.20, 0.18) * 0.35; o.Specular = 0;
+                    o.Emission = float3(1.0, 0.24, 0.20) * (0.62 + dLine);
+                }
+                else if (newS)
+                {
+                    float3 b = float3(0.16, 0.46, 1.0);
+                    o.Albedo = lerp(grey, b, 0.78); o.Specular = 0.2;
+                    o.Emission = b * (0.30 + dLine) + o.Albedo * amb;
+                }
+                else if (newF)
+                {
+                    float3 b = float3(0.50, 0.80, 1.0);
+                    o.Albedo = lerp(grey, b, 0.62); o.Specular = 0.15;
+                    o.Emission = b * (0.14 + dLine * 0.6) + o.Albedo * amb;
+                }
+                else { o.Albedo = grey; o.Specular = 0; o.Emission = grey * (amb * 1.05 + 0.06) * (1.0 - 0.18 * dLine); }
+            }
             if (bim)
             {
                 // flat slate solids shaded by facing; the ground of the plot dark; a frame without its facade concrete-light; the

@@ -15,7 +15,9 @@ namespace AlatauCity.DigitalTwin.Landmarks
         public static float Done { get; private set; }
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
-        static void Boot() { if (Instance == null) new GameObject("Iconic grounds").AddComponent<IconicPark>(); }
+        // not booted: the grounds were laid round the first site of the complex; the complex now stands in the heart of Gate with the
+        // square, the ring and the gardens of its QTwin page round it (IconicDistrict)
+        static void Boot() { }
         void Awake() { Instance = this; }
 
         static readonly Color32 PaveC = LM.C("#d2cbbd"), LawnC = LM.C("#86a95c"), WaterC = LM.C("#2f6f8f"), RimC = LM.C("#bdb6a8");
@@ -26,7 +28,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             if (!built) { TryBuild(); return; }
             float p = LandmarkSystem.Progress(host, LandmarkSystem.YearNow);
             float L = Mathf.Clamp01((p - 0.08f) / 0.90f); Done = L;
-            bool on = L > 0f;
+            bool on = L > 0f && !IconicDistrict.On;                             // the finished district brings its own streets and gardens
             if (go.activeSelf != on) go.SetActive(on);
             if (!on) return;
             mr.GetPropertyBlock(mpb);
@@ -48,6 +50,8 @@ namespace AlatauCity.DigitalTwin.Landmarks
             Vector3 P(float x, float z) => new Vector3(x - cx, CityGround.HeightAt(x, z) + 0.14f - baseY, z - cz);
             for (int i = 0; i + 7 < d.tris.Length; i += 8)
             {
+                // the plot of the complex has its own plaza and gardens (the BIM model)
+                if (IconicDistrict.InPlot((d.tris[i] + d.tris[i + 2] + d.tris[i + 4]) / 3f, (d.tris[i + 1] + d.tris[i + 3] + d.tris[i + 5]) / 3f)) continue;
                 int mat = Mathf.RoundToInt(d.tris[i + 6]); float st = d.tris[i + 7];
                 var col = mat == LM.Water ? WaterC : mat == LM.Plant ? LawnC : PaveC;
                 int v0 = k.VertexCount;
@@ -59,6 +63,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             for (int i = 0; i + 3 < d.trees.Length; i += 4)
             {
                 float x = d.trees[i], z = d.trees[i + 1], h = d.trees[i + 2], st = d.trees[i + 3];
+                if (IconicDistrict.InPlot(x, z, 4f)) continue;                     // the plot of the complex
                 int v0 = k.VertexCount;
                 k.Tree(P(x, z) - Vector3.up * 0.14f, h, Leaf[(i / 4) % Leaf.Length], (i % 97) * 0.13f);
                 k.AlphaFrom(v0, (byte)Mathf.RoundToInt((1f - st) * 255f));

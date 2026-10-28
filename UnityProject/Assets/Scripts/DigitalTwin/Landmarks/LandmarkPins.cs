@@ -11,7 +11,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
     public class LandmarkPins : MonoBehaviour
     {
         public static LandmarkPins Instance;
-        class Pin { public Landmark L; public LrtLayer.Station St; public VisualElement El, Box; public Label Name, Stat; public VisualElement Dot; public int Prio; public float X, Y; public int StIdx = -1; }
+        class Pin { public Landmark L; public LrtLayer.Station St; public VisualElement El, Box; public Label Name, Stat; public VisualElement Dot, Stem; public int Prio; public float X, Y; public int StIdx = -1; }
         readonly List<Pin> pins = new List<Pin>();
         VisualElement host;
 
@@ -43,9 +43,12 @@ namespace AlatauCity.DigitalTwin.Landmarks
             if (st == null)
             {
                 var s = new Label(LandmarkCatalog.StatusOf(l)) { pickingMode = PickingMode.Ignore }; s.AddToClassList("lm-st"); box.Add(s); p.Stat = s;
+                // the «Мониторинг стройки» mode: the mark is the way into the object's monitoring
+                var mo = new Label("Мониторинг") { pickingMode = PickingMode.Ignore }; mo.AddToClassList("lm-mon"); box.Add(mo);
+                if (Modules.MonitoringModule.Watched(l)) w.AddToClassList("has-mon");
             }
             w.Add(box);
-            var stem = new VisualElement { pickingMode = PickingMode.Ignore }; stem.AddToClassList("lm-stem"); w.Add(stem);
+            var stem = new VisualElement { pickingMode = PickingMode.Ignore }; stem.AddToClassList("lm-stem"); w.Add(stem); p.Stem = stem;
             var foot = new VisualElement { pickingMode = PickingMode.Ignore }; foot.AddToClassList("lm-foot"); w.Add(foot);
             // clicks are hit-tested here (LateUpdate) against the drawn label, so they never fall through to the buildings below
             host.Add(w); p.El = w; p.Box = box; w.style.display = DisplayStyle.None;
@@ -61,13 +64,15 @@ namespace AlatauCity.DigitalTwin.Landmarks
             foreach (var p in pins)
             {
                 if (p.Stat == null || p.L == null) continue;
-                int si = LandmarkCatalog.StatusIdx(p.L); string txt = LandmarkCatalog.StatusLabel(p.L);
+                // the monitoring map shows the city as designed; its marks say where each object stands today
+                bool now = Modules.MonitoringModule.On;
+                int si = now ? LandmarkCatalog.NowIdx(p.L) : LandmarkCatalog.StatusIdx(p.L); string txt = now ? LandmarkCatalog.StatusText[si] : LandmarkCatalog.StatusLabel(p.L);
                 if (si == p.StIdx && txt == p.Stat.text) continue;
                 if (p.StIdx >= 0) p.Stat.RemoveFromClassList(LandmarkCatalog.StatusCls[p.StIdx]);
                 p.StIdx = si; p.Stat.text = txt; p.Stat.AddToClassList(LandmarkCatalog.StatusCls[si]);
             }
             var cam = Camera.main; var sys = LandmarkSystem.Instance; if (cam == null || sys == null || !sys.Ready || host == null || host.panel == null) return;
-            string mod = TwinState.Module; bool objectsTab = mod == "objects", overview = mod == "overview";
+            string mod = TwinState.Module; bool objectsTab = mod == "objects", overview = mod == "overview", monitoring = mod == "monitoring";
             var mc = cam.GetComponent<MapCamera>(); float camD = mc != null ? mc.distance : 30000f;
             float y = LandmarkSystem.YearNow;
             bool tour = TwinTour.Running; int zone = TwinTour.Zone;
@@ -94,6 +99,9 @@ namespace AlatauCity.DigitalTwin.Landmarks
                     p.El.EnableInClassList("planned", pr <= 0f);
                     p.El.EnableInClassList("hover", sys.Hovered == p.L);
                 }
+                // monitoring mode: only its six marked objects, nothing else on the map
+                if (monitoring) show = p.St == null && Modules.MonitoringModule.OnMap(p.L) && !IconicMonitor.Open;
+                p.El.EnableInClassList("mon", monitoring);
                 p.El.EnableInClassList("selected", sel);
                 if (!show || IconicInterior.Active) { p.El.style.display = DisplayStyle.None; continue; }
                 var sp = cam.WorldToScreenPoint(wp);
@@ -119,8 +127,23 @@ namespace AlatauCity.DigitalTwin.Landmarks
             order.Clear(); foreach (var p in pins) if (p.El.style.display == DisplayStyle.Flex) order.Add(p);
             order.Sort((a, b) => (b.Prio + (sys.Selected == b.L && b.St == null ? 1000 : 0)).CompareTo(a.Prio + (sys.Selected == a.L && a.St == null ? 1000 : 0)));
             placed.Clear();
+            bool mon = TwinState.Module == "monitoring";
             foreach (var p in order)
             {
+                if (mon && p.St == null)
+                {
+                    // the monitoring map never hides one of its six marks: a label that would cover another rises on a longer stem
+                    float mw = 50f + p.Name.text.Length * 8.4f + (p.Stat != null ? p.Stat.text.Length * 6.2f : 0f) + (Modules.MonitoringModule.Watched(p.L) ? 86f : 0f);
+                    float stem = 60f; Rect mr = default;
+                    for (int k = 0; k < 6; k++, stem += 42f)
+                    {
+                        mr = new Rect(p.X - mw * 0.5f, p.Y - stem - 48f, mw, 40f); bool over = false;
+                        foreach (var q in placed) if (q.Overlaps(mr)) { over = true; break; }
+                        if (!over) break;
+                    }
+                    p.Stem.style.height = stem; placed.Add(mr); continue;
+                }
+                if (p.Stem != null && p.St == null) p.Stem.style.height = StyleKeyword.Null;
                 float w = (p.St != null ? 46f : 30f + p.Name.text.Length * 7.2f + (p.St == null ? 90f : 0f)), h = p.St != null ? 20f : 26f;
                 float x = p.X - w * 0.5f, y = p.Y - (p.St != null ? 34f : 54f);
                 var r = new Rect(x, y, w, h); bool hit = false;
@@ -153,7 +176,9 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 if (downPin != null && downPin == hoverPin)
                 {
                     var p = downPin;
-                    if (p.St != null) sys.FlyToPoint(p.L, p.St.P, 700f); else sys.Select(p.L);
+                    if (p.St != null) sys.FlyToPoint(p.L, p.St.P, 700f);
+                    else if (TwinState.Module == "monitoring") Modules.MonitoringModule.Open(p.L);
+                    else sys.Select(p.L);
                 }
                 downPin = null;
             }

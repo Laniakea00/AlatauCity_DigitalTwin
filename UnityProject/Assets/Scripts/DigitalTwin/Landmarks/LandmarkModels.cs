@@ -59,7 +59,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 case "rail_terminal": RailTerminal(k); break;
                 case "substation": Substation(k); break;
                 case "power": PowerPlant(k); break;
-                case "campus": Campus(k); break;
+                case "campus": if (QTwinData.Kaist() != null) KaistCampus(k); else Campus(k); break;
                 case "hospital": Hospital(k); break;
                 case "kpark": KPark(k); break;
                 case "marina": Marina(k); break;
@@ -110,132 +110,122 @@ namespace AlatauCity.DigitalTwin.Landmarks
             for (int i = 0; i < n; i++) k.Cylinder(new Vector3(x0 + i * (r * 2.3f), 0.3f, z0), r, h, 16, col, LM.Metal, 4f, col, LM.Metal, r * 0.5f);
         }
 
-        // ------------------------------------------------------------------ Iconic Complex (SOM): two separate buildings and a garden between them —
-        // the 272 m tower (offices, residences, amenities at the top) wrapped in golden floor plates that project past the glass and turn a
-        // little from floor to floor, its top glowing; the 80 m hotel stepping down to the west in planted terraces with a timber-and-garden
-        // cascade in its middle; two low retail blocks (up to 32 m) with sloping green roofs and a roof pool; the square with an amphitheatre.
-        static readonly Color32 Gold = LM.C("#cf9f45"), GoldLight = LM.C("#f2cf7f"), Bronze = LM.C("#3b3125"), WarmGlass = LM.C("#4d3d2a"),
-            CrownGlass = LM.C("#c99c55"), Timber = LM.C("#b9853f"), Fascia = LM.C("#efe9dc"), PoolTile = LM.C("#7fb8c4"), PoolWater = LM.C("#2f8fb0");
+        // ------------------------------------------------------------------ Iconic Complex: the BIM model of its QTwin page
+        // (QTwinData.Bim, tools/build_gate_district.py) — T1, 272 m: a tapering tower of warm glass under a diamond lattice with
+        // champagne slab edges, golden fins in a V on its face toward the hotel and a lit crown, on a stepped podium; T2, 80 m: the stepped
+        // "pyramid" of the hotel with planted terraces and its own golden V on the face toward the tower — the two make the "gate";
+        // two wedge pavilions whose planted roofs slope up to 32 and 22 m over shop fronts and a timber soffit, a pool on the east
+        // terrace, the plaza with its amphitheatre steps, parasols and gardens. Every surface keeps the page's tag (LM.QTwin).
+        static readonly Color32 Gold = LM.C("#cf9f45"), CrownGlass = LM.C("#c99c55"), Fascia = LM.C("#efe9dc"), PoolWater = LM.C("#2f8fb0"),
+            LatticeGold = LM.C("#e0b06a"), PlateWhite = LM.C("#f1e9d8"), Sand = LM.C("#e3d6bf"), SandDark = LM.C("#cbbda4"),
+            GoldLight = LM.C("#f2cf7f"), WarmGlass = LM.C("#4d3d2a"), Timber = LM.C("#b9853f"), PoolTile = LM.C("#7fb8c4");
+        const float PodiumTop = 18f;
+        /// <summary>The top of T1 (its crown) and of the hotel T2.</summary>
+        public const float IconicApex = 271f, PyramidTop = 80.8f;
+        /// <summary>The top of the hotel T2 (local x, z): the camera of the monitoring looks down from it.</summary>
+        public static Vector2 T2Apex => new Vector2(-4f, 42f);
+        /// <summary>Height of the top of the complex over a local point (a roof, a terrace, the ground of the plot).</summary>
+        public static float RoofAt(float x, float z) => Mathf.Max(QTwinData.TopAt(x, z), 0.3f);
         static void Iconic(LandmarkKit k)
         {
-            var shape = IconicShape.P; IconicShape.P = TowerProfile.Iconic;          // the tower's footprint is the one of its interior floors
-            Pad(k, 270f, 200f, 22f, Pave);
-
-            // ---- the tower: glass shell on the shared footprint (IconicShape, the interior floors fit it), a golden plate at every floor
-            // (parts of the model = the buildings of LandmarkData's Iconic Complex, each staged on its own dates: 1 T1, 2 T2, 3 east retail,
-            // 4 west retail, 5 the grounds; 0 the plot)
-            k.Part = 1;
-            float xr = IconicShape.Xr, cz0 = IconicShape.Cz, H = 272f, roof = IconicShape.Roof, fh = IconicShape.Fh, crownFrom = 214f;
-            var prev = IconicShape.Ring(0.3f); float yp = 0.3f; int fl = 0;
-            for (float y = 0.3f + fh; y <= roof + 0.01f; y += fh, fl++)
+            var m = QTwinData.Bim();
+            if (m == null) { k.Prism(LandmarkKit.Rect(0f, 0f, 270f, 200f), -2f, 0.3f, SandDark, LM.Solid, 3f, Sand, LM.Paving); return; }
+            // parts of the model = the buildings of LandmarkData's Iconic Complex, each staged on its own dates:
+            // 1 T1, 2 T2, 3 the east pavilion, 4 the west pavilion, 5 the plaza (0 the plot)
+            k.Indexed(m.P, m.N, m.U, m.Tag, m.Part, m.I, LM.QTwin, new Color32(255, 255, 255, 255));
+            // the trees of the plaza on the page, planted with it
+            var d = QTwinData.Gate();
+            if (d != null)
             {
-                var r = IconicShape.Ring(y); bool crown = yp >= crownFrom;
-                k.Loft(prev, yp, r, y, crown ? CrownGlass : Bronze, LM.Glass, fh);
-                if (fl > 0) Plate(k, prev, yp, fl, crown);
-                prev = r; yp = y;
-            }
-            Plate(k, prev, yp, fl, true);
-            // crown: the lean continues as a glass blade to a ridge; mast and aircraft light
-            float dTop = IconicShape.D0 * 0.72f;
-            var ridge = LandmarkKit.Chamfer(xr - 1.2f, cz0, 2.4f, dTop * 0.55f, 0.5f);
-            k.Loft(prev, yp, ridge, 264f, CrownGlass, LM.Glass, 2.2f);
-            k.Cap(ridge, 264f, true, GoldLight, LM.Metal);
-            k.Beam(new Vector3(xr - 1.2f, 263f, cz0), new Vector3(xr - 1.2f, H, cz0), 0.9f, 0.9f, MetalG, LM.Steel);
-            k.Box(new Vector3(xr - 1.2f, H - 0.4f, cz0), new Vector3(1.4f, 0.8f, 1.4f), 0, Red, LM.Light, 1f, Red, LM.Light);
-            // lobby canopy toward the square
-            k.Box(new Vector3(xr - 30f, 6.3f, cz0 - IconicShape.D0 * 0.5f - 7f), new Vector3(30f, 0.7f, 14f), 0, Gold, LM.Solid, 1f, Fascia, LM.Roof);
-
-            // ---- the hotel: 80 m, stepping down to the west, two wings with a planted cascade between them
-            k.Part = 2;
-            const float hx0 = -128f, hx1 = -32f, hz0 = 14f, hz1 = 74f, gap = 10f, top = 80f; const int NS = 18;
-            float step = (top - 0.3f) / NS, gz0 = (hz0 + hz1 - gap) * 0.5f, gz1 = gz0 + gap;
-            for (int s = 0; s < NS; s++)
-            {
-                float y0 = 0.3f + s * step, y1 = y0 + step, x0 = Mathf.Lerp(hx0, hx1 - 12f, s / (NS - 1f));
-                foreach (var (z0, z1) in new[] { (hz0, gz0), (gz1, hz1) })
+                k.Part = 5;
+                for (int i = 0; i < d.Trees.Length; i++)
                 {
-                    k.Prism(LandmarkKit.Rect((x0 + hx1) * 0.5f, (z0 + z1) * 0.5f, hx1 - x0, z1 - z0), y0, y1 - 1.0f, WarmGlass, LM.Glass, 3.4f, Fascia, -1);
-                    k.Prism(LandmarkKit.Rect((x0 + hx1) * 0.5f - 0.6f, (z0 + z1) * 0.5f, hx1 - x0 + 1.2f, z1 - z0 + 1.2f), y1 - 1.0f, y1, Fascia, LM.Solid, 1f, Stone, LM.Paving);
-                    // planted edge of the terrace this step leaves open
-                    if (s < NS - 1)
-                    {
-                        // terraces: waterproofed and planted once the frame is past them (the lower ones first)
-                        float tx = x0 + 1.6f, tq = s / (NS - 1f);
-                        k.Win(Mathf.Lerp(Wbs.T2Terr.x, Wbs.T2Terr.y - 0.1f, tq), Mathf.Lerp(Wbs.T2Terr.x + 0.1f, Wbs.T2Terr.y, tq), y1, y1 + 4f);
-                        k.Prism(LandmarkKit.Rect(tx, (z0 + z1) * 0.5f, 2.2f, z1 - z0 - 1.5f), y1, y1 + 0.7f, Stone, LM.Solid, 1f, Grass, LM.Plant);
-                        for (float z = z0 + 3f; z < z1 - 2f; z += 6.5f) k.Tree(new Vector3(tx, y1 + 0.7f, z), 2.6f + (s % 3) * 0.5f, (s & 1) == 0 ? Leaf : Leaf2, s * 0.37f + z * 0.05f);
-                        k.NoWin();
-                    }
+                    var t = d.Trees[i]; if (Mathf.Abs(t.x) >= 136f || Mathf.Abs(t.z) >= 100f) continue;
+                    k.Tree(new Vector3(t.x, t.y, t.z), 10.5f * t.w, (i & 1) == 0 ? Leaf : Leaf2, i * 0.37f);
                 }
-                // the cascade: a garden that steps down between the wings, framed by timber fins
-                W(k, Wbs.T2Cascade, y0, y0 + 4.2f);
-                k.Prism(LandmarkKit.Rect((x0 + hx1) * 0.5f - 3f, (gz0 + gz1) * 0.5f, hx1 - x0 - 6f, gap), y0, y0 + 0.8f, Stone, LM.Solid, 1f, Grass, LM.Plant);
-                if (s % 2 == 0) k.Tree(new Vector3((x0 + hx1) * 0.5f, y0 + 0.8f, (gz0 + gz1) * 0.5f), 3.4f, Leaf2, s * 0.21f);
-                k.NoWin();
-                for (float x = x0 + 1f; x < hx1 - 3f; x += 2.4f)
-                    foreach (float z in new[] { gz0 + 0.25f, gz1 - 0.25f })
-                        k.Box(new Vector3(x, (y0 + y1) * 0.5f, z), new Vector3(0.18f, step, 0.5f), 0f, Timber, LM.Solid, 20f, Timber, LM.Solid);
+                k.Part = 0;
             }
-            k.Box(new Vector3(hx1 - 6f, top + 1.5f, (hz0 + hz1) * 0.5f), new Vector3(9f, 3f, 20f), 0, MetalG, LM.Metal, 3f, Roof, LM.Roof);
-
-            // ---- two retail blocks (podiums) with roof terraces and pools, as on the SOM renders: glass walls under a golden fascia,
-            // the south-east one steps down from 26 m to 14 m, the west one rises from 14 m to 22 m toward the garden
-            // (each: the high block first, the low one a little later, then the roof pool and the roof garden — Wbs.R*)
-            k.Part = 3;
-            W(k, Wbs.RHigh, 0.3f, 27.1f); Podium(k, 6f, -84f, 78f, -12f, 26f);
-            W(k, Wbs.RLow, 0.3f, 15.1f); Podium(k, 78f, -84f, 120f, -12f, 14f);
-            W(k, Wbs.RPool, 26f, 29f); RoofPool(k, 42f, -48f, 50f, 15f, 26f, 0f);
-            W(k, Wbs.RGarden, 14f, 19.5f); RoofGarden(k, 99f, -48f, 34f, 64f, 14f);
-            k.Part = 4;
-            W(k, Wbs.RHigh, 0.3f, 23.1f); Podium(k, -70f, -84f, -24f, -12f, 22f);
-            W(k, Wbs.RLow, 0.3f, 15.1f); Podium(k, -120f, -84f, -70f, -12f, 14f);
-            W(k, Wbs.RPool, 22f, 25f); RoofPool(k, -47f, -48f, 15f, 40f, 22f, 90f);
-            W(k, Wbs.RGarden, 14f, 19.5f); RoofGarden(k, -95f, -48f, 42f, 64f, 14f);
-
-            // ---- grounds: a promenade with a double alley of clipped trees all around the plot, a formal allée with a fountain between
-            k.Part = 5;
-            // the tower and the hotel, a parterre north of the tower and a square with a reflecting pool east of it
-            var keepOff = new List<Rect>
+        }
+        /// <summary>KAIST Kazakhstan as on its QTwin monitoring page (QTwinData.Kaist, tools/build_kaist.py): B1, the library tower of teal
+        /// glass with white bands and a glass pyramid; the main hall, a blue glass box with a white grid lifted on columns over a glazed lobby,
+        /// three pyramids on its roof; the laboratories, a spine and three stepped wings with green roofs; the north block in an arc; the sports
+        /// core with its track and stand; the park with the lake, the island, the alleys and the lawns. Parts as LandmarkData's KAIST.</summary>
+        static void KaistCampus(LandmarkKit k)
+        {
+            var c = QTwinData.Kaist(); var m = c.Mesh;
+            k.Indexed(m.P, m.N, m.U, m.Tag, m.Part, m.I, LM.QTwin, new Color32(255, 255, 255, 255));
+            // the trees of the park, planted with it (before the buildings, so the campus is green from the start)
+            k.Part = 6;
+            for (int i = 0; i < c.Trees.Length; i++)
             {
-                new Rect(4f, 9f, 66f, 51f),            // tower with its plates
-                new Rect(-122f, 12f, 92f, 64f),        // hotel
-                new Rect(4f, -86f, 118f, 76f), new Rect(-122f, -86f, 100f, 76f),   // podiums
-                new Rect(19f, -4f, 34f, 18f),          // lobby canopy
-                new Rect(-33f, -33f, 46f, 26f),        // amphitheatre
-            };
-            Promenade(k, 270f, 200f, keepOff);
-            // the allée between the tower and the hotel, from the square to the north promenade
-            W(k, Wbs.GAllee, 0.3f, 2.3f);
-            k.Prism(LandmarkKit.Rect(-13f, 44f, 7f, 80f), 0.3f, 0.38f, Stone, LM.Solid, 1f, Pave, LM.Paving);
-            Lawn(k, -25.5f, 44f, 9f, 80f, 1.5f); Lawn(k, -0.5f, 44f, 6f, 80f, 1.5f);
-            for (float z = 8f; z <= 82f; z += 8f)
-            {
-                if (Mathf.Abs(z - 44f) < 9f) continue;
-                W(k, Wbs.GTrees, 0.3f, 9f); Planted(k, -19.5f, z, 7.5f, 0); Planted(k, -6.5f, z, 7.5f, 1);
+                var t = c.Trees[i];
+                k.Tree(new Vector3(t.x, t.y, t.z), 10.5f * t.w, (i & 1) == 0 ? Leaf : Leaf2, i * 0.37f);
             }
-            W(k, Wbs.GAllee, 0.3f, 2.3f);
-            k.Cylinder(new Vector3(-13f, 0.3f, 44f), 7f, 0.65f, 28, Stone, LM.Solid, 1f, Stone, LM.Paving);
-            k.Cylinder(new Vector3(-13f, 0.3f, 44f), 6.2f, 0.6f, 28, Stone, LM.Solid, 1f, Water, LM.Water);
-            k.Cylinder(new Vector3(-13f, 0.9f, 44f), 1.1f, 1.4f, 12, Stone, LM.Solid, 1f, Water, LM.Water);
-            // the parterre north of the tower: four lawn panels, a cross of paths, a row of trees along it
-            W(k, Wbs.GSquare, 0.3f, 1f);
-            k.Prism(LandmarkKit.Rect(39f, 72f, 66f, 22f), 0.3f, 0.36f, Stone, LM.Solid, 1f, Pave, LM.Paving);
-            foreach (float px in new[] { 22f, 56f }) foreach (float pz in new[] { 66.5f, 77.5f }) Lawn(k, px, pz, 28f, 8f, 1.5f);
-            W(k, Wbs.GTrees, 0.3f, 9f);
-            for (float x = 10f; x <= 68f; x += 9.5f) Planted(k, x, 61.5f, 6.5f, 2);
-            // the square east of the tower: a long reflecting pool between two rows of trees
-            W(k, Wbs.GSquare, 0.3f, 1f);
-            k.Prism(LandmarkKit.Rect(97f, 42f, 46f, 80f), 0.3f, 0.36f, Stone, LM.Solid, 1f, Pave, LM.Paving);
-            k.Prism(LandmarkKit.Rect(97f, 42f, 12f, 44f), 0.36f, 0.75f, Stone, LM.Solid, 1f, Stone, LM.Paving);
-            k.Prism(LandmarkKit.Rect(97f, 42f, 10.4f, 42.4f), 0.75f, 0.8f, Stone, LM.Solid, 1f, Water, LM.Water);
-            foreach (float px in new[] { 83.5f, 110.5f }) Lawn(k, px, 42f, 9f, 64f, 1.5f);
-            W(k, Wbs.GTrees, 0.3f, 9f);
-            for (float z = 14f; z <= 72f; z += 9.5f) { Planted(k, 83.5f, z, 8f, 3); Planted(k, 110.5f, z, 8f, 4); }
-            for (float z = 22f; z <= 64f; z += 14f) foreach (float px in new[] { 89.5f, 104.5f }) Bench(k, px, z, 90f);
-            W(k, Wbs.GSquare, 0.3f, 6.5f);
-            for (int i = 0; i < 9; i++) k.Box(new Vector3(-6f + i * 10f, 3.2f, 2f), new Vector3(0.35f, 6f, 0.35f), 0, Steel, LM.Steel, 1f, Warm, LM.Light);
-            k.Part = 0; k.NoWin();
-            IconicShape.P = shape;
+            k.Part = 0;
+        }
+        /// <summary>A stone path on the podium roof from a to b.</summary>
+        static void RoofPath(LandmarkKit k, Vector2 a, Vector2 b, float w)
+        {
+            var d = (b - a); float L = d.magnitude; if (L < 1f) return;
+            float yaw = -Mathf.Atan2(d.y, d.x) * Mathf.Rad2Deg; var m = (a + b) * 0.5f;
+            k.Prism(LandmarkKit.Rect(m.x, m.y, L, w, yaw), PodiumTop + 0.3f, PodiumTop + 0.5f, SandDark, LM.Solid, 1f, Sand, LM.Paving);
+        }
+        /// <summary>A point on a stadium outline (w × d, corner radius r) at angle a from its centre.</summary>
+        static Vector2 Stadium(float a, float w, float d, float r)
+        {
+            var dir = new Vector2(Mathf.Cos(a), Mathf.Sin(a));
+            float lo = 0f, hi = Mathf.Max(w, d);
+            for (int it = 0; it < 24; it++) { float m = (lo + hi) * 0.5f; if (InStadium(dir * m, w, d, r)) lo = m; else hi = m; }
+            return dir * lo;
+        }
+        static bool InStadium(Vector2 p, float w, float d, float r)
+        {
+            float hx = w * 0.5f - r, hz = d * 0.5f - r;
+            float qx = Mathf.Max(Mathf.Abs(p.x) - hx, 0f), qz = Mathf.Max(Mathf.Abs(p.y) - hz, 0f);
+            return qx * qx + qz * qz <= r * r;
+        }
+        /// <summary>A convex polygon moved outward (d &gt; 0) or inward (d &lt; 0) by d metres (counter-clockwise or clockwise alike).</summary>
+        static List<Vector2> Offset(List<Vector2> poly, float d)
+        {
+            int n = poly.Count; float area = 0f;
+            for (int i = 0; i < n; i++) { var u = poly[i]; var v = poly[(i + 1) % n]; area += u.x * v.y - v.x * u.y; }
+            float s = area > 0f ? 1f : -1f;                      // outward normal of edge (u→v) = (dy, −dx) for clockwise, (−dy, dx)·… for ccw
+            var o = new List<Vector2>(n);
+            for (int i = 0; i < n; i++)
+            {
+                var p = poly[(i + n - 1) % n]; var c = poly[i]; var q = poly[(i + 1) % n];
+                var e0 = (c - p).normalized; var e1 = (q - c).normalized;
+                var n0 = new Vector2(e0.y, -e0.x) * s; var n1 = new Vector2(e1.y, -e1.x) * s;
+                var bis = (n0 + n1); float cos = Vector2.Dot(bis.normalized, n0);
+                o.Add(c + bis.normalized * (d / Mathf.Max(cos, 0.2f)));
+            }
+            return o;
+        }
+        /// <summary>The part of a convex polygon east (keepEast) or west of the line x = c.</summary>
+        static List<Vector2> ClipX(List<Vector2> poly, float c, bool keepEast)
+        {
+            var o = new List<Vector2>();
+            for (int i = 0; i < poly.Count; i++)
+            {
+                var a = poly[i]; var b = poly[(i + 1) % poly.Count];
+                bool ia = keepEast ? a.x >= c : a.x <= c, ib = keepEast ? b.x >= c : b.x <= c;
+                if (ia) o.Add(a);
+                if (ia != ib) { float t = (c - a.x) / (b.x - a.x); o.Add(new Vector2(c, a.y + (b.y - a.y) * t)); }
+            }
+            return o;
+        }
+        static bool Inside(List<Vector2> poly, Vector2 p, float margin)
+        {
+            int n = poly.Count; float area = 0f;
+            for (int i = 0; i < n; i++) { var u = poly[i]; var v = poly[(i + 1) % n]; area += u.x * v.y - v.x * u.y; }
+            float s = area > 0f ? 1f : -1f;
+            for (int i = 0; i < n; i++)
+            {
+                var a = poly[i]; var b = poly[(i + 1) % n]; var e = (b - a).normalized;
+                float side = (e.x * (p.y - a.y) - e.y * (p.x - a.x)) * s;     // > 0 inside for both windings
+                if (side < margin) return false;
+            }
+            return true;
         }
         /// <summary>A podium block on the rectangle (x0, z0)–(x1, z1): glass walls, a golden fascia, a flat paved roof terrace with a glass parapet.</summary>
         static void Podium(LandmarkKit k, float x0, float z0, float x1, float z1, float h)

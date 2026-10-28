@@ -60,6 +60,7 @@ namespace AlatauCity.DigitalTwin.UI
             Attach();
             if (toast != null && toastLeft > 0f) { toastLeft -= TwinState.RealDelta; if (toastLeft <= 0f) { toast.RemoveFromClassList("show"); toast.style.opacity = 0f; } }
             if (TwinTour.Running) return;                 // the presentation decides when an event comes
+            if (Modules.MonitoringModule.On || Landmarks.IconicMonitor.Open) { if (toast != null && toastLeft > 0f) toastLeft = 0.01f; return; }   // the monitoring keeps the screen to itself
             wait -= TwinState.RealDelta;
             if (wait <= 0f) { wait = 30f + Random.value * 15f; Push(true); }
         }

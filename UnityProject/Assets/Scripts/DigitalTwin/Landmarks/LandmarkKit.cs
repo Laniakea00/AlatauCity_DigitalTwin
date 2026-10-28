@@ -7,7 +7,10 @@ namespace AlatauCity.DigitalTwin.Landmarks
     /// <summary>Surface materials of AlatauCity/Landmark (uv1.x of every vertex).</summary>
     public static class LM
     {
-        public const int Solid = 0, Glass = 1, Metal = 2, Roof = 3, Paving = 4, Light = 5, Plant = 6, Water = 7, Fins = 8, Steel = 9;
+        public const int Solid = 0, Glass = 1, Metal = 2, Roof = 3, Paving = 4, Light = 5, Plant = 6, Water = 7, Fins = 8, Steel = 9, Lattice = 10,
+            Maket = 11, Lamella = 12, Perforated = 13, Road = 14,
+            // surfaces of the QTwin page of Iconic Complex (its BIM model and the Gate District round it): param = the page's surface tag
+            QTwin = 15;
         public static Color32 C(string hex) { ColorUtility.TryParseHtmlString(hex, out var c); return c; }
     }
 
@@ -31,6 +34,9 @@ namespace AlatauCity.DigitalTwin.Landmarks
         readonly List<Vector4> uv3 = new List<Vector4>();
         readonly List<int> t = new List<int>();
         public int VertexCount => v.Count;
+        /// <summary>Height subtracted from the facade v coordinate of the walls Prism builds (0 = the model's base): lets a building
+        /// standing on sloping ground count its floors from its own ground (AlatauLandmark material Maket).</summary>
+        public float UvY0;
         /// <summary>Sets the colour alpha of the vertices from 'start' to the end (AlatauLandmark: alpha = 1 − landscaping stage).</summary>
         public void AlphaFrom(int start, byte a) { for (int i = start; i < c.Count; i++) { var q = c[i]; q.a = a; c[i] = q; } }
 
@@ -56,6 +62,18 @@ namespace AlatauCity.DigitalTwin.Landmarks
             if (!flip) { t.Add(i); t.Add(i + 1); t.Add(i + 2); } else { t.Add(i); t.Add(i + 2); t.Add(i + 1); }
         }
         /// <summary>Horizontal polygon (convex or star-shaped around its centroid) at height y, facing up (or down).</summary>
+        /// <summary>An indexed mesh as it is (QTwinData): uv0 = (u, height), uv1 = (mat, tag), the building of each vertex from part (or Part).</summary>
+        public void Indexed(Vector3[] p, Vector3[] nr, float[] u, byte[] tag, byte[] part, int[] tri, int mat, Color32 col)
+        {
+            int b = v.Count;
+            for (int i = 0; i < p.Length; i++)
+            {
+                v.Add(p[i]); n.Add(nr[i]); c.Add(col); uv0.Add(new Vector2(u[i], p[i].y)); uv1.Add(new Vector2(mat, tag[i]));
+                uv2.Add(new Vector2(part != null ? part[i] : Part, 0f)); uv3.Add(Window);
+            }
+            foreach (int i in tri) t.Add(b + i);
+        }
+
         public void Cap(IList<Vector2> fp, float y, bool up, Color32 col, int mat, float prm = 3f)
         {
             Vector2 ce = Vector2.zero; foreach (var p in fp) ce += p; ce /= fp.Count;
@@ -77,7 +95,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 var mid = (a + b) * 0.5f; var o = new Vector3(mid.x - ce.x, 0, mid.y - ce.y);
                 var e = new Vector2(b.y - a.y, -(b.x - a.x)); var eo = new Vector3(e.x, 0, e.y); if (Vector3.Dot(eo, o) < 0) eo = -eo;
                 Quad(new Vector3(a.x, y0, a.y), new Vector3(b.x, y0, b.y), new Vector3(b.x, y1, b.y), new Vector3(a.x, y1, a.y), eo, wall, wallMat, prm,
-                     new Vector2(u, y0), new Vector2(u + L, y0), new Vector2(u + L, y1), new Vector2(u, y1));
+                     new Vector2(u, y0 - UvY0), new Vector2(u + L, y0 - UvY0), new Vector2(u + L, y1 - UvY0), new Vector2(u, y1 - UvY0));
                 u += L;
             }
             if (topMat >= 0) Cap(fp, y1, true, top, topMat, topPrm);

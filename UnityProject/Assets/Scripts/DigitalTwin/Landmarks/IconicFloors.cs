@@ -25,7 +25,9 @@ namespace AlatauCity.DigitalTwin.Landmarks
         public static readonly TowerProfile Iconic = new TowerProfile
         {
             Id = "iconic", Title = "Башня Iconic Complex (T1)", Tower = "Башня T1", Enter = "Внутрь башни",
-            Xr = 66f, Cz = 34f, W0 = 60f, D0 = 44f, Roof = 252f, Fh = 4.3f, Taper = 0.74f, DepthTaper = 0.28f, Chamfer = 5f, Levels = 58, Floors = 56,
+            // the tower of the BIM model of the QTwin page: its face toward the hotel upright at x −53, tapering from 61 × 40 m over the
+            // podium to a blade of 5 × 3.5 m at 270 m; 56 floors of 4.3 m and the crown levels above them
+            Xr = -53f, Cz = 46f, W0 = 65.5f, D0 = 43f, Roof = 270f, Fh = 4.3f, Taper = 0.93f, TaperPow = 1f, DepthTaper = 0.92f, Chamfer = 1.2f, Levels = 62, Floors = 56,
             UseOf = i =>
             {
                 if (i == 0) return IconicFloors.Use.Lobby;

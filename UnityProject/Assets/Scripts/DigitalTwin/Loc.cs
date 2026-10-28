@@ -32,7 +32,7 @@ namespace AlatauCity.DigitalTwin
         static readonly Dictionary<string, string> RuD = new Dictionary<string, string>
         {
             ["brand"] = "qTwin", ["city"] = "Alatau City", ["subtitle"] = "цифровой двойник · демо-сценарий",
-            ["tab_objects"] = "Инвестпроекты", ["tab_overview"] = "Обзор", ["tab_construction"] = "Стройка", ["tab_prediction"] = "Прогноз", ["tab_infra"] = "Инфраструктура",
+            ["tab_objects"] = "Инвестпроекты", ["tab_overview"] = "Обзор", ["tab_construction"] = "Стройка", ["tab_monitoring"] = "Мониторинг стройки", ["tab_prediction"] = "Прогноз", ["tab_infra"] = "Инфраструктура",
             ["tab_situation"] = "Ситуационный центр", ["tab_ai"] = "ИИ-управление", ["tab_smart"] = "Smart City", ["tab_economy"] = "Экономика",
             ["scenario"] = "Сценарий", ["year"] = "Год",
             ["sc_base"] = "Базовый (генплан)", ["sc_fast"] = "Ускоренный", ["sc_slow"] = "Отставание", ["sc_infra"] = "Приоритет инфраструктуры",
@@ -231,7 +231,7 @@ namespace AlatauCity.DigitalTwin
         static readonly Dictionary<string, string> En = new Dictionary<string, string>
         {
             ["subtitle"] = "digital twin · demo scenario",
-            ["tab_objects"] = "Investment projects", ["tab_overview"] = "Overview", ["tab_construction"] = "Construction", ["tab_prediction"] = "Prediction", ["tab_infra"] = "Infrastructure",
+            ["tab_objects"] = "Investment projects", ["tab_overview"] = "Overview", ["tab_construction"] = "Construction", ["tab_monitoring"] = "Construction monitoring", ["tab_prediction"] = "Prediction", ["tab_infra"] = "Infrastructure",
             ["tab_situation"] = "Situational Center", ["tab_ai"] = "AI Control", ["tab_smart"] = "Smart City", ["tab_economy"] = "Economy",
             ["scenario"] = "Scenario", ["year"] = "Year",
             ["sc_base"] = "Base (master plan)", ["sc_fast"] = "Accelerated", ["sc_slow"] = "Delayed", ["sc_infra"] = "Infrastructure first",
@@ -268,7 +268,7 @@ namespace AlatauCity.DigitalTwin
         // TODO: Kazakh copy to be approved by the user; falls back to RU.
         static readonly Dictionary<string, string> Kz = new Dictionary<string, string>
         {
-            ["subtitle"] = "цифрлық егіз · демо-сценарий", ["tab_objects"] = "Инвестжобалар", ["tab_overview"] = "Шолу", ["tab_construction"] = "Құрылыс", ["tab_prediction"] = "Болжам",
+            ["subtitle"] = "цифрлық егіз · демо-сценарий", ["tab_objects"] = "Инвестжобалар", ["tab_overview"] = "Шолу", ["tab_construction"] = "Құрылыс", ["tab_monitoring"] = "Құрылыс мониторингі", ["tab_prediction"] = "Болжам",
             ["tab_infra"] = "Инфрақұрылым", ["tab_situation"] = "Ситуациялық орталық", ["tab_ai"] = "ЖИ-басқару", ["tab_smart"] = "Smart City", ["tab_economy"] = "Экономика", ["scenario"] = "Сценарий", ["year"] = "Жыл",
             ["play"] = "Іске қосу", ["pause"] = "Кідірту", ["demo_badge"] = "Демо-сценарий · деректер модельденген",
             ["kpi_residents"] = "тұрғын", ["kpi_gfa"] = "енгізілді, млн м²", ["kpi_jobs"] = "жұмыс орны", ["kpi_ready"] = "қала дайындығы",

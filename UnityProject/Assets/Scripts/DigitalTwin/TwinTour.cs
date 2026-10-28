@@ -185,10 +185,10 @@ namespace AlatauCity.DigitalTwin
         {
             steps.Clear(); indCount = -1;
             // ================= the city (segment 0)
-            steps.Add(new Step { Seg = 0, Zone = -1, Year = 2025, Dur = 24, Enter = Overview, Title = () => "Alatau City сегодня",
-                Story = () => new Story { Eyebrow = "Alatau City · 2025", Head = "Город-спутник Алматы на берегу Капшагая", Note = "Конституционный закон № 286-VIII · Alatau City Authority" }
+            steps.Add(new Step { Seg = 0, Zone = -1, Year = 2026, Dur = 24, Enter = Overview, Title = () => "Alatau City сегодня",
+                Story = () => new Story { Eyebrow = "Alatau City · 2026", Head = "Город-спутник Алматы на берегу Капшагая", Note = "Конституционный закон № 286-VIII · Alatau City Authority" }
                     .K("88 267 га", "территория города").K("≈ 70 тыс.", "жителей сегодня", CRes).K("67", "проектов · $6,9 млрд", CInfo) });
-            steps.Add(new Step { Seg = 0, Zone = -1, Year = 2025, Dur = 26, Grow = true, Gfa = true, Enter = Overview, Title = () => "Город растёт: 2025 → 2050",
+            steps.Add(new Step { Seg = 0, Zone = -1, Year = 2026, Dur = 26, Grow = true, Gfa = true, Enter = Overview, Title = () => "Город растёт: 2026 → 2050",
                 Story = () =>
                 {
                     int y = TwinState.Year; var s = new Story { Eyebrow = "Рост города · " + y, Head = "Кварталы, сети и дороги — по графику стройки" };
@@ -212,7 +212,8 @@ namespace AlatauCity.DigitalTwin
                     s.K("272 м", "56 этажей", Color.white).K("276 800 м²", "площадь комплекса", CInfo).K("> $800 млн", "инвестиции", COk);
                     s.R("Каркас", Mathf.RoundToInt(frame * H) + " м", new Color(0.98f, 0.62f, 0.20f), frame);
                     s.R("Фасад", Mathf.RoundToInt(facade * 100f) + " %", CInfo, facade);
-                    s.R("Благоустройство квартала", Mathf.RoundToInt(IconicPark.Done * 100f) + " %", COk, IconicPark.Done);
+                    float land = Mathf.Clamp01((p - 0.75f) / 0.25f);                   // the square and its gardens are laid last
+                    s.R("Площадь и сады", Mathf.RoundToInt(land * 100f) + " %", COk, land);
                     return s;
                 } });
 
@@ -454,7 +455,7 @@ namespace AlatauCity.DigitalTwin
                 t += Time.deltaTime;
                 if (s.Grow)
                 {
-                    float yf = Mathf.Clamp(2025f + (t - 1.5f) / (s.Dur - 4f) * 25f, 2025f, 2050f);
+                    float yf = Mathf.Clamp(TwinState.MinYear + (t - 1.5f) / (s.Dur - 4f) * (TwinState.MaxYear - TwinState.MinYear), TwinState.MinYear, TwinState.MaxYear);
                     int y = Mathf.Min(2050, Mathf.FloorToInt(yf));
                     if (y != TwinState.Year) TwinState.Year = y;
                     if (yf < 2050f) CityTimeline.Growth(yf); else CityTimeline.StopGrowth();

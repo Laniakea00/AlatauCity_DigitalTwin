@@ -60,7 +60,8 @@ float ABox(float2 p, float2 half_, float2 aa)
 
 struct AFacade { float3 albedo; float3 emit; float spec; float ao; };
 
-// style: 0 other, 1 house, 2 housing, 3 glass tower / office, 4 public, 5 industry, 6 podium / retail, 7 solar field, 8 resort, 9 existing
+// style: 0 other, 1 house, 2 housing, 3 glass tower / office, 4 public, 5 industry, 6 podium / retail, 7 solar field, 8 resort, 9 existing,
+// 10 the presentation model around Iconic (white plaster, grey window grid, planted roofs on the mid-rise)
 // wall = (metres along the wall from its start, wall length); hy = metres above the building's base; H = building height.
 AFacade AlatauFacade(float2 wall, float hy, float H, float floorsN, float style, float seed, float3 tint, float3 n, float3 view, float3 wpos, float part)
 {
@@ -84,8 +85,9 @@ AFacade AlatauFacade(float2 wall, float hy, float H, float floorsN, float style,
     else if (style < 5.5 && style > 4.5)  { wallL = 3.0; bw = 6.0; ww = 0.86; wh = 0.10; sill = 0.72; gf = 0.0; wallC = r1 < 0.5 ? float3(0.74, 0.76, 0.78) : r1 < 0.8 ? float3(0.83, 0.82, 0.79) : float3(0.45, 0.52, 0.60); }
     else if (style < 6.5 && style > 5.5)  { wallL = 1.0; bw = 6.0; ww = 0.86; wh = 0.66; sill = 0.08; wallC = float3(0.32, 0.33, 0.35); }
     else if (style < 8.5 && style > 7.5)  { wallL = r1 < 0.5 ? 0.0 : 11.0; bw = 3.6; ww = 0.56; wh = 0.56; sill = 0.26; wallC = r1 < 0.5 ? float3(0.92, 0.90, 0.85) : float3(0.66, 0.50, 0.36); }
+    else if (style > 9.5)                 { wallL = 0.0; bw = 2.9; ww = 0.56; wh = 0.60; sill = 0.22; gf = 1.0; glassC = float3(0.26, 0.29, 0.32); wallC = r1 < 0.7 ? float3(0.95, 0.95, 0.93) : float3(0.91, 0.91, 0.89); }
     else if (style > 8.5)                 { wallL = r1 < 0.8 ? 0.0 : 2.0; roofL = r2 < 0.5 ? 4.0 : 10.0; bw = 3.4; ww = 0.40; wh = 0.44; sill = 0.32; gf = 0.0; wallC = r1 < 0.5 ? float3(0.74, 0.73, 0.70) : r1 < 0.8 ? float3(0.80, 0.76, 0.68) : float3(0.63, 0.52, 0.46); }
-    wallC = lerp(wallC, tint, 0.14);
+    wallC = lerp(wallC, tint, style > 9.5 ? 0.0 : 0.14);
 
     o.spec = 0; o.emit = 0; o.ao = 1; o.albedo = wallC;
     // every screen-space derivative is taken here, before the first branch
@@ -104,7 +106,7 @@ AFacade AlatauFacade(float2 wall, float hy, float H, float floorsN, float style,
     float3 tng = float3(-n.z, 0.0, n.x); tng = dot(tng, tng) > 1e-4 ? normalize(tng) : float3(1, 0, 0);
     float3 btn = cross(n, tng);
     float2 metres = flat ? wpos.xz : float2(dot(wpos, tng), sloped ? wpos.y / max(sqrt(1.0 - n.y * n.y), 0.25) : wpos.y);
-    float planted = step(r3, 0.14) * step(style, 4.5) * step(1.5, style);
+    float planted = style > 9.5 ? step(floorsN, 14.5) : step(r3, 0.14) * step(style, 4.5) * step(1.5, style);
     float layer = part > 3.5 ? 7.0 : part > 2.5 || (sloped && style < 1.5 && style > 0.5) ? roofL : part > 1.5 ? 3.0 : part > 0.5 ? wallL : (n.y > 0.45 || wall.y < 0.05) ? lerp(5.0, 8.0, planted) : wallL;
     AMat M = AlatauMat(metres, layer);
     float3 np = normalize(n + (M.nxy.x * tng + M.nxy.y * btn) * 0.85);
@@ -140,6 +142,7 @@ AFacade AlatauFacade(float2 wall, float hy, float H, float floorsN, float style,
         else if (style < 3.5 && style > 2.5) roof = r2 < 0.5 ? float3(0.56, 0.57, 0.58) : float3(0.40, 0.41, 0.43);
         else if (style > 4.5 && style < 5.5) roof = r2 < 0.5 ? float3(0.62, 0.64, 0.66) : float3(0.48, 0.50, 0.52);      // metal roofs of plants and warehouses
         else if (r3 < 0.14 && style < 4.5) roof = float3(0.42, 0.52, 0.34);                                    // planted roof
+        else if (style > 9.5) roof = floorsN < 14.5 ? float3(0.34, 0.52, 0.22) * (0.85 + 0.3 * ANoise(wpos.xz * 0.21)) : float3(0.88, 0.88, 0.86);   // model: lawn roofs, white tops on towers
         roof *= 1.0 + 0.07 * grainFade * (ANoise(wpos.xz * 0.35) * 0.5 + ANoise(wpos.xz * 1.7) * 0.5 - 0.5);
         roof *= surf;
         if ((part > 2.5 && part < 3.5) || (style < 1.5 && style > 0.5))
@@ -237,9 +240,18 @@ AFacade AlatauFacade(float2 wall, float hy, float H, float floorsN, float style,
 #endif
 
 // ---- landmark plots (LandmarkSystem.BuildPadMask): 1 where a landmark stands — line layers and film roads are not drawn there
-sampler2D _AlatauPadTex; float _AlatauPadOn;
+// _AlatauGate = (x, z, cos, sin of the yaw) of the Gate District round Iconic Complex (IconicDistrict), _AlatauGateOn = 1 while it
+// stands, _AlatauGateTex its area (local frame, ± _AlatauGateHalf metres): inside it the district's own streets replace the city's
+sampler2D _AlatauPadTex; float _AlatauPadOn; float4 _AlatauGate; float _AlatauGateOn, _AlatauGateHalf; sampler2D _AlatauGateTex;
 float AlatauOnPad(float3 wpos)
 {
+    if (_AlatauGateOn > 0.5)
+    {
+        float2 d = wpos.xz - _AlatauGate.xy;
+        float2 l = float2(d.x * _AlatauGate.z - d.y * _AlatauGate.w, d.x * _AlatauGate.w + d.y * _AlatauGate.z);
+        float2 g = l / (2.0 * _AlatauGateHalf) + 0.5;
+        if (all(g > 0.0) && all(g < 1.0) && tex2Dlod(_AlatauGateTex, float4(g, 0, 0)).r > 0.5) return 1.0;
+    }
     if (_AlatauPadOn < 0.5) return 0.0;
     float2 uv = float2(2.29357798e-5 * wpos.x + 0.5, 1.62074554e-5 * wpos.z + 0.491085899);
     return tex2Dlod(_AlatauPadTex, float4(uv, 0, 0)).r;

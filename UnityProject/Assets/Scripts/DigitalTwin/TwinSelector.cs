@@ -27,6 +27,13 @@ namespace AlatauCity.DigitalTwin
                 if (bim != null && BimQuarter.Visible && bim.Owns(hits[i].collider)) { Select(-1); bim.Select(bim.ElementAtTriangle(hits[i].triangleIndex)); return; }
                 // a landmark (Iconic Complex, plants, campus …) in front of everything else: fly to it and open its passport
                 var lo = hits[i].collider.GetComponent<Landmarks.LandmarkObject>();
+                if (Modules.MonitoringModule.On)
+                {
+                    // the monitoring map: only its marked objects answer a click (fly close, passport); the city stays a backdrop
+                    var ms = Landmarks.LandmarkSystem.Instance; var mm = lo != null && ms != null ? ms.Get(lo.Id) : null;
+                    if (Modules.MonitoringModule.OnMap(mm)) { Modules.MonitoringModule.Open(mm); return; }
+                    continue;
+                }
                 if (lo != null)
                 {
                     var ls = Landmarks.LandmarkSystem.Instance; var lm = ls != null ? ls.Get(lo.Id) : null;
@@ -41,7 +48,7 @@ namespace AlatauCity.DigitalTwin
                 if (eff > year) continue;                                      // hidden by the timeline / scenario
                 Select(bid); return;
             }
-            Select(-1);
+            if (!Modules.MonitoringModule.On) Select(-1);
         }
         public void Select(int bid)
         {
