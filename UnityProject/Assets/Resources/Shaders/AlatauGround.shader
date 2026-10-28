@@ -21,7 +21,9 @@ Shader "AlatauCity/Ground"
     {
         Tags { "RenderType" = "Opaque" "Queue" = "Geometry-10" }
         CGPROGRAM
-        #pragma surface surf Soft fullforwardshadows
+        // one sun and no point lights: no additive-light copies for the browser to compile (novertexlights would also drop
+        // the ambient light probes the ground is lit by)
+        #pragma surface surf Soft fullforwardshadows noforwardadd nolightmap nodynlightmap nodirlightmap nometa
         #pragma target 3.5
         #include "Assets/Shaders/AlatauFilm.cginc"
         sampler2D _MainTex, _NatTex, _DevTex; half _Ambient; fixed4 _Earth;

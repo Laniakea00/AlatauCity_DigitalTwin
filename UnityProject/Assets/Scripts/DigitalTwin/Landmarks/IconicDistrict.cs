@@ -76,7 +76,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             var rot = Quaternion.Euler(0f, host.Yaw, 0f); var org = new Vector3(host.X, baseY, host.Z);
             root = new GameObject("Gate District · квартал по генплану (QTwin)"); root.transform.SetParent(transform, false);
             root.transform.SetPositionAndRotation(org, rot);
-            var mat = new Material(sh) { name = "Gate District" };
+            var mat = new Material(sh) { name = "Gate District" }; mat.EnableKeyword("ALATAU_QT_GATE");      // its part of AlatauQTwin.cginc
 
             // every vertex on the terrain (the page's ground is flat at 0): walls keep their plan, so a building stays upright
             var m = d.Mesh; int nv = m.P.Length;

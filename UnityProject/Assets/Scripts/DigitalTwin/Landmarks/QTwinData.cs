@@ -17,6 +17,16 @@ namespace AlatauCity.DigitalTwin.Landmarks
         /// <summary>KAIST Kazakhstan (tools/build_kaist.py, from the campus page): the BIM model (tags 41–62), the park's trees, the crane spots.</summary>
         public class KaistModel { public QMesh Mesh; public Vector4[] Trees; public byte[] Kind; public Vector3[] Cranes; }
 
+        /// <summary>The table of random values the QTwin surfaces take their noise from (_AlatauQNoise in AlatauQTwin.cginc).</summary>
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+        static void Noise()
+        {
+            var px = new byte[256 * 256]; var rnd = new System.Random(1729); rnd.NextBytes(px);
+            var tex = new Texture2D(256, 256, TextureFormat.R8, false, true) { name = "Alatau QTwin noise", filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Repeat };
+            tex.SetPixelData(px, 0); tex.Apply(false, true);
+            Shader.SetGlobalTexture("_AlatauQNoise", tex);
+        }
+
         static QMesh bim; static District gate; static KaistModel kaist; static bool bimTried, gateTried, kaistTried;
         static float[] top; static float topX0, topZ0; const float TopCell = 2f; static int topW, topH;
 

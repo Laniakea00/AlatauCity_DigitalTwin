@@ -37,7 +37,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             public bool Site0, Site1, Cr0, Cr1; public MeshRenderer FenceR; public MaterialPropertyBlock FenceB;
         }
         readonly Dictionary<string, Node> nodes = new Dictionary<string, Node>();
-        Material mat; bool built;
+        Material mat, matIconic, matKaist; bool built;
         static readonly int RevealId = Shader.PropertyToID("_Reveal"), BuildId = Shader.PropertyToID("_Build"), GhostId = Shader.PropertyToID("_Ghost"), HiId = Shader.PropertyToID("_Hi"),
             FacadeId = Shader.PropertyToID("_Facade"), LandId = Shader.PropertyToID("_Land"), GlowId = Shader.PropertyToID("_Glow"), HeightId = Shader.PropertyToID("_H"),
             PartAId = Shader.PropertyToID("_PartA"), PartBId = Shader.PropertyToID("_PartB"),
@@ -181,6 +181,9 @@ namespace AlatauCity.DigitalTwin.Landmarks
             var sh = Shader.Find("AlatauCity/Landmark");
             if (sh == null) { Debug.LogWarning("[Alatau] AlatauCity/Landmark shader missing"); return; }
             mat = new Material(sh) { name = "Landmarks", enableInstancing = false };
+            // the models with surfaces of their QTwin page get a variant of the shader with just their part (AlatauQTwin.cginc)
+            matIconic = new Material(mat) { name = "Landmarks · Iconic (QTwin)" }; matIconic.EnableKeyword("ALATAU_QT_ICONIC");
+            matKaist = new Material(mat) { name = "Landmarks · KAIST (QTwin)" }; matKaist.EnableKeyword("ALATAU_QT_KAIST");
             foreach (var l in Items) if (!l.IsLrt) Build(l);
             built = true;
             Debug.Log("[Alatau] landmarks: " + nodes.Count + " models");
@@ -196,7 +199,8 @@ namespace AlatauCity.DigitalTwin.Landmarks
             Mesh m; try { m = LandmarkModels.Build(l.Model, l.X * 0.001f); }
             catch (Exception e) { Debug.LogWarning("[Alatau] model " + l.Model + ": " + e.Message); return; }
             go.AddComponent<MeshFilter>().sharedMesh = m;
-            var r = go.AddComponent<MeshRenderer>(); r.sharedMaterial = mat; r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.On; r.receiveShadows = true;
+            var lm = l.Model == "iconic" && QTwinData.Bim() != null ? matIconic : l.Model == "campus" && QTwinData.Kaist() != null ? matKaist : mat;
+            var r = go.AddComponent<MeshRenderer>(); r.sharedMaterial = lm; r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.On; r.receiveShadows = true;
             var c = go.AddComponent<MeshCollider>(); c.sharedMesh = m;
             go.AddComponent<LandmarkObject>().Id = l.Id;
             var node = new Node { L = l, Go = go, R = r, C = c, B = new MaterialPropertyBlock() };

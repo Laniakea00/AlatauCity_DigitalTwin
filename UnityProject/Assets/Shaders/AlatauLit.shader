@@ -22,8 +22,11 @@ Shader "AlatauCity/Lit"
         Offset [_OffsetF], [_OffsetU]
         Cull [_AlatauCull]
         CGPROGRAM
-        #pragma surface surf Soft fullforwardshadows vertex:vert addshadow noambient
+        #pragma surface surf Soft fullforwardshadows vertex:vert addshadow noambient novertexlights noforwardadd nolightmap nodynlightmap nodirlightmap nometa
         #pragma target 3.5
+        // the browser compiles every variant when the shader loads: one sun, the ambient light comes from ShadeSH9 below,
+        // so the light probe copies only repeat the same code
+        #pragma skip_variants LIGHTPROBE_SH
         #include "Assets/Shaders/AlatauFilm.cginc"
         sampler2D _MainTex; fixed4 _Color, _AlatauSelColor; half _Ambient; float _AlatauYear, _AlatauSel, _AlatauScenario, _AlatauMode, _AlatauYearF, _AlatauGrow, _AlatauBldSat, _AlatauBlackout, _InfraKind, _AlatauHiOn, _AlatauHiCur; float4 _AlatauHiWave;
         sampler2D _AlatauYearTex, _AlatauStateTex, _AlatauGeoTex, _AlatauTintTex, _AlatauStyleTex, _AlatauHideTex; float _AlatauHideOn;

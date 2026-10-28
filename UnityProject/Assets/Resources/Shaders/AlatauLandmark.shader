@@ -32,10 +32,19 @@ Shader "AlatauCity/Landmark"
         // and must not show through the plots, the viaduct or the platforms
         Offset -1, -6
         CGPROGRAM
-        #pragma surface surf Soft fullforwardshadows vertex:vert addshadow noambient
+        #pragma surface surf Soft fullforwardshadows vertex:vert addshadow noambient novertexlights noforwardadd nolightmap nodynlightmap nodirlightmap nometa
         #pragma target 3.5
+        // the browser compiles every variant when the shader loads: the city has one sun and no ambient light, so the
+        // light probe copies only repeat the same code
+        #pragma skip_variants LIGHTPROBE_SH
+        // the QTwin surfaces (id 15) only in the materials of the models that have them, each with its own part: the Iconic BIM
+        // model, the Gate District round it, KAIST. Together and in every landmark they made a shader too big for browsers to compile
+        #pragma multi_compile_local __ ALATAU_QT_ICONIC ALATAU_QT_GATE ALATAU_QT_KAIST
         #include "Assets/Shaders/AlatauFilm.cginc"
+        #if defined(ALATAU_QT_ICONIC) || defined(ALATAU_QT_GATE) || defined(ALATAU_QT_KAIST)
+        #define ALATAU_QTWIN 1
         #include "Assets/Shaders/AlatauQTwin.cginc"
+        #endif
         float _Reveal, _Build, _Ghost, _Hi, _Facade, _Land, _Glow, _H, _Park;
         // buildings of a complex (LandmarkSystem.Parts): x reveal, y build, z facade, w landscaping · x glow, y height, z outline, w progress
         float4 _PartA[8], _PartB[8];
@@ -147,12 +156,17 @@ Shader "AlatauCity/Landmark"
             float grain = ANoise(IN.worldPos.xz * 0.37 + IN.worldPos.y * 0.21);
 
             bool qSoft = false;
+            #ifdef ALATAU_QTWIN
             if (id == 15)
             {
                 // the QTwin page's own surfaces, worked out in linear light; metals put their colour into the reflection of the sky
                 int qt = (int)round(prm); QSurf q;
-                if (qt > 40) q = KaistSurface(qt - 40, pid, uv.x, uv.y, fw.x, fw.y, kxz, kfw, qfl, n, night);
-                else q = QTwinSurface(qt, pid, uv.x, uv.y, fw.x, fw.y, IN.worldPos.xz, qfw, qfl, n, night);
+                #if defined(ALATAU_QT_KAIST)
+                q = KaistSurface(qt - 40, pid, uv.x, uv.y, fw.x, fw.y, kxz, kfw, qfl, n, night);
+                #else
+                q = QTwinSurface(qt, pid, uv.x, uv.y, fw.x, fw.y, IN.worldPos.xz, qfw, qfl, n, night);
+                #endif
+                QResolve(q, qfl);
                 float3 f0 = lerp(float3(0.04, 0.04, 0.04), q.col, q.metal);
                 float gloss = (1.0 - q.rough) * (1.0 - q.rough);
                 a = pow(max(q.col * (1.0 - 0.8 * q.metal), 1e-5), 0.4545);
@@ -161,6 +175,7 @@ Shader "AlatauCity/Landmark"
                 emit = pow(max(q.emis + refl, 1e-5), 0.4545) + a * 0.16;
                 spec = gloss * 0.6; qSoft = q.soft;
             }
+            #endif
             if (id == 1 || id == 8)
             {
                 // glass curtain wall: slab bands per floor, thin mullions; (8) white horizontal fins in front of the glass

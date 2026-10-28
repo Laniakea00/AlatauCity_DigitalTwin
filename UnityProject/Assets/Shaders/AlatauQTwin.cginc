@@ -13,10 +13,15 @@ float QLine(float v, float period, float w, float fwv)
     return lerp(l, min(2.0 * w / period, 1.0), smoothstep(period * 0.12, period * 0.45, f));
 }
 float QHash(float2 p) { return frac(sin(dot(p, float2(127.1, 311.7))) * 43758.5453); }
+// value noise read from a 256² table of random values (QTwinData.Noise, bilinear, repeating): sampling between two texel centres
+// at the smoothstepped fraction gives the same curve as blending four hashes, at one fetch. The shader stays small enough for
+// browsers to compile it (with four hashes per call, inlined in every branch, the WebGL shader grew past 350 KB and the GPU
+// process of the browser gave up on it)
+sampler2D _AlatauQNoise;
 float QNoise(float2 p)
 {
     float2 i = floor(p), f = frac(p); f = f * f * (3.0 - 2.0 * f);
-    return lerp(lerp(QHash(i), QHash(i + float2(1, 0)), f.x), lerp(QHash(i + float2(0, 1)), QHash(i + float2(1, 1)), f.x), f.y);
+    return tex2Dlod(_AlatauQNoise, float4((i + f + 0.5) / 256.0, 0, 0)).r;
 }
 float QFbm(float2 p) { float s = 0.0, a = 0.5; for (int i = 0; i < 4; i++) { s += a * QNoise(p); p = p * 2.03 + 17.1; a *= 0.5; } return s / 0.9375; }
 // detail that fades to its mean where it gets smaller than a pixel (fwl = length of the footprint of a pixel in metres)
@@ -47,10 +52,11 @@ float3 QMembrane(float2 p, float2 fwp, float fwl)
     float n = QFbm(p / 7.0), s = QLine(p.x, 2.0, 0.025, fwp.x);
     return float3(0.42, 0.42, 0.40) * (0.93 + 0.10 * n) * (1.0 - 0.10 * s) * (0.96 + 0.08 * QFine(p, 1.5, fwl));
 }
-// a garden (a courtyard or a roof): lawn, soft beds of shrubs and perennials, winding paths, a paved patch here and there
-float3 QGarden(float2 p, float2 fwp, float fwl)
+// a garden (a courtyard or a roof): lawn, soft beds of shrubs and perennials, winding paths, a paved patch here and there;
+// c: its lawn (QGrass), pav: its paths (QPavers 0.9 × 0.45 m, QGardenPav)
+static const float2 QGardenSz = float2(0.9, 0.45); static const float3 QGardenPav = float3(0.30, 0.28, 0.25);
+float3 QGardenMix(float3 c, float3 pav, float2 p, float2 fwp, float fwl)
 {
-    float3 c = QGrass(p, fwl);
     float sh = QFbm(p / 3.2 + 4.0);
     float3 shrub = float3(0.030, 0.070, 0.020) * (0.75 + 0.55 * QFine(p, 3.5, fwl));
     c = lerp(c, shrub, smoothstep(0.60, 0.70, sh));
@@ -60,18 +66,62 @@ float3 QGarden(float2 p, float2 fwp, float fwl)
     c = lerp(c, flw, step(0.85, QHash(floor(fq) + 2.0)) * dt * smoothstep(0.56, 0.62, sh) * (1.0 - smoothstep(0.66, 0.7, sh)) * (1.0 - far) * 0.8);
     float w1 = QLine(p.x + 9.0 * sin(p.y / 27.0), 67.0, 0.75, fwp.x), w2 = QLine(p.y + 8.0 * sin(p.x / 23.0 + 1.3), 53.0, 0.75, fwp.y);
     float pv = smoothstep(0.80, 0.82, QFbm(p / 9.0 + 2.0));
-    float3 pav = QPavers(p, float2(0.9, 0.45), float3(0.30, 0.28, 0.25), fwp, fwl);
     return lerp(c, pav, max(max(w1, w2), pv));
 }
+// the planted slope of Iconic: lawn (c) in bands along the contour, low clipped hedges between them, flowers in the beds
+float3 QSlopeMix(float3 c, float2 wp, float y, float fwl)
+{
+    float band = frac(y / 2.6), hedge = smoothstep(0.80, 0.86, band) - smoothstep(0.94, 0.99, band);
+    float bed = smoothstep(0.55, 0.62, band) * (1.0 - smoothstep(0.78, 0.80, band));
+    float2 fq = wp * 4.0; float fc = QHash(floor(fq)), far = smoothstep(0.25, 0.7, fwl * 4.0);
+    float dt = 1.0 - smoothstep(0.18, 0.32, length(frac(fq) - 0.5));
+    float3 flw = fc > 0.66 ? float3(0.55, 0.16, 0.30) : fc > 0.33 ? float3(0.62, 0.48, 0.10) : float3(0.36, 0.20, 0.50);
+    float3 bedc = float3(0.040, 0.080, 0.024) * (0.75 + 0.5 * QFine(wp, 2.5, fwl));
+    bedc = lerp(bedc, flw, step(0.80, QHash(floor(fq) + 7.0)) * dt * (1.0 - far) * 0.8 + far * 0.06);
+    c = lerp(c, bedc, bed);
+    return lerp(c, float3(0.035, 0.085, 0.022) * (0.8 + 0.4 * QFine(wp, 3.0, fwl)), hedge);
+}
 
-struct QSurf { float3 col; float rough; float metal; float3 emis; bool soft; };
+// pat: a ground pattern still to be laid (QResolve), so lawn, pavers, garden and membrane appear once in the shader, not once per
+// surface: inlined in every branch they made the WebGL shader so big (350 KB) that browsers lost the GPU compiling it.
+// pp: plan or facade metres, pfw: their footprint, psz/pbase: the pavers' size and colour, pk: a factor on the colour (QSlope: y)
+#define QP_NONE 0
+#define QP_PAVERS 1
+#define QP_GRASS 2
+#define QP_GARDEN 3
+#define QP_MEMBRANE 4
+#define QP_SLOPE 5
+struct QSurf { float3 col; float rough; float metal; float3 emis; bool soft; int pat; float2 pp; float2 pfw; float2 psz; float3 pbase; float pk; };
+void QPat(inout QSurf o, int pat, float2 pp, float2 pfw, float pk) { o.pat = pat; o.pp = pp; o.pfw = pfw; o.pk = pk; }
+void QPav(inout QSurf o, float2 pp, float2 sz, float3 base, float2 pfw, float pk) { QPat(o, QP_PAVERS, pp, pfw, pk); o.psz = sz; o.pbase = base; }
+QSurf QNew(float rough)
+{
+    QSurf o; o.col = float3(0.40, 0.395, 0.38); o.rough = rough; o.metal = 0.0; o.emis = 0; o.soft = false;
+    o.pat = QP_NONE; o.pp = 0; o.pfw = 0; o.psz = 1; o.pbase = 0; o.pk = 1;
+    return o;
+}
+// lays the pattern a surface asked for (after QTwinSurface or KaistSurface, called once)
+void QResolve(inout QSurf o, float fwl)
+{
+    if (o.pat == QP_NONE) return;
+    float3 grass = 0, pav = 0;
+    if (o.pat == QP_GRASS || o.pat == QP_GARDEN || o.pat == QP_SLOPE) grass = QGrass(o.pp, fwl);
+    if (o.pat == QP_GARDEN) { o.psz = QGardenSz; o.pbase = QGardenPav; }
+    if (o.pat == QP_PAVERS || o.pat == QP_GARDEN) pav = QPavers(o.pp, o.psz, o.pbase, o.pfw, fwl);
+    if (o.pat == QP_PAVERS) o.col = pav * o.pk;
+    else if (o.pat == QP_GRASS) o.col = grass * o.pk;
+    else if (o.pat == QP_GARDEN) o.col = QGardenMix(grass, pav, o.pp, o.pfw, fwl) * o.pk;
+    else if (o.pat == QP_SLOPE) o.col = QSlopeMix(grass, o.pp, o.pk, fwl);
+    else o.col = QMembrane(o.pp, o.pfw, fwl) * o.pk;
+}
 
-// tag: the page's surface; pid: the building of the complex (1 T1, 2 T2, 3–4 pavilions, 5 plaza; 0 the district);
+// tag: the page's surface (the complex in the ALATAU_QT_ICONIC variant of AlatauLandmark, the district in ALATAU_QT_GATE); pid: the building of the complex (1 T1, 2 T2, 3–4 pavilions, 5 plaza; 0 the district);
 // u, y: facade metres along and up (y from the ground of the page); fu, fy: their screen derivatives; wp, fwp, fwl: plan metres and
 // their footprint; no: normal; night 0 … 1; clad: the facade is on at this height (else the bare frame shows, drawn by the caller)
 QSurf QTwinSurface(int tg, int pid, float u, float y, float fu, float fy, float2 wp, float2 fwp, float fwl, float3 no, float night)
 {
-    QSurf o; o.col = float3(0.40, 0.395, 0.38); o.rough = 0.85; o.metal = 0.0; o.emis = 0; o.soft = false;
+    QSurf o = QNew(0.85);
+#if defined(ALATAU_QT_ICONIC)
     if (tg < 20)
     {
         // ---------------- the complex
@@ -133,28 +183,14 @@ QSurf QTwinSurface(int tg, int pid, float u, float y, float fu, float fy, float2
             o.col = float3(0.92, 0.68, 0.32) * rib; o.rough = 0.25; o.metal = 0.9;
             o.emis = float3(1.0, 0.62, 0.24) * (0.22 + 0.9 * night) * rib;
         }
-        if (tg == 6)
-        {
-            // the planted slope: lawn in bands along the contour, low clipped hedges between them, flowers in the beds
-            float3 c = QGrass(wp, fwl);
-            float band = frac(y / 2.6), hedge = smoothstep(0.80, 0.86, band) - smoothstep(0.94, 0.99, band);
-            float bed = smoothstep(0.55, 0.62, band) * (1.0 - smoothstep(0.78, 0.80, band));
-            float2 fq = wp * 4.0; float fc = QHash(floor(fq)), far = smoothstep(0.25, 0.7, fwl * 4.0);
-            float dt = 1.0 - smoothstep(0.18, 0.32, length(frac(fq) - 0.5));
-            float3 flw = fc > 0.66 ? float3(0.55, 0.16, 0.30) : fc > 0.33 ? float3(0.62, 0.48, 0.10) : float3(0.36, 0.20, 0.50);
-            float3 bedc = float3(0.040, 0.080, 0.024) * (0.75 + 0.5 * QFine(wp, 2.5, fwl));
-            bedc = lerp(bedc, flw, step(0.80, QHash(floor(fq) + 7.0)) * dt * (1.0 - far) * 0.8 + far * 0.06);
-            c = lerp(c, bedc, bed);
-            c = lerp(c, float3(0.035, 0.085, 0.022) * (0.8 + 0.4 * QFine(wp, 3.0, fwl)), hedge);
-            o.col = c; o.rough = 0.95; o.soft = true;
-        }
+        if (tg == 6) { QPat(o, QP_SLOPE, wp, fwp, y); o.rough = 0.95; o.soft = true; }      // the planted slope (QSlopeMix)
         if (tg == 7)
         {
             float rp = 0.5 + 0.5 * sin(wp.x * 0.9 + wp.y * 0.7) * sin(wp.y * 1.3 - wp.x * 0.4);
             o.col = lerp(float3(0.02, 0.22, 0.36), float3(0.06, 0.42, 0.60), rp); o.rough = 0.04; o.metal = 0.15;
             o.emis = float3(0.05, 0.45, 0.85) * (0.10 + night * 0.9); o.soft = true;
         }
-        if (tg == 5) { o.col = QPavers(wp, float2(1.2, 0.6), float3(0.56, 0.52, 0.46), fwp, fwl); o.rough = 0.8; o.soft = true; }
+        if (tg == 5) { QPav(o, wp, float2(1.2, 0.6), float3(0.56, 0.52, 0.46), fwp, 1.0); o.rough = 0.8; o.soft = true; }
         if (tg == 14)
         {
             // the underside of the pavilion roof: timber slats, a grid of downlights
@@ -170,17 +206,18 @@ QSurf QTwinSurface(int tg, int pid, float u, float y, float fu, float fy, float2
             o.col = float3(0.80, 0.76, 0.68) * (0.92 + 0.08 * QFine(wp, 2.0, fwl)); o.rough = 0.9;
             o.emis = float3(1.0, 0.75, 0.45) * night * 0.45;
         }
-        if (tg == 9) { o.col = QPavers(wp, float2(1.6, 0.8), float3(0.42, 0.40, 0.37), fwp, fwl); o.rough = 0.8; o.soft = true; }
+        if (tg == 9) { QPav(o, wp, float2(1.6, 0.8), float3(0.42, 0.40, 0.37), fwp, 1.0); o.rough = 0.8; o.soft = true; }
         if (tg == 10)
         {
             bool top = no.y > 0.5;
-            o.col = QPavers(top ? wp : float2(u, y), float2(1.2, 0.6), float3(0.50, 0.47, 0.43), top ? fwp : float2(fu, fy), fwl) * (top ? 1.0 : 0.78); o.rough = 0.75;
+            QPav(o, top ? wp : float2(u, y), float2(1.2, 0.6), float3(0.50, 0.47, 0.43), top ? fwp : float2(fu, fy), top ? 1.0 : 0.78); o.rough = 0.75;
             if (!top) o.emis = float3(1.0, 0.8, 0.55) * night * 0.35;
             o.soft = true;
         }
-        if (tg == 12) { o.col = QGrass(wp, fwl); o.rough = 0.95; o.soft = true; }
-        return o;
+        if (tg == 12) { QPat(o, QP_GRASS, wp, fwp, 1.0); o.rough = 0.95; o.soft = true; }
     }
+    return o;
+#else
     // ---------------- the district
     if (tg == 32)
     {
@@ -195,7 +232,7 @@ QSurf QTwinSurface(int tg, int pid, float u, float y, float fu, float fy, float2
     }
     else if (no.y > 0.5)
     {
-        if (tg == 26) { o.col = QGarden(wp, fwp, fwl); o.rough = 0.92; o.soft = true; }
+        if (tg == 26) { QPat(o, QP_GARDEN, wp, fwp, 1.0); o.rough = 0.92; o.soft = true; }
         else if (tg == 28) { float rp = QFine(wp * 0.6, 1.0, fwl * 0.6); o.col = float3(0.012, 0.045, 0.055) * (0.9 + 0.2 * rp); o.rough = 0.12; o.soft = true; }
         else if (tg == 31)
         {
@@ -208,10 +245,10 @@ QSurf QTwinSurface(int tg, int pid, float u, float y, float fu, float fy, float2
             o.col = lerp(o.col, float3(0.45, 0.45, 0.45), lane * dash * 0.35);
             o.emis = float3(1.0, 0.75, 0.45) * night * 0.05;
         }
-        else if (tg == 29) { o.col = QGrass(wp, fwl); o.rough = 0.95; o.soft = true; }
-        else if (tg == 30) { o.col = QPavers(wp, float2(1.0, 0.5), float3(0.40, 0.385, 0.36), fwp, fwl); o.rough = 0.9; o.soft = true; }
+        else if (tg == 29) { QPat(o, QP_GRASS, wp, fwp, 1.0); o.rough = 0.95; o.soft = true; }
+        else if (tg == 30) { QPav(o, wp, float2(1.0, 0.5), float3(0.40, 0.385, 0.36), fwp, 1.0); o.rough = 0.9; o.soft = true; }
         else if (tg == 27) { o.col = float3(0.10, 0.14, 0.17); o.rough = 0.08; o.metal = 0.9; o.emis = float3(1.0, 0.8, 0.6) * night * 0.5; }
-        else { o.col = QMembrane(wp, fwp, fwl); o.rough = 0.85; }
+        else { QPat(o, QP_MEMBRANE, wp, fwp, 1.0); o.rough = 0.85; }
     }
     else if (tg == 27)
     {
@@ -261,12 +298,14 @@ QSurf QTwinSurface(int tg, int pid, float u, float y, float fu, float fy, float2
         o.col *= lerp(0.70, 1.0, smoothstep(0.0, 5.0, y));            // the base darker: the street in shadow
     }
     return o;
+#endif
 }
 // KAIST Kazakhstan (QTwin_AlatauCity_Monitoring.html, its campus page), tags 41–62 = the page's tag + 40: k = the page's tag.
 // lp, lfw: plan metres in the frame of the campus (its paving and lines run with its buildings) and their footprint
 QSurf KaistSurface(int k, int pid, float u, float y, float fu, float fy, float2 lp, float2 lfw, float fwl, float3 no, float night)
 {
-    QSurf o; o.col = float3(0.40, 0.395, 0.38); o.rough = 0.9; o.metal = 0.0; o.emis = 0; o.soft = false;
+    QSurf o = QNew(0.9);
+#if defined(ALATAU_QT_KAIST)
     if (k == 1 || k == 15)
     {
         // the curtain walls: deep blue glass under a white grid (main hall, north block) or teal glass with white mullions every 1.2 m (B1, labs)
@@ -304,9 +343,9 @@ QSurf KaistSurface(int k, int pid, float u, float y, float fu, float fy, float2 
         o.col = float3(0.84, 0.84, 0.82) * (0.96 + 0.06 * QFine(lp + y, 1.0, fwl)); o.rough = 0.55;
         if (no.y < -0.5) o.emis = float3(1.0, 0.86, 0.62) * night * 0.55;
     }
-    if (k == 18) { o.col = QMembrane(lp, lfw, fwl) * 1.25; o.rough = 0.85; }
-    if (k == 6) { o.col = QGarden(lp, lfw, fwl); o.rough = 0.95; o.soft = true; }
-    if (k == 12) { o.col = QGrass(lp, fwl); o.rough = 0.95; o.soft = true; }
+    if (k == 18) { QPat(o, QP_MEMBRANE, lp, lfw, 1.25); o.rough = 0.85; }
+    if (k == 6) { QPat(o, QP_GARDEN, lp, lfw, 1.0); o.rough = 0.95; o.soft = true; }
+    if (k == 12) { QPat(o, QP_GRASS, lp, lfw, 1.0); o.rough = 0.95; o.soft = true; }
     if (k == 21) { o.col = float3(0.035, 0.08, 0.025) * (0.75 + 0.5 * QFine(lp + y * 1.3, 2.5, fwl)); o.rough = 0.95; o.soft = true; }
     if (k == 7)
     {
@@ -315,14 +354,14 @@ QSurf KaistSurface(int k, int pid, float u, float y, float fu, float fy, float2 
         o.col = lerp(float3(0.015, 0.13, 0.22), float3(0.03, 0.24, 0.36), rp); o.rough = 0.22; o.metal = 0.1;
         o.emis = float3(0.03, 0.22, 0.42) * (0.06 + night * 0.6); o.soft = true;
     }
-    if (k == 5) { o.col = QPavers(lp, float2(1.2, 0.6), float3(0.62, 0.60, 0.56), lfw, fwl); o.rough = 0.8; o.soft = true; }
-    if (k == 9) { o.col = QPavers(lp, float2(1.6, 0.8), float3(0.50, 0.48, 0.45), lfw, fwl); o.rough = 0.8; o.soft = true; }
-    if (k == 22) { o.col = QPavers(lp, float2(0.9, 0.45), float3(0.55, 0.53, 0.49), lfw, fwl); o.rough = 0.85; o.soft = true; }
-    if (k == 20) { o.col = QPavers(lp, float2(1.6, 0.8), float3(0.52, 0.50, 0.46), lfw, fwl); o.rough = 0.8; o.soft = true; }
+    if (k == 5) { QPav(o, lp, float2(1.2, 0.6), float3(0.62, 0.60, 0.56), lfw, 1.0); o.rough = 0.8; o.soft = true; }
+    if (k == 9) { QPav(o, lp, float2(1.6, 0.8), float3(0.50, 0.48, 0.45), lfw, 1.0); o.rough = 0.8; o.soft = true; }
+    if (k == 22) { QPav(o, lp, float2(0.9, 0.45), float3(0.55, 0.53, 0.49), lfw, 1.0); o.rough = 0.85; o.soft = true; }
+    if (k == 20) { QPav(o, lp, float2(1.6, 0.8), float3(0.52, 0.50, 0.46), lfw, 1.0); o.rough = 0.8; o.soft = true; }
     if (k == 10)
     {
         bool top = no.y > 0.5;
-        o.col = QPavers(top ? lp : float2(u, y), float2(1.2, 0.6), float3(0.70, 0.68, 0.64), top ? lfw : float2(fu, fy), fwl) * (top ? 1.0 : 0.85); o.rough = 0.7; o.soft = true;
+        QPav(o, top ? lp : float2(u, y), float2(1.2, 0.6), float3(0.70, 0.68, 0.64), top ? lfw : float2(fu, fy), top ? 1.0 : 0.85); o.rough = 0.7; o.soft = true;
     }
     if (k == 16) { o.col = float3(0.42, 0.12, 0.07) * (0.9 + 0.2 * saturate(QFbm(lp * 1.3))); o.rough = 0.9; o.soft = true; }
     if (k == 17)
@@ -334,6 +373,7 @@ QSurf KaistSurface(int k, int pid, float u, float y, float fu, float fy, float2 
                        max(QLine(abs(q.y) - 18.5, 1000.0, 0.08, lfw.y), QLine(length(q) - 9.15, 1000.0, 0.09, length(lfw))));
         o.col = lerp(float3(0.07, 0.17, 0.05) * (0.92 + 0.12 * st), float3(0.85, 0.85, 0.85), saturate(ln)); o.rough = 0.9; o.soft = true;
     }
+#endif
     return o;
 }
 #endif
