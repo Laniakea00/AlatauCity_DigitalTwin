@@ -2,10 +2,8 @@
 // Vertex data (LandmarkKit): COLOR = base colour, uv0 = facade metres (along, up), uv1.x = material id, uv1.y = its parameter.
 // Materials: 0 solid (plaster / concrete), 1 glass curtain wall (param = floor height), 2 profiled metal, 3 flat roof, 4 paving,
 //            5 light (emissive), 6 planting, 7 water, 8 horizontal fins over glass (param = fin spacing), 9 dark steel / rails,
-//            10 lit lattice glass (Iconic, param = width of a diamond of the lattice), 11 white housing of the presentation model
-//            (plaster with punched windows on a 3 m bay, param = floor height, uv.y from the building's ground), 12 golden lamellas over
-//            warm glass (param = lamella spacing), 13 perforated copper (param = hole spacing, uv = plan metres), 14 carriageway with
-//            lines of light (uv.x across from the centre line, param = half width), 15 the surfaces of the QTwin page of Iconic Complex
+//            10-14 retired (the old Iconic presentation model: lattice glass, white housing, lamellas, copper, lit roads; plain vertex
+//            colour if met), 15 the surfaces of the QTwin page of Iconic Complex
 //            (its BIM model and the Gate District round it, param = the page's surface tag; AlatauQTwin.cginc) and of the campus page
 //            of KAIST (param = its tag + 40).
 // Per object (MaterialPropertyBlock): _Reveal = metres above the object's base still visible (construction rises), _Build = 1 while
@@ -129,12 +127,6 @@ Shader "AlatauCity/Landmark"
                 float ign = frac(52.9829189 * frac(dot(floor(sp), float2(0.06711056, 0.00583715))));
                 clip((1.0 - 0.72 * _Ghost) - ign);
             }
-            // lattice of the Iconic facade (material 10): coordinates along the face (horizontal) and up, the same on every floor of a face
-            float2 latH = n.xz; float latL = length(latH);
-            float2 latT = latL > 1e-3 ? float2(-latH.y, latH.x) / latL : float2(1.0, 0.0);
-            float latP = max(IN.fm.w, 1.0);
-            float latA = (dot(IN.worldPos.xz, latT) + IN.worldPos.y / 2.6) / latP, latB = (dot(IN.worldPos.xz, latT) - IN.worldPos.y / 2.6) / latP;
-            float latWA = fwidth(latA), latWB = fwidth(latB);
             int id = (int)round(IN.fm.zw.x);
             bool tree = IN.fm.zw.y < -6.5;                                   // LandmarkKit.TreeTag: planted at the end of construction
             float prm = tree || keep || green ? 3.0 : max(IN.fm.zw.y, 0.05);
@@ -201,123 +193,8 @@ Shader "AlatauCity/Landmark"
                 a = lerp(farA, nearA, detail); emit = lerp(farE, nearE, detail);
                 spec = (1.0 - solidPart * detail) * 0.9;
             }
-            else if (id == 10)
-            {
-                // lit lattice glass, as on the presentation model: warm-lit floors behind the glass, a diamond grid of light lines over the
-                // faces (2.6 times as tall as wide), faint mullions every 1.5 m; seen from afar the grid fades to its average brightness
-                float lw = 0.17 / latP;
-                float dA = abs(frac(latA + 0.5) - 0.5), dB = abs(frac(latB + 0.5) - 0.5);
-                float lineA = 1.0 - saturate((dA - lw) / max(latWA, 1e-4) + 0.5), lineB = 1.0 - saturate((dB - lw) / max(latWB, 1e-4) + 0.5);
-                float detail = saturate(1.6 - max(latWA, latWB) * 4.0);
-                float wallF = saturate(latL * 3.0);
-                float lat = lerp(lw * 4.0, max(lineA, lineB), detail) * wallF;
-                float mu = abs(frac(dot(IN.worldPos.xz, latT) / 1.5 + 0.5) - 0.5);
-                float mull = (1.0 - saturate((mu - 0.03) / max(latWA * latP / 1.5, 1e-4) + 0.5)) * detail;
-                float h = AHash2(floor(float2(dot(IN.worldPos.xz, latT) / 6.0, IN.worldPos.y / 3.75)) + 5.0);
-                float3 warmIn = a * lerp(float3(1.0, 0.86, 0.66), float3(1.0, 0.94, 0.82), h);
-                float mirror = (0.22 + 0.60 * fres) * (1.0 - 0.55 * night);
-                a = lerp(a * 0.42, float3(0.93, 0.90, 0.84), mull * 0.5);
-                emit = warmIn * (0.58 + 0.70 * night) * (1.0 - mull * 0.4) + sky * mirror
-                     + float3(1.0, 0.96, 0.86) * lat * (0.85 + 1.4 * night);
-                spec = 0.8 * (1.0 - lat);
-            }
-            else if (id == 11)
-            {
-                // white housing of the presentation model, uv.y = metres above the building's ground: a glazed ground floor of shops and
-                // cafés between pilasters, above it one window 1.5 × 1.85 m per 3 m bay and floor set in a reveal (a shadow along its top
-                // and one side), a faint groove at every slab, some bays with full-height French windows; the glass dark and mirroring
-                // the sky, a curtain behind some, lights on at night; from afar the grid fades to its average
-                const float gfH = 4.2;
-                float wallF = 1.0 - saturate(abs(n.y) * 3.0);
-                float yy = uv.y - gfH;
-                float2 cell = float2(uv.x / 3.0, yy / prm), cw = fw / float2(3.0, prm);
-                float2 q = frac(cell), idc = floor(cell);
-                float detail = saturate(1.4 - max(cw.x, cw.y) * 2.0);
-                float hb = AHash2(float2(floor(uv.x / 6.0), 3.0) + 31.0);
-                float tall = step(0.78, hb);                                         // a column of French windows
-                float wy0 = lerp(0.23, 0.08, tall), wy1 = 0.81;
-                float wx = 1.0 - saturate((abs(q.x - 0.5) - 0.25) / max(cw.x, 1e-4) + 0.5);
-                float wy = saturate((q.y - wy0) / max(cw.y, 1e-4) + 0.5) * (1.0 - saturate((q.y - wy1) / max(cw.y, 1e-4) + 0.5));
-                float w = wx * wy * wallF * step(0.0, yy);
-                float reveal = w * saturate(1.0 - (wy1 - q.y) / 0.07) + w * saturate(1.0 - (q.x - 0.25) / 0.05) * 0.6;
-                float groove = (1.0 - saturate(min(q.y, 1.0 - q.y) / max(cw.y * 1.2, 0.012))) * step(0.0, yy);
-                float h = AHash2(idc + 31.0);
-                float3 glass = float3(0.17, 0.20, 0.24) * (0.8 + 0.4 * h);
-                glass = lerp(glass, float3(0.62, 0.58, 0.52) * 0.55, step(0.72, AHash2(idc * 1.3 + 2.0)) * 0.7);     // curtains
-                float lit = step(1.0 - (0.10 + 0.50 * night), AHash2(idc * 2.1 + 7.0)) * night;
-                float3 lamp = lerp(float3(1.0, 0.80, 0.50), float3(1.0, 0.93, 0.78), h) * lit * 1.3;
-                float mirror = 0.22 + 0.62 * fres;
-                // ground floor: shop windows from 0.4 to 3.7 m between 0.6 m pilasters every 6 m
-                float gq = frac(uv.x / 6.0), gw = fw.x / 6.0;
-                float shop = (1.0 - saturate((abs(gq - 0.5) - 0.44) / max(gw, 1e-4) + 0.5)) * saturate((uv.y - 0.4) / max(fw.y, 1e-3)) * saturate((3.7 - uv.y) / max(fw.y, 1e-3)) * step(uv.y, gfH) * wallF;
-                float3 shopIn = float3(1.0, 0.86, 0.62) * (0.10 + 0.16 * AHash2(float2(floor(uv.x / 6.0), 7.0)));
-                float share = 0.50 * 0.58 * wallF * step(0.0, yy);
-                float3 plaster = a * (0.965 + 0.05 * grain) * (0.86 + 0.14 * saturate(uv.y / 7.0)) * (1.0 - 0.05 * groove * detail);
-                plaster *= 1.0 - 0.25 * reveal * detail;
-                float3 nearA = lerp(lerp(plaster, glass, w * (1.0 - reveal * 0.5)), float3(0.16, 0.17, 0.18), shop);
-                float3 farA = lerp(lerp(plaster, glass, share), float3(0.16, 0.17, 0.18), shop * 0.85);
-                a = lerp(farA, nearA, detail);
-                float3 winE = (sky * mirror + lamp) * w * (1.0 - reveal * 0.6);
-                float3 shopE = (shopIn * (1.0 + 4.0 * night) + sky * mirror * 0.5) * shop;
-                emit = lerp((sky * mirror * 0.45 + float3(1.0, 0.85, 0.6) * night * 0.3) * share + shopE * 0.85, winE + shopE, detail);
-                spec = lerp(share + shop * 0.6, w + shop, detail) * 0.8;
-            }
-            else if (id == 12)
-            {
-                // golden lamellas over warm-lit glass (Iconic, as on its model and the SOM renders): a light champagne blade every prm
-                // metres, the glass between glowing warm (more at night), faint mullions every 1.5 m; from afar the average
-                float wallF = 1.0 - saturate(abs(n.y) * 2.0);
-                float2 cell = float2(uv.x / 1.5, uv.y / prm), cw = fw / float2(1.5, prm);
-                float2 q = frac(cell);
-                float detail = saturate(1.4 - max(cw.x, cw.y) * 2.0);
-                float blade = 1.0 - saturate((abs(q.y - 0.5) - 0.19) / max(cw.y, 1e-4) + 0.5);
-                float mull = (1.0 - saturate((min(q.x, 1.0 - q.x) - 0.03) / max(cw.x, 1e-4) + 0.5)) * 0.5;
-                float h = AHash2(floor(float2(uv.x / 6.0, uv.y / 3.75)) + 9.0);
-                float3 bladeC = float3(0.92, 0.84, 0.68) * (0.95 + 0.08 * grain);
-                float3 warmIn = a * lerp(float3(1.0, 0.84, 0.62), float3(1.0, 0.93, 0.80), h);
-                float mirror = (0.16 + 0.55 * fres) * (1.0 - 0.6 * night);
-                float sol = saturate(blade + mull) * wallF, solFar = 0.40 * wallF;
-                float3 glassA = a * 0.28;
-                float3 glassE = warmIn * (0.40 + 0.85 * night) + sky * mirror;
-                a = lerp(lerp(glassA, bladeC, solFar), lerp(glassA, bladeC, sol), detail);
-                emit = lerp(glassE * (1.0 - solFar), glassE * (1.0 - sol), detail) + bladeC * night * 0.12 * lerp(solFar, sol, detail);
-                spec = lerp(0.45, (1.0 - sol) * 0.8, detail);
-            }
-            else if (id == 13)
-            {
-                // perforated copper of the tents: round holes on a staggered grid prm metres apart, larger toward the middle of a panel
-                // field, seams every 3 panels; by day the holes are dark, at night the halls' light shines through them
-                float2 pp = uv / prm, pw = fw / prm;
-                float odd = frac(floor(pp.y) * 0.5) * 2.0;
-                float2 g = frac(float2(pp.x + 0.5 * odd, pp.y)) - 0.5;
-                float rr = 0.18 + 0.14 * ANoise(uv * 0.025 + 5.0);
-                float hole = 1.0 - saturate((length(g) - rr) / max(max(pw.x, pw.y), 1e-4) + 0.5);
-                float detail = saturate(1.3 - max(pw.x, pw.y) * 2.5);
-                float2 sq = abs(frac(uv / (prm * 3.0)) - 0.5); float2 sw = fw / (prm * 3.0);
-                float seam = 1.0 - saturate((0.485 - max(sq.x, sq.y)) / max(max(sw.x, sw.y), 1e-4) + 0.5);
-                float3 plate = a * (0.92 + 0.10 * grain) * (1.0 - 0.10 * seam * detail);
-                float shareH = 3.1416 * rr * rr;
-                float3 holeC = float3(0.22, 0.16, 0.11);
-                float ho = lerp(shareH, hole, detail);
-                a = lerp(plate, holeC, ho);
-                emit = float3(1.0, 0.78, 0.48) * ho * (0.10 + 1.1 * night) + sky * (0.06 + 0.25 * fres) * (1.0 - ho);
-                spec = 0.45 * (1.0 - ho);
-            }
-            else if (id == 14)
-            {
-                // a carriageway of the presentation model's roads: uv.x = metres across from its centre line, uv.y = along, prm = half
-                // width; lanes of 3.5 m, edge lines and dashed lane lines that are strips of cool light, as on the model
-                float hw = prm, x = uv.x, ax = abs(x), xw = max(fw.x, 1e-4), v = uv.y;
-                float3 asph = float3(0.30, 0.305, 0.31) * (0.92 + 0.12 * grain) * (0.95 + 0.10 * ANoise(IN.worldPos.xz * 0.05));
-                float edgeL = 1.0 - saturate((abs(ax - (hw - 0.35)) - 0.08) / xw + 0.5);
-                float lp = (x + hw) / 3.5; float dl = abs(frac(lp + 0.5) - 0.5) * 3.5;
-                float lane = (1.0 - saturate((dl - 0.07) / xw + 0.5)) * step(1.75, x + hw) * step(1.75, hw - x) * step(frac(v / 9.0), 0.42);
-                float mark = saturate(edgeL + lane) * saturate(1.5 - xw * 5.0);
-                float far = saturate(xw * 3.0 - 0.3);
-                a = lerp(asph, float3(0.92, 0.92, 0.90), mark * 0.9);
-                emit = float3(0.62, 0.82, 1.0) * (mark + far * 0.10) * (0.30 + 1.8 * night);
-                spec = 0.1;
-            }
+            // (materials 10-14, the lattice, housing, lamellas, copper and roads of the old Iconic presentation model, are gone with it:
+            // Iconic is drawn from QTwin, and every material here is compiled by the browser whether used or not)
             // (two chains: one long else-if chain overflows the parser of the surface shader analysis)
             if (id == 2)
             {

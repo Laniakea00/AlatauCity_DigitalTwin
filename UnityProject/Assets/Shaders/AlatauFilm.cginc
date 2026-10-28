@@ -243,16 +243,23 @@ AFacade AlatauFacade(float2 wall, float hy, float H, float floorsN, float style,
 // _AlatauGate = (x, z, cos, sin of the yaw) of the Gate District round Iconic Complex (IconicDistrict), _AlatauGateOn = 1 while it
 // stands, _AlatauGateTex its area (local frame, ± _AlatauGateHalf metres): inside it the district's own streets replace the city's
 sampler2D _AlatauPadTex; float _AlatauPadOn; float4 _AlatauGate; float _AlatauGateOn, _AlatauGateHalf; sampler2D _AlatauGateTex;
+// No early return inside the Gate test: compiled to WebGL that shape (a sampled branch whose result decides
+// whether the pad texture is read) crashes Chrome's shader compiler on Windows (D3D11 GPU process stack overflow).
 float AlatauOnPad(float3 wpos)
 {
+    float pad = 0.0;
+    if (_AlatauPadOn > 0.5)
+    {
+        float2 uv = float2(2.29357798e-5 * wpos.x + 0.5, 1.62074554e-5 * wpos.z + 0.491085899);
+        pad = tex2Dlod(_AlatauPadTex, float4(uv, 0, 0)).r;
+    }
     if (_AlatauGateOn > 0.5)
     {
         float2 d = wpos.xz - _AlatauGate.xy;
         float2 l = float2(d.x * _AlatauGate.z - d.y * _AlatauGate.w, d.x * _AlatauGate.w + d.y * _AlatauGate.z);
         float2 g = l / (2.0 * _AlatauGateHalf) + 0.5;
-        if (all(g > 0.0) && all(g < 1.0) && tex2Dlod(_AlatauGateTex, float4(g, 0, 0)).r > 0.5) return 1.0;
+        float inside = all(g > 0.0) && all(g < 1.0) ? 1.0 : 0.0;
+        pad = max(pad, inside * step(0.5, tex2Dlod(_AlatauGateTex, float4(saturate(g), 0, 0)).r));
     }
-    if (_AlatauPadOn < 0.5) return 0.0;
-    float2 uv = float2(2.29357798e-5 * wpos.x + 0.5, 1.62074554e-5 * wpos.z + 0.491085899);
-    return tex2Dlod(_AlatauPadTex, float4(uv, 0, 0)).r;
+    return pad;
 }
