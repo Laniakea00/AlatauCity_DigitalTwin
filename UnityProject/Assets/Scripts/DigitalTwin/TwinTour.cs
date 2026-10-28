@@ -263,7 +263,7 @@ namespace AlatauCity.DigitalTwin
             steps.Add(new Step { Seg = 4, Zone = 3, Year = 2050, Dur = 15, Title = () => "Район Green в 2050 году", Enter = () => ZoneGlide(3, 16f),
                 Story = () => District(3, "Туризм и отдых на Капшагае: курорты, пляжи, набережные", "4 млн", "туристов в год к 2050") });
             steps.Add(new Step { Seg = 4, Zone = 3, Year = 2050, Dur = 27, Title = () => "Паводок на Капшагае: модель и решение",
-                Enter = () => { TourFx.Instance?.GlideDistrict(3, 27f, -0.10f, 0.22f, 3400f, 2600f, 34f, 16f, b => b.GroundM < 479f); TourFx.Instance?.Flood(new Rect(-1500f, 11000f, 19500f, 17000f), 3, 475.0f, 3.2f, 10f, 16f); } });
+                Enter = () => { if (VideoMode) TourFx.Instance?.GlideDistrict(3, 27f, -0.10f, 0.22f, 3400f, 2600f, 34f, 16f, b => b.GroundM < 479f); else TourFx.Instance?.FloodView(3, 478.2f, 27f); TourFx.Instance?.Flood(new Rect(-1500f, 11000f, 19500f, 17000f), 3, 475.0f, 3.2f, 10f, 16f); } });
 
             // ================= LRT (segment 5)
             steps.Add(new Step { Seg = 5, Zone = -1, Year = 2050, Dur = 20, Title = () => "ЛРТ соединит Алматы и Конаев",

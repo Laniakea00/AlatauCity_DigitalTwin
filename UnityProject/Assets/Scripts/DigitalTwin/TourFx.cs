@@ -89,6 +89,54 @@ namespace AlatauCity.DigitalTwin
             var cam = Cam; if (cam == null) return;
             Launch(new Vector2(cam.target.x, cam.target.z), p, cam.distance, dist, cam.yaw, cam.yaw + Mathf.DeltaAngle(cam.yaw, yaw), cam.pitch, pitch, dur, 0f);
         }
+        /// <summary>The flood view: a quick flight (3 s) straight to where the risk is, the densest cluster of the district's buildings
+        /// standing below 'below' metres, looking downhill towards the water, then a slow drift along the shore for the rest of 'dur'.
+        /// So the step opens on the water and the houses at risk, not on the middle of the district.</summary>
+        public void FloodView(int district, float below, float dur)
+        {
+            var db = CityDatabase.Instance; var cam = Cam; if (db == null || cam == null) return;
+            string id = CityStats.DistrictIds[Mathf.Clamp(district, 0, 3)];
+            var risk = new List<Vector2>(); var cells = new Dictionary<long, int>();
+            foreach (var b in db.Buildings)
+            {
+                if (b == null || b.District != id || b.GroundM >= below) continue;
+                risk.Add(new Vector2(b.X, b.Z)); long k = ((long)Mathf.FloorToInt(b.X / 1000f) << 32) ^ (uint)Mathf.FloorToInt(b.Z / 1000f);
+                cells[k] = cells.TryGetValue(k, out int n) ? n + 1 : 1;
+            }
+            if (risk.Count == 0) return;
+            // the densest 3 × 3 km of risk, and the mean of the houses in it
+            long best = 0; int bestN = -1;
+            foreach (var kv in cells)
+            {
+                int cx = (int)(kv.Key >> 32), cz = (int)(uint)(kv.Key & 0xFFFFFFFF), sum = 0;
+                for (int dz = -1; dz <= 1; dz++) for (int dx = -1; dx <= 1; dx++) if (cells.TryGetValue(((long)(cx + dx) << 32) ^ (uint)(cz + dz), out int n)) sum += n;
+                if (sum > bestN) { bestN = sum; best = kv.Key; }
+            }
+            var cc = new Vector2(((int)(best >> 32) + 0.5f) * 1000f, ((int)(uint)(best & 0xFFFFFFFF) + 0.5f) * 1000f);
+            Vector2 c = Vector2.zero; int cn = 0; foreach (var p in risk) if ((p - cc).sqrMagnitude < 1800f * 1800f) { c += p; cn++; }
+            c = cn > 0 ? c / cn : cc;
+            // downhill: a plane through the ground of the district's buildings around it; the water lies that way
+            double sxx = 0, sxz = 0, szz = 0, sxh = 0, szh = 0, sh = 0; int m = 0;
+            foreach (var b in db.Buildings)
+            {
+                if (b == null || b.District != id) continue; float x = b.X - c.x, z = b.Z - c.y; if (x * x + z * z > 2500f * 2500f) continue;
+                sxx += x * x; sxz += x * z; szz += z * z; sxh += x * b.GroundM; szh += z * b.GroundM; sh += b.GroundM; m++;
+            }
+            Vector2 down = new Vector2(0.8f, 0.6f);
+            if (m > 20)
+            {
+                double mh = sh / m, det = sxx * szz - sxz * sxz;
+                if (Math.Abs(det) > 1e-6) { double gx = (sxh * szz - szh * sxz) / det, gz = (szh * sxx - sxh * sxz) / det; var g = new Vector2((float)-gx, (float)-gz); if (g.sqrMagnitude > 1e-10f) down = g.normalized; }
+            }
+            float yaw = Mathf.Atan2(down.x, down.y) * Mathf.Rad2Deg; var along = new Vector2(down.y, -down.x);
+            var target = c + down * 250f;
+            GlideTo(target, 3300f, yaw, 34f, 3.2f);
+            Later(3.2f, () => GlideTo(target + along * 1300f, 2700f, yaw + 16f, 30f, Mathf.Max(dur - 3.6f, 4f)));
+        }
+        float laterT; Action later;
+        /// <summary>Runs 'a' after 's' seconds of tour time (one pending action; Reset drops it).</summary>
+        void Later(float sec, Action a) { laterT = sec; later = a; }
+
         /// <summary>blend: seconds to blend in from the camera's pose (0 = the path starts at the camera; &lt;0 = by the length of the way).</summary>
         void Launch(Vector2 a, Vector2 b, float d0, float d1, float yaw0, float yaw1, float p0, float p1, float dur, float blend = 3f)
         {
@@ -378,6 +426,7 @@ namespace AlatauCity.DigitalTwin
             if (Application.isEditor && Input.GetKeyDown(KeyCode.F11)) Probe();                     // editor only: what lies under the mouse (Console)
             if (Application.isEditor && Input.GetKeyDown(KeyCode.F10)) { Time.timeScale = Time.timeScale > 0f ? 0f : 1f; Debug.Log("[Alatau] time scale " + Time.timeScale); }   // editor only: freeze to inspect a frame
             float dt = Paused ? 0f : Time.deltaTime;
+            if (later != null && (laterT -= dt) <= 0f) { var a = later; later = null; a(); }
             FloodStep(dt);
             energy?.Tick(dt);
             seaside?.Tick(dt);
@@ -426,7 +475,7 @@ namespace AlatauCity.DigitalTwin
 
         public void Reset()
         {
-            glide = null; Paused = false; LineLayers.JamOff();
+            glide = null; later = null; Paused = false; LineLayers.JamOff();
             HideCallout();
             if (flooding) { flooding = false; if (water != null) water.SetActive(false); TintLayer.Disable(); }
             if (hour0 >= 0f && FilmLook.Instance != null) { FilmLook.Instance.hour = hour0; hour0 = -1f; }
