@@ -39,6 +39,19 @@ namespace AlatauCity.DigitalTwin
         /// <summary>The trees of the film look (null until they are made): other layers draw their own plantings with them.</summary>
         public static FilmTrees Instance;
         void Awake() { Instance = this; }
+
+        struct Clearing { public Vector2 a, b; public float r; }
+        static readonly List<Clearing> clearings = new List<Clearing>();
+        /// <summary>Keeps a strip free of trees (a capsule a–b of radius r): a model put on open land (the presentation's substation,
+        /// its line and road). Cells already placed there are placed again.</summary>
+        public static void KeepClear(Vector2 a, Vector2 b, float r)
+        {
+            clearings.Add(new Clearing { a = a, b = b, r = r });
+            var inst = Instance; if (inst == null) return;
+            for (int cz = C(Mathf.Min(a.y, b.y) - r); cz <= C(Mathf.Max(a.y, b.y) + r); cz++)
+                for (int cx = C(Mathf.Min(a.x, b.x) - r); cx <= C(Mathf.Max(a.x, b.x) + r); cx++) inst.cells.Remove(Key(cx, cz));
+        }
+        static bool Cleared(float x, float z) { var p = new Vector2(x, z); foreach (var c in clearings) if (DistToSeg(p, c.a, c.b) < c.r) return true; return false; }
         /// <summary>Draws a batch of up to 1023 trees of species s (0 round crown, 1 poplar, 2 spruce) with their per-tree props
         /// (_TreeYear, _TreeTint); false while the meshes are not made yet.</summary>
         public bool DrawBatch(int s, Matrix4x4[] m, int count, MaterialPropertyBlock props, bool near, bool shadows)
@@ -242,6 +255,7 @@ namespace AlatauCity.DigitalTwin
             {
                 if (tmpM[sp].Count >= 1023) return;
                 if (Landmarks.LandmarkSystem.OnPlot(x, z)) return;                        // a landmark's plot (airfield, campus…): its own planting
+                if (clearings.Count > 0 && Cleared(x, z)) return;
                 if (!Physics.Raycast(new Vector3(x, 6000f, z), Vector3.down, out var hit, 9000f, ~0, QueryTriggerInteraction.Ignore)) return;
                 if (!isGround.TryGetValue(hit.collider, out bool ground)) isGround[hit.collider] = ground = hit.collider.name.StartsWith("Terrain");
                 if (!ground) return;                                                       // a building stands here (in some year)
@@ -258,7 +272,7 @@ namespace AlatauCity.DigitalTwin
                 {
                     if (tmpM[3].Count >= 1023) break;
                     if (Land(hd.x, hd.y, out float yr) == 3) continue;
-                    if (Landmarks.LandmarkSystem.OnPlot(hd.x, hd.y) || FilmRoads.InInterchange(hd.x, hd.y)) continue;
+                    if (Landmarks.LandmarkSystem.OnPlot(hd.x, hd.y) || FilmRoads.InInterchange(hd.x, hd.y) || (clearings.Count > 0 && Cleared(hd.x, hd.y))) continue;
                     if (segs != null) { bool onRoad = false; var q = new Vector2(hd.x, hd.y); foreach (var sg in segs) if (DistToSeg(q, sg.a, sg.b) < sg.half - 1f) { onRoad = true; break; } if (onRoad) continue; }
                     if (!Physics.Raycast(new Vector3(hd.x, 6000f, hd.y), Vector3.down, out var hit, 9000f, ~0, QueryTriggerInteraction.Ignore)) continue;
                     if (!isGround.TryGetValue(hit.collider, out bool ground)) isGround[hit.collider] = ground = hit.collider.name.StartsWith("Terrain");

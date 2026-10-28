@@ -97,9 +97,11 @@
 
 .chart { height: 150px; margin: 2px 0 8px 0; }
 .legend { flex-direction: row; flex-wrap: wrap; }
-.legend-item { flex-direction: row; align-items: center; margin-right: 12px; margin-bottom: 4px; }
-.block .legend-item { width: 50%; margin-right: 0; }
-.legend-item Label { white-space: nowrap; }
+.legend-item { flex-direction: row; align-items: flex-start; margin-right: 12px; margin-bottom: 4px; max-width: 100%; flex-shrink: 1; }
+.block .legend-item { width: 50%; margin-right: 0; padding-right: 8px; }
+.legend-item Label { white-space: normal; flex-shrink: 1; min-width: 0; }
+.legend-item .dot { flex-shrink: 0; margin-top: 4px; }
+.block .legend-item Label { flex-grow: 1; flex-basis: 0; }
 .dot { width: 8px; height: 8px; border-radius: 2px; margin-right: 6px; }
 .dot.round { border-radius: 4px; }
 
@@ -637,6 +639,7 @@
 .feed-place { position: absolute; left: 9px; bottom: 7px; font-size: 11px; color: #f0f0f0; background-color: rgba(0, 0, 0, 0.5); padding: 1px 6px; border-radius: 3px; }
 .feed-stub { position: absolute; right: 9px; bottom: 7px; font-size: 9px; letter-spacing: 1px; color: #ffcf6a; background-color: rgba(0, 0, 0, 0.55); padding: 1px 6px; border-radius: 3px; }
 .feed.offline .feed-place { color: #ff6b61; }
+.feed-tag { position: absolute; font-size: 9px; color: #0b0b0b; padding: 0 3px 0 3px; border-radius: 2px; white-space: nowrap; -unity-font-definition: url("Fonts/Geologica-Medium.ttf"); }
 .feed-tour { position: absolute; right: 12px; top: 12px; width: 372px; padding: 12px 14px 12px 14px; border-radius: 12px;
     background-color: rgba(16, 16, 16, 0.94); border-width: 1px; border-color: #262626; }
 .compact .feed-tour { width: 330px; }

@@ -47,7 +47,7 @@ namespace AlatauCity.DigitalTwin
                 mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off; mr.receiveShadows = true;
                 V.Clear(); U0.Clear(); U1.Clear(); U2.Clear(); T.Clear(); meshes++;
             }
-            var strokes = Strokes();
+            var strokes = Strokes(); drawn = strokes;
             foreach (var st in strokes)
             {
                 Dims(st.Cls, out float half, out float walk, out int lanes, out float lift);
@@ -137,6 +137,66 @@ namespace AlatauCity.DigitalTwin
 
         // ---------------------------------------------------------------- strokes: the road graph as long, smooth lines
         class Stroke { public List<Vector2> P; public TwinData.RoadClass Cls; public Vector4 Years; public int A, B; public float Len; public bool Ramp, OneWay, Fixed; }
+        static List<Stroke> drawn; static Dictionary<int, List<int>> drawnAt;
+
+        /// <summary>The road as it is drawn nearest to p (open in 'year' of scenario 'sc', no ramps), continued at each junction by the
+        /// straightest drawn road (turning less than ~55°) until 'reach' metres are added on each side: its centre line, class and
+        /// whether it is one carriageway of a dual road (one direction). False until the film roads are built.</summary>
+        public static bool DrawnWay(Vector2 p, int year, int sc, float maxD, float reach, out List<Vector2> line, out TwinData.RoadClass cls, out bool oneWay)
+        {
+            line = null; cls = TwinData.RoadClass.Street; oneWay = false;
+            var st = drawn; if (st == null || st.Count == 0) return false;
+            bool Open(Stroke q) => !q.Ramp && q.P != null && q.P.Count >= 2 && q.Years[Mathf.Clamp(sc, 0, 3)] <= year;
+            int bi = -1; float bd = maxD * maxD;
+            for (int i = 0; i < st.Count; i++)
+            {
+                var q = st[i]; if (!Open(q)) continue;
+                for (int j = 0; j + 1 < q.P.Count; j++)
+                {
+                    var a = q.P[j]; var ab = q.P[j + 1] - a; float L2 = ab.sqrMagnitude; if (L2 < 1e-4f) continue;
+                    float d = (a + ab * Mathf.Clamp01(Vector2.Dot(p - a, ab) / L2) - p).sqrMagnitude; if (d < bd) { bd = d; bi = i; }
+                }
+            }
+            if (bi < 0) return false;
+            if (drawnAt == null)
+            {
+                drawnAt = new Dictionary<int, List<int>>();
+                for (int i = 0; i < st.Count; i++) foreach (int nd in new[] { st[i].A, st[i].B }) { if (nd < 0) continue; if (!drawnAt.TryGetValue(nd, out var l)) drawnAt[nd] = l = new List<int>(); l.Add(i); }
+            }
+            var nodes = TwinData.RoadNodes;
+            int NodeAt(Stroke q, Vector2 end)
+            {
+                int best = -1; float b2 = 30f * 30f;
+                foreach (int nd in new[] { q.A, q.B }) if (nd >= 0 && nd < nodes.Length) { float d = (nodes[nd] - end).sqrMagnitude; if (d < b2) { b2 = d; best = nd; } }
+                return best;
+            }
+            var pts = new List<Vector2>(st[bi].P); cls = st[bi].Cls; oneWay = st[bi].OneWay;
+            for (int pass = 0; pass < 2; pass++)
+            {
+                if (pass == 1) pts.Reverse();
+                int cur = bi; float len = 0f;
+                for (int guard = 0; guard < 40 && len < reach; guard++)
+                {
+                    var end = pts[pts.Count - 1]; var dir = (end - pts[pts.Count - 2]).normalized;
+                    int node = NodeAt(st[cur], end); if (node < 0 || !drawnAt.TryGetValue(node, out var list)) break;
+                    int nb = -1; float bestDot = 0.58f; bool flip = false;
+                    foreach (int k in list)
+                    {
+                        if (k == cur) continue; var q = st[k]; if (!Open(q) || q.OneWay != oneWay) continue;
+                        bool fw = (q.P[0] - end).sqrMagnitude <= (q.P[q.P.Count - 1] - end).sqrMagnitude;
+                        var a = fw ? q.P[0] : q.P[q.P.Count - 1]; var b = fw ? q.P[Mathf.Min(2, q.P.Count - 1)] : q.P[Mathf.Max(q.P.Count - 3, 0)];
+                        float dot = Vector2.Dot(dir, (b - a).normalized) + (q.Cls == cls ? 0.12f : 0f);
+                        if (dot > bestDot) { bestDot = dot; nb = k; flip = !fw; }
+                    }
+                    if (nb < 0) break;
+                    var np = st[nb].P; int n = np.Count;
+                    for (int i = 1; i < n; i++) { var v = flip ? np[n - 1 - i] : np[i]; len += Vector2.Distance(pts[pts.Count - 1], v); pts.Add(v); }
+                    cur = nb;
+                }
+            }
+            pts.Reverse();                                                       // back in the stroke's own order (a one-way carriageway runs that way)
+            line = pts; return true;
+        }
 
         /// <summary>Edges of one class and one opening year that meet at a node of degree 2 are one road: chained into a stroke, resampled
         /// every 8 m and smoothed (a few binomial passes, ends fixed), so the ribbon has no kinks from the vectorised plan and corners of

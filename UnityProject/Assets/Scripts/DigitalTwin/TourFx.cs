@@ -15,7 +15,7 @@ namespace AlatauCity.DigitalTwin
         void Awake() { Instance = this; }
 
         // ------------------------------------------------------------------ glide
-        class Glide { public Vector2 A, B; public float D0, D1, Yaw0, Yaw1, P0, P1, Dur, T; public bool Broken; public Vector3 StartT; public float StartD, StartY, StartP; }
+        class Glide { public Vector2 A, B; public float D0, D1, Yaw0, Yaw1, P0, P1, Dur, T, Blend = 3f, Way; public Vector3 StartT; public float StartD, StartY, StartP, StartL; }
         Glide glide;
 
         /// <summary>Principal axis of a district (from its buildings): centre, unit direction and length (5–95 % along the axis).</summary>
@@ -40,22 +40,63 @@ namespace AlatauCity.DigitalTwin
         }
 
         /// <summary>A slow oblique flight along a district: from 'from' to 'to' (fractions of the axis, -0.5..0.5), the camera looking across
-        /// the city at 'pitch', distance easing from d0 to d1, heading turning by 'turn' degrees. Starts from the current pose (blend 3 s).</summary>
+        /// the city at 'pitch', distance easing from d0 to d1, heading turning by 'turn' degrees. When the camera is already over the district
+        /// (the step before was there too) the flight goes on from where the camera is, at its own height and heading, the same length
+        /// along the axis; from elsewhere it comes in at the nearer end of the district, rising over the way between.</summary>
         public void GlideDistrict(int d, float dur, float from = -0.32f, float to = 0.30f, float d0 = 3600f, float d1 = 2600f, float pitch = 30f, float turn = 18f, Func<BuildingInfo, bool> only = null)
         {
             if (!DistrictAxis(d, out var c, out var dir, out var len, out var wid, only)) return;
             var cam = Cam; if (cam == null) return;
             float heading = Mathf.Atan2(dir.x, dir.y) * Mathf.Rad2Deg;          // yaw that looks along the axis
             float yaw0 = heading + 35f;                                          // look slightly across the axis: depth and skyline
-            glide = new Glide { A = c + dir * (len * from), B = c + dir * (len * to), D0 = d0, D1 = d1, Yaw0 = yaw0, Yaw1 = yaw0 + turn, P0 = pitch + 4f, P1 = pitch, Dur = dur,
-                                StartT = cam.target, StartD = cam.distance, StartY = cam.yaw, StartP = cam.pitch };
-            cam.StopFly();
+            Vector2 a = c + dir * (len * from), b = c + dir * (len * to);
+            if (TwinTour.VideoMode) { Launch(a, b, d0, d1, yaw0, yaw0 + turn, pitch + 4f, pitch, dur); return; }   // the recorded video keeps its cut
+            var cur = new Vector2(cam.target.x, cam.target.z); var nrm = new Vector2(-dir.y, dir.x);
+            float s = Vector2.Dot(cur - c, dir) / Mathf.Max(len, 1f), off = Vector2.Dot(cur - c, nrm);
+            if (Mathf.Abs(s) < 0.6f && Mathf.Abs(off) < wid * 0.75f + 1500f)
+            {
+                float span = to - from, s0 = Mathf.Clamp(s, -0.46f, 0.46f), s1 = s0 + span;
+                if (s1 > 0.48f || s1 < -0.48f) s1 = s0 - span;                   // no room ahead: the flight turns back along the district
+                s1 = Mathf.Clamp(s1, -0.48f, 0.48f);
+                float yEnd = cam.yaw + Mathf.Clamp(Mathf.DeltaAngle(cam.yaw, yaw0 + turn), -60f, 60f);
+                if (Mathf.Abs(yEnd - cam.yaw) < 8f) yEnd = cam.yaw + turn;
+                Launch(cur, c + dir * (len * s1) + nrm * (Mathf.Clamp(off, -wid * 0.5f, wid * 0.5f) * 0.35f), cam.distance, d1, cam.yaw, yEnd, cam.pitch, pitch, dur, 0f);
+                return;
+            }
+            if ((cur - b).sqrMagnitude < (cur - a).sqrMagnitude) { var q = a; a = b; b = q; yaw0 += 180f; turn = -turn; }   // in at the nearer end
+            Launch(a, b, d0, d1, yaw0, yaw0 + turn, pitch + 4f, pitch, dur, -1f);
         }
-        /// <summary>The same kind of flight between two points (world x/z).</summary>
+        /// <summary>The same kind of flight between two points (world x/z). Like GlideDistrict it does not jump: a camera already over the
+        /// line goes on from where it is towards the farther end, one from elsewhere comes in at the nearer end.</summary>
         public void GlideLine(Vector2 a, Vector2 b, float dur, float d0, float d1, float yaw0, float yaw1, float p0, float p1)
         {
             var cam = Cam; if (cam == null) return;
-            glide = new Glide { A = a, B = b, D0 = d0, D1 = d1, Yaw0 = yaw0, Yaw1 = yaw1, P0 = p0, P1 = p1, Dur = dur, StartT = cam.target, StartD = cam.distance, StartY = cam.yaw, StartP = cam.pitch };
+            if (TwinTour.VideoMode) { Launch(a, b, d0, d1, yaw0, yaw1, p0, p1, dur); return; }
+            var cur = new Vector2(cam.target.x, cam.target.z);
+            if ((cur - b).sqrMagnitude < (cur - a).sqrMagnitude) { (a, b) = (b, a); (d0, d1) = (d1, d0); (p0, p1) = (p1, p0); (yaw0, yaw1) = (yaw1 + 180f, yaw0 + 180f); }
+            var ab = b - a; float L = Mathf.Max(ab.magnitude, 1f), f = Vector2.Dot(cur - a, ab) / (L * L), off = Mathf.Abs(ab.x * (cur - a).y - ab.y * (cur - a).x) / L;
+            if (f > -0.15f && f < 0.7f && off < 1500f + 0.15f * L)
+            {
+                float yEnd = cam.yaw + Mathf.Clamp(Mathf.DeltaAngle(cam.yaw, yaw1), -60f, 60f);
+                Launch(cur, b, cam.distance, d1, cam.yaw, yEnd, cam.pitch, p1, dur, 0f);
+                return;
+            }
+            Launch(a, b, d0, d1, yaw0, yaw1, p0, p1, dur, -1f);
+        }
+        /// <summary>A flight from the camera's pose straight to a view of p (world x/z): distance, heading and pitch ease to the given ones.</summary>
+        public void GlideTo(Vector2 p, float dist, float yaw, float pitch, float dur)
+        {
+            var cam = Cam; if (cam == null) return;
+            Launch(new Vector2(cam.target.x, cam.target.z), p, cam.distance, dist, cam.yaw, cam.yaw + Mathf.DeltaAngle(cam.yaw, yaw), cam.pitch, pitch, dur, 0f);
+        }
+        /// <summary>blend: seconds to blend in from the camera's pose (0 = the path starts at the camera; &lt;0 = by the length of the way).</summary>
+        void Launch(Vector2 a, Vector2 b, float d0, float d1, float yaw0, float yaw1, float p0, float p1, float dur, float blend = 3f)
+        {
+            var cam = Cam; if (cam == null) return;
+            float way = Vector2.Distance(new Vector2(cam.target.x, cam.target.z), a);
+            glide = new Glide { A = a, B = b, D0 = d0, D1 = d1, Yaw0 = yaw0, Yaw1 = yaw1, P0 = p0, P1 = p1, Dur = dur, Way = way,
+                                Blend = blend >= 0f ? blend : Mathf.Clamp(2.5f + way / 5000f, 3f, 6f),
+                                StartT = cam.target, StartD = cam.distance, StartY = cam.yaw, StartP = cam.pitch, StartL = cam.lift };
             cam.StopFly();
         }
 
@@ -72,7 +113,7 @@ namespace AlatauCity.DigitalTwin
             glide.T += Time.deltaTime;
             float u = Mathf.Clamp01(glide.T / glide.Dur), e = u * u * (3f - 2f * u);
             var p = Vector2.Lerp(glide.A, glide.B, e);
-            float d = Mathf.Lerp(glide.D0, glide.D1, e), y = Mathf.Lerp(glide.Yaw0, glide.Yaw1, e), pt = Mathf.Lerp(glide.P0, glide.P1, e);
+            float d = Mathf.Exp(Mathf.Lerp(Mathf.Log(Mathf.Max(glide.D0, 1f)), Mathf.Log(Mathf.Max(glide.D1, 1f)), e)), y = Mathf.LerpAngle(glide.Yaw0, glide.Yaw1, e), pt = Mathf.Lerp(glide.P0, glide.P1, e);
             if (vid)
             {
                 // the recorded video: the camera follows the glide with the eased fly-to of the video (from the last scene's view it rises
@@ -81,10 +122,14 @@ namespace AlatauCity.DigitalTwin
                 if (u >= 1f) glide = null;
                 return;
             }
-            // blend in from where the camera was
-            float bl = Mathf.Clamp01(glide.T / 3f); bl = bl * bl * (3f - 2f * bl);
+            // blend in from where the camera was: eased, rising over a long way (the ground never rushes past low), the orbit lift of an
+            // object the step before looked at sinks softly to the ground
+            float bl = glide.Blend > 0.01f ? Mathf.Clamp01(glide.T / glide.Blend) : 1f; bl = bl * bl * (3f - 2f * bl);
             var tgt = Vector3.Lerp(glide.StartT, new Vector3(p.x, 0, p.y), bl);
-            cam.SetPose(new Vector3(tgt.x, 0, tgt.z), Mathf.Exp(Mathf.Lerp(Mathf.Log(glide.StartD), Mathf.Log(d), bl)), Mathf.LerpAngle(glide.StartY, y, bl), Mathf.Lerp(glide.StartP, pt, bl), 0f);
+            float dd = Mathf.Exp(Mathf.Lerp(Mathf.Log(Mathf.Max(glide.StartD, 1f)), Mathf.Log(d), bl));
+            if (bl < 1f) dd = Mathf.Max(dd, glide.Way * 0.55f * Mathf.Sin(Mathf.PI * bl));
+            float lift = Mathf.Lerp(glide.StartL, 0f, Mathf.Clamp01(glide.T / Mathf.Max(glide.Blend, 2.5f)));
+            cam.SetPose(new Vector3(tgt.x, 0, tgt.z), dd, Mathf.LerpAngle(glide.StartY, y, bl), Mathf.Lerp(glide.StartP, pt, bl), lift);
             if (u >= 1f) glide = null;
         }
 
@@ -238,7 +283,7 @@ namespace AlatauCity.DigitalTwin
         public void ShowEnergy()
         {
             energy?.Stop(); energy = new TourEnergy(); Clean(true);
-            GlideDistrict(1, 30f, -0.30f, 0.22f, 5600f, 4300f, 40f, 16f);
+            GlideDistrict(1, 10.1f, -0.30f, 0.0f, 5600f, 4600f, 40f, 10f);           // then the energy step takes the camera to the substation
         }
         /// <summary>Hides the side panels for a full-screen WOW step (the overlay tells the story itself).</summary>
         public void Clean(bool on) { var m = UI.TwinUI.Instance?.Middle; if (m == null) return; if (on) m.AddToClassList("tour-clean"); else m.RemoveFromClassList("tour-clean"); }

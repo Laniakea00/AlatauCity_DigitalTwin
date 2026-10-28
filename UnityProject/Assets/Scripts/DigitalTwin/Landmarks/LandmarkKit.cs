@@ -39,6 +39,8 @@ namespace AlatauCity.DigitalTwin.Landmarks
         public float UvY0;
         /// <summary>Sets the colour alpha of the vertices from 'start' to the end (AlatauLandmark: alpha = 1 − landscaping stage).</summary>
         public void AlphaFrom(int start, byte a) { for (int i = start; i < c.Count; i++) { var q = c[i]; q.a = a; c[i] = q; } }
+        /// <summary>Moves the vertices from 'start' to the end up by 'dy' (a part standing on its own ground, lower or higher than the base).</summary>
+        public void LiftFrom(int start, float dy) { for (int i = start; i < v.Count; i++) v[i] += new Vector3(0f, dy, 0f); }
 
         // ------------------------------------------------------------------ primitives
         /// <summary>Quad a-b-c-d (any winding); it faces along 'outward'. uv = facade metres for each corner.</summary>

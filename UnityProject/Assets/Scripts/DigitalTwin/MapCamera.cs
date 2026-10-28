@@ -87,12 +87,13 @@ namespace AlatauCity.DigitalTwin
             }
             else dragging = false;
             if (!Input.GetMouseButton(0) && !Input.GetMouseButton(1) && !Input.GetMouseButtonUp(0) && !Input.GetMouseButtonUp(1)) pressedOnMap = false;
-            if (flying && TwinTour.VideoMode)
+            if (flying && (TwinTour.VideoMode || TwinTour.Running))
             {
-                // the recorded video: the move starts and ends softly and takes the same time whatever the speed-up of the scene. A long way
-                // rises over the city and the ground never runs past faster than 0.8 view distances a second: no low rush across the map;
-                // the zoom keeps to about a factor of 3 a second (no snap back from a close-up)
-                const float st = 0.4f; float udt = TwinState.RealDelta; flyFrame = Time.frameCount;
+                // the recorded video and the presentation: the move starts and ends softly and takes the same time whatever the speed-up of
+                // the scene. A long way rises over the city and the ground never runs past faster than 0.8 view distances a second: no low
+                // rush across the map; the zoom keeps to about a factor of 3 a second (no snap back from a close-up). The presentation
+                // moves a little slower still, so the audience can follow where the camera goes
+                float st = TwinTour.VideoMode ? 0.4f : 0.8f; float udt = TwinState.RealDelta; flyFrame = Time.frameCount;
                 float way = new Vector2(goT.x - target.x, goT.z - target.z).magnitude;
                 target = Vector3.SmoothDamp(target, goT, ref vT, st, 0.8f * distance, udt); distance = Mathf.SmoothDamp(distance, Mathf.Max(goD, way * 0.7f), ref vD, st, 1.2f * distance, udt);
                 yaw = Mathf.SmoothDampAngle(yaw, goY, ref vY, st, Mathf.Infinity, udt); pitch = Mathf.SmoothDamp(pitch, goP, ref vP, st, Mathf.Infinity, udt);

@@ -17,7 +17,12 @@ namespace AlatauCity.DigitalTwin
         readonly TwinData.Facility hv; readonly List<TwinData.Facility> subs = new List<TwinData.Facility>();
         readonly int sc;
         GameObject go; Material cable, trunk; UI.EnergyPanel panel;
-        float t; int lastYear = -1, lastStage = -1; bool tinted;
+        float t; int lastYear = -1, lastStage = -1; bool tinted, flewIn, flewOut;
+        /// <summary>Where ПС 220/110 кВ «Golden» stands (as networks.json hv_golden): the free plot of the plan in the middle of the district's
+        /// load (Golden's floor area is centred about 400 m away), 0.9 km from the motorway and 1 km from the LRT; the 220 kV line comes
+        /// in from the open land west of the city, the 110 kV side and the gate face the district.</summary>
+        public static readonly Vector2 SitePos = new Vector2(SiteX, SiteZ); public const float SiteX = -2045f, SiteZ = -8325f, SiteYaw = 0f;
+        Vector2 site; float lookYaw;
         static readonly int BlackoutId = Shader.PropertyToID("_AlatauBlackout");
         public static readonly Color Blue = new Color(0.35f, 0.78f, 1f), Amber = new Color(1f, 0.70f, 0.20f), Red = new Color(1f, 0.22f, 0.16f), Green = new Color(0.30f, 0.85f, 0.45f);
 
@@ -32,6 +37,10 @@ namespace AlatauCity.DigitalTwin
             sc = (int)TwinState.Scenario;
             hv = TwinData.Facilities.FirstOrDefault(f => f.Id == "hv_golden");
             subs.AddRange(TwinData.Facilities.Where(f => f.Res == "power" && f.District == 1));
+            site = SitePos;
+            // the camera comes to the substation from outside the district: the yard in front, the district it feeds behind it
+            Vector2 dc = Vector2.zero; foreach (var f in subs) dc += new Vector2(f.X, f.Z); dc = subs.Count > 0 ? dc / subs.Count - site : Vector2.up;
+            lookYaw = dc.sqrMagnitude > 250000f ? Mathf.Atan2(dc.x, dc.y) * Mathf.Rad2Deg : SiteYaw + 35f;
             Build();
             var ui = UI.TwinUI.Instance;
             if (ui != null && ui.Scene != null) { panel = new UI.EnergyPanel(this); ui.Scene.Add(panel); }
@@ -43,6 +52,7 @@ namespace AlatauCity.DigitalTwin
         {
             var sh = Shader.Find("AlatauCity/Glow"); if (sh == null) return;
             go = new GameObject("Tour energy");
+            var model = SubstationModel.Build(site, SiteYaw, out _); model.transform.SetParent(go.transform, true);
             cable = new Material(sh) { name = "Energy cables" }; cable.SetFloat("_Speed", 700f); cable.SetFloat("_Period", 900f);
             trunk = new Material(sh) { name = "Energy trunks" }; trunk.SetFloat("_Speed", 1100f); trunk.SetFloat("_Period", 1400f);
             // 110 kV cables of the Golden substations, each oriented away from its substation so the pulses run outwards
@@ -61,16 +71,24 @@ namespace AlatauCity.DigitalTwin
                     Ribbon(V, U, Y, T, pts, 20f, Vector2.Distance(pts[0], fp), yr);
                 }
             Mesh("Energy cables", V, U, Y, T, cable);
-            // trunks 220/110 → 110/10: straight bright lines from the big substation (appear with the first stage of each substation)
+            // trunks 220/110 → 110/10: straight bright lines from the big substation's fence (appear with the first stage of each
+            // substation), and the ring of light round its yard that shows its load
             V.Clear(); U.Clear(); Y.Clear(); T.Clear();
             if (hv != null)
                 foreach (var f in subs)
                 {
                     int first = f.Stages != null && f.Stages.Length > sc && f.Stages[sc].Length > 0 ? f.Stages[sc][0] : 9999; if (first > 2036) continue;
-                    var a = new Vector2(hv.X, hv.Z); var b = new Vector2(f.X, f.Z); int n = Mathf.Max(2, Mathf.CeilToInt(Vector2.Distance(a, b) / 80f) + 1);
+                    var b = new Vector2(f.X, f.Z); var a = site + (b - site).normalized * (SubstationModel.HalfZ + 25f); int n = Mathf.Max(2, Mathf.CeilToInt(Vector2.Distance(a, b) / 80f) + 1);
                     var pts = new Vector2[n]; for (int i = 0; i < n; i++) pts[i] = Vector2.Lerp(a, b, i / (n - 1f));
                     Ribbon(V, U, Y, T, pts, 40f, 0f, first);
                 }
+            {
+                var rot = Quaternion.Euler(0f, SiteYaw, 0f); float hx = SubstationModel.HalfX + 9f, hz = SubstationModel.HalfZ + 9f;
+                var ring = new List<Vector2>();
+                foreach (var c in new[] { new Vector2(-hx, -hz), new Vector2(hx, -hz), new Vector2(hx, hz), new Vector2(-hx, hz), new Vector2(-hx, -hz) })
+                { var w = rot * new Vector3(c.x, 0f, c.y); ring.Add(site + new Vector2(w.x, w.z)); }
+                Ribbon(V, U, Y, T, ring.ToArray(), 7f, 0f, 2026);
+            }
             Mesh("Energy trunks", V, U, Y, T, trunk);
         }
 
@@ -129,6 +147,11 @@ namespace AlatauCity.DigitalTwin
             if (dark > 0.001f && !tinted) MarkOutage();
             Shader.SetGlobalFloat(BlackoutId, dark); lastDark = over ? dark : lastDark;
 
+            // the camera: over the district while it grows, then down to the substation for the overload (the yard in front, the dark
+            // district behind it), back up over the district once the 2nd stage is in
+            if (!flewIn && t >= TGrowB - 1.4f) { flewIn = true; TourFx.Instance?.GlideTo(site, 1050f, lookYaw, 28f, 6.4f); }
+            if (!flewOut && t >= TFix + 1.4f) { flewOut = true; var to = Quaternion.Euler(0f, lookYaw, 0f) * Vector3.forward * 900f; TourFx.Instance?.GlideTo(site + new Vector2(to.x, to.z), 3600f, lookYaw + 16f, 36f, 7f); }
+
             int stage = t < TGrowB ? 0 : !Fixed ? 1 : 2;
             if (stage != lastStage) { lastStage = stage; Pins(u); }
             panel?.Refresh();
@@ -144,7 +167,7 @@ namespace AlatauCity.DigitalTwin
         void MarkOutage()
         {
             tinted = true; if (hv == null) return;
-            var c = new Vector2(hv.X, hv.Z); const float R = 2600f; float people = 0;
+            var c = site; const float R = 2600f; float people = 0;
             TintLayer.Apply(b =>
             {
                 if (b.District != "Golden" || b.Year > YBad) return new Color(0, 0, 0, 0);
@@ -161,7 +184,7 @@ namespace AlatauCity.DigitalTwin
             if (hv != null)
             {
                 string st = lastStage == 1 ? "bad" : lastStage == 2 ? "ok" : "";
-                pins.Add(new MapPins.Pin { Id = "hv", Label = "ПС 220 кВ «Golden»", World = new Vector3(hv.X, CityGround.HeightAt(hv.X, hv.Z) + 30f, hv.Z), Fill = lastStage == 1 ? Red : Blue, Status = st, ShowLabel = true, Size = 18f });
+                pins.Add(new MapPins.Pin { Id = "hv", Label = "ПС 220 кВ «Golden»", World = new Vector3(site.x, CityGround.HeightAt(site.x, site.y) + SubstationModel.TowerH + 30f, site.y), Fill = lastStage == 1 ? Red : Blue, Status = st, ShowLabel = true, Size = 18f });
             }
             foreach (var f in subs)
             {
