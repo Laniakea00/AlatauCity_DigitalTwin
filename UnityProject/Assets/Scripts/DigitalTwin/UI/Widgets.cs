@@ -13,8 +13,14 @@ namespace AlatauCity.DigitalTwin.UI
             if (!string.IsNullOrEmpty(title) || !string.IsNullOrEmpty(sub))
             {
                 var h = new VisualElement(); h.AddToClassList("block-head");
-                var t = new Label(title ?? ""); t.AddToClassList("block-title"); h.Add(t);
-                if (!string.IsNullOrEmpty(sub)) { var s = new Label(sub); s.AddToClassList("block-sub"); h.Add(s); }
+                var t = new Label(title ?? ""); t.AddToClassList("block-title");
+                Label s = null; if (!string.IsNullOrEmpty(sub)) { s = new Label(sub); s.AddToClassList("block-sub"); }
+                // a long title and subtitle don't fit one line of the ~372 px column: the subtitle goes under the title
+                if (s != null && 9 * (title ?? "").Length + 6 * sub.Length > 290)
+                {
+                    var tx = new VisualElement(); tx.AddToClassList("block-head-text"); tx.Add(t); tx.Add(s); h.Add(tx); h.AddToClassList("stacked");
+                }
+                else { h.Add(t); if (s != null) h.Add(s); }
                 b.Add(h);
                 if (!string.IsNullOrWhiteSpace(title))
                 {

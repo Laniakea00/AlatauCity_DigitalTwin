@@ -40,7 +40,7 @@ namespace AlatauCity.DigitalTwin.Modules
         static readonly Color OK = new Color(0.20f, 0.78f, 0.35f), WARN = new Color(0.96f, 0.65f, 0.14f), BAD = new Color(1f, 0.23f, 0.18f);
 
         Label eyebrow, summary, whyLabel, chartTitle, chartNote, rowsTitle, rowsSub; readonly Label[] kv = new Label[4], kl = new Label[4]; readonly VisualElement[] kb = new VisualElement[4];
-        TwinChart chart; VisualElement legend, rows; Button whyBtn; readonly List<Button> chips = new List<Button>();
+        TwinChart chart; VisualElement legend, rows, srcTop, srcChart, srcRows; int srcFor = -1; Button whyBtn; readonly List<Button> chips = new List<Button>();
 
         public override (Color, string)[] Legend => Metrics[cur].Kind == Kind.Flood
             ? new[] { (new Color(0.55f, 0.75f, 1f), Loc.T("p_lg_flood1")), (new Color(0.15f, 0.40f, 0.95f), Loc.T("p_lg_flood2")), (new Color(0.62f, 0.62f, 0.62f), Loc.T("p_lg_dry")) }
@@ -93,6 +93,7 @@ namespace AlatauCity.DigitalTwin.Modules
             }
             whyBtn = Widgets.Btn(Loc.T("p_why"), () => { why = !why; Refresh(); }, "small", "ghost"); whyBtn.style.alignSelf = Align.FlexStart; whyBtn.style.marginTop = 8; whyBtn.style.marginLeft = -8; top.Add(whyBtn);
             whyLabel = new Label(); whyLabel.AddToClassList("note"); whyLabel.style.color = new Color(0.76f, 0.76f, 0.76f); top.Add(whyLabel);
+            srcTop = new VisualElement(); top.Add(srcTop); srcFor = -1;
 
             Right();
             var cb = Widgets.Block(panel, " ");
@@ -100,10 +101,11 @@ namespace AlatauCity.DigitalTwin.Modules
             chart = new TwinChart(); cb.Add(chart);
             legend = new VisualElement(); legend.AddToClassList("legend"); cb.Add(legend);
             chartNote = new Label(); chartNote.AddToClassList("note"); chartNote.style.marginTop = 6; cb.Add(chartNote);
+            srcChart = new VisualElement(); cb.Add(srcChart);
 
             var rb = Widgets.Block(panel, Loc.T("p_districts"), Loc.T("p_districts_sub"));
             rowsTitle = rb.Q<Label>(className: "block-title"); rowsSub = rb.Q<Label>(className: "block-sub");
-            rows = new VisualElement(); rb.Add(rows);
+            rows = new VisualElement(); rb.Add(rows); srcRows = new VisualElement(); rb.Add(srcRows);
 
             var n = Widgets.Block(panel); var note = new Label(Loc.T("p_note")); note.AddToClassList("note"); n.Add(note);
         }
@@ -118,6 +120,7 @@ namespace AlatauCity.DigitalTwin.Modules
             rows.Clear(); legend.Clear();
             var rk = m.Kind == Kind.Transport ? "p_rows_tr" : m.Kind == Kind.Quake ? "p_rows_q" : m.Kind == Kind.Flood ? "p_rows_f" : "p_districts";
             rowsTitle.text = Loc.T(rk); rowsSub.text = rk == "p_districts" ? Loc.T("p_districts_sub") : "";
+            if (srcFor != cur) { srcFor = cur; var ids = SourceIds(m.Kind); srcTop.Clear(); srcTop.Add(SourceTags.Line(ids)); srcChart.Clear(); srcChart.Add(SourceTags.Line(ids)); srcRows.Clear(); srcRows.Add(SourceTags.Line(ids)); }
             switch (m.Kind)
             {
                 case Kind.Net: RefreshNet(m, s, y); break;
@@ -127,6 +130,16 @@ namespace AlatauCity.DigitalTwin.Modules
                 case Kind.Flood: RefreshFlood(s, y); break;
             }
         }
+
+        /// <summary>Where the numbers of a metric come from: the QTwin model with its assumptions, on the build-out scenario and the genplan.</summary>
+        static string[] SourceIds(Kind k) => k switch
+        {
+            Kind.Net => new[] { TwinModels.Loads, Sources.ModelCity, Sources.GenPlan },
+            Kind.Social => new[] { TwinModels.Social, Sources.ModelCity, Sources.GenPlan },
+            Kind.Transport => new[] { TwinModels.Traffic, Sources.ModelCity },
+            Kind.Quake => new[] { TwinModels.Quake, Sources.ModelCity, Sources.Osm },
+            _ => new[] { TwinModels.Flood, Sources.ModelCity },
+        };
 
         // ------------------------------------------------------------------ networks
         static float Scale(Metric m) => m.Res == "water" || m.Res == "sewer" || m.Res == "gas" ? 0.001f : 1f;
@@ -147,8 +160,8 @@ namespace AlatauCity.DigitalTwin.Modules
             int fy = -1, fd = -1; float fv = 0;
             for (int i = 0; i < TwinData.NY && fy < 0; i++)
             {
-                for (int d = 0; d < 4; d++) { var b = TwinData.BalanceOf(s, m.Res, d); if (b != null && b.Deficit[i] > 0.5f) { fy = 2025 + i; fd = d; fv = b.Deficit[i]; break; } }
-                if (fy < 0 && city.Deficit[i] > 0.5f) { fy = 2025 + i; fd = -1; fv = city.Deficit[i]; }
+                for (int d = 0; d < 4; d++) { var b = TwinData.BalanceOf(s, m.Res, d); if (b != null && b.Deficit[i] > 0.5f) { fy = TwinData.Y0 + i; fd = d; fv = b.Deficit[i]; break; } }
+                if (fy < 0 && city.Deficit[i] > 0.5f) { fy = TwinData.Y0 + i; fd = -1; fv = city.Deficit[i]; }
             }
             float dem = city.Demand[yi], cap = city.Cap[yi], def = city.Deficit[yi];
             string where = fd >= 0 ? CityStats.DistrictIds[fd] : Loc.T("p_city");
@@ -157,7 +170,7 @@ namespace AlatauCity.DigitalTwin.Modules
             else summary.text = string.Format(Loc.T("p_sum_net"), fy, where, F(fv * k), m.Unit, cause);
             Set(0, F(dem * k), string.Format(Loc.T("p_k_dem"), y, m.Unit), "");
             Set(1, F(cap * k), string.Format(Loc.T("p_k_cap"), m.Unit), "");
-            Set(2, cap > 0 ? Mathf.RoundToInt(100 * dem / cap) + " %" : "—", Loc.T("p_k_util"), def > 0.5f ? "bad" : dem > cap * 0.85f ? "warn" : "ok");
+            Set(2, cap > 0 ? Mathf.RoundToInt(100 * dem / cap) + " %" : "—", Loc.T("p_k_util"), def > 0.5f ? "bad" : dem > cap * 0.85f ? "warn" : "ok");
             Set(3, fy < 0 ? "—" : fy.ToString(), Loc.T("p_k_first"), fy < 0 ? "ok" : "bad");
 
             chartTitle.text = string.Format(Loc.T("p_chart_net"), Loc.T(m.Name));
@@ -175,7 +188,7 @@ namespace AlatauCity.DigitalTwin.Modules
                 float ld = TwinData.Load(s, m.Res == "power_hv" ? "power" : m.Res, d, y);
                 string val = b != null ? F(b.Demand[yi] * k) + " / " + F(b.Cap[yi] * k) + " " + m.Unit : F(ld * k) + " " + m.Unit + " · " + Loc.T("p_pooled");
                 string st = b != null ? St(b, yi) : St(city, yi);
-                int first = -1; if (b != null) for (int i = 0; i < TwinData.NY; i++) if (b.Deficit[i] > 0.5f) { first = 2025 + i; break; }
+                int first = -1; if (b != null) for (int i = 0; i < TwinData.NY; i++) if (b.Deficit[i] > 0.5f) { first = TwinData.Y0 + i; break; }
                 AddRow(d, val, st, first >= 0 ? string.Format(Loc.T("p_row_first"), first) : Loc.T("p_row_none"));
             }
         }
@@ -213,7 +226,7 @@ namespace AlatauCity.DigitalTwin.Modules
                 : string.Format(Loc.T("p_sum_soc"), y, CityStats.DistrictIds[worst], Loc.N0(wv), m.Unit, Loc.T(m.Name).ToLower(), Mathf.RoundToInt(cov[worst] * 100));
             Set(0, Loc.N0(needC), string.Format(Loc.T("p_k_need"), m.Unit), "");
             Set(1, Loc.N0(capC), string.Format(Loc.T("p_k_have"), m.Unit), "");
-            Set(2, Mathf.RoundToInt(covC * 100) + " %", Loc.T("p_k_cov"), covC < 0.9f ? "bad" : covC < 1f ? "warn" : "ok");
+            Set(2, Mathf.RoundToInt(covC * 100) + " %", Loc.T("p_k_cov"), covC < 0.9f ? "bad" : covC < 1f ? "warn" : "ok");
             Set(3, Loc.N0(Mathf.Max(0, needC - capC)), string.Format(Loc.T("p_k_gap"), m.Unit), needC > capC ? "warn" : "ok");
             chartTitle.text = string.Format(Loc.T("p_chart_soc"), Loc.T(m.Name));
             var need = new float[TwinData.NY]; var cap = new float[TwinData.NY]; var alerts = new bool[TwinData.NY];
@@ -241,24 +254,24 @@ namespace AlatauCity.DigitalTwin.Modules
             summary.text = string.Format(Loc.T("p_sum_tr"), ys[ti], Loc.N0(ck), Mathf.RoundToInt(dl),
                 ph < 0 ? string.Format(Loc.T("p_lrt_none"), TwinData.LrtPhaseYear[s][0]) : string.Format(Loc.T("p_lrt_on"), ph + 1, Loc.N1(lrt / 1000f)));
             Set(0, Loc.N0(ck), Loc.T("p_k_cong"), ck > 150 ? "bad" : ck > 60 ? "warn" : "ok");
-            Set(1, "+" + Mathf.RoundToInt(dl) + " %", Loc.T("p_k_delay"), dl > 35 ? "bad" : dl > 15 ? "warn" : "ok");
+            Set(1, "+" + Mathf.RoundToInt(dl) + " %", Loc.T("p_k_delay"), dl > 35 ? "bad" : dl > 15 ? "warn" : "ok");
             Set(2, Loc.N1(car / 1000f), Loc.T("p_k_cars"), "");
-            Set(3, lrt > 0 ? Mathf.RoundToInt(100f * lrt / Mathf.Max(lrt + car * 1.3f, 1)) + " %" : "—", Loc.T("p_k_lrt"), "");
+            Set(3, lrt > 0 ? Mathf.RoundToInt(100f * lrt / Mathf.Max(lrt + car * 1.3f, 1)) + " %" : "—", Loc.T("p_k_lrt"), "");
             chartTitle.text = Loc.T("p_chart_tr");
             // congested km by modelled year, all four scenarios (current one bold)
-            var ser = new float[4][]; for (int sc = 0; sc < 4; sc++) { ser[sc] = new float[TwinData.NY]; for (int i = 0; i < TwinData.NY; i++) ser[sc][i] = Interp(sc, 2025 + i); }
+            var ser = new float[4][]; for (int sc = 0; sc < 4; sc++) { ser[sc] = new float[TwinData.NY]; for (int i = 0; i < TwinData.NY; i++) ser[sc][i] = Interp(sc, TwinData.Y0 + i); }
             var cols = new[] { new Color(0.99f, 0.99f, 0.99f), WARN, new Color(0.53f, 0.53f, 0.53f), new Color(0.48f, 0.65f, 1f) };
             var widths = new float[4]; for (int i = 0; i < 4; i++) widths[i] = i == s ? 3f : 1.2f;
             chart.Series = ser; chart.Colors = cols; chart.LineWidths = widths; chart.Stacked = false; chart.Bars = false; chart.StepLast = false; chart.Alerts = null; chart.MarkYear = y; chart.Refresh();
             for (int i = 0; i < 4; i++) legend.Add(Widgets.LegendItem(cols[i], TwinScenario.Name((Scenario)i)));
             chartNote.text = Loc.T("p_chart_tr_note");
             for (int p = 0; p < 3; p++)
-                rows.Add(Widgets.Fact(string.Format(Loc.T("p_lrt_phase"), p + 1, TwinData.LrtPhaseNames[p]), TwinData.LrtPhaseYear[s][p] + " · " + Loc.N1(TwinData.LrtPhaseKm[p]) + " км"));
+                rows.Add(Widgets.Fact(string.Format(Loc.T("p_lrt_phase"), p + 1, TwinData.LrtPhaseNames[p]), TwinData.LrtPhaseYear[s][p] + " · " + Loc.N1(TwinData.LrtPhaseKm[p]) + " км"));
         }
         static float Interp(int s, int y)
         {
             var ys = TwinData.TrafficYears; float v(int i) => TwinData.TrafficKpi[s][i].TryGetValue("congested_km", out var a) ? a : 0;
-            if (y <= ys[0]) return v(0) * Mathf.Clamp01((y - 2025) / (float)(ys[0] - 2025));
+            if (y <= ys[0]) return v(0) * Mathf.Clamp01((y - TwinData.Y0) / (float)(ys[0] - TwinData.Y0));
             for (int i = 1; i < ys.Length; i++) if (y <= ys[i]) return Mathf.Lerp(v(i - 1), v(i), (y - ys[i - 1]) / (float)(ys[i] - ys[i - 1]));
             return v(ys.Length - 1);
         }
@@ -300,8 +313,8 @@ namespace AlatauCity.DigitalTwin.Modules
             var ser = new float[2][]; ser[0] = new float[TwinData.NY]; ser[1] = new float[TwinData.NY];
             foreach (var b in db.Buildings)
             {
-                if (b == null) continue; float p = QuakeP(b); int e = b.Source == "existing_osm" ? 2025 : CityStats.EffectiveYearOf(b.Bid);
-                if (e > 2050) continue; int i0 = Mathf.Clamp(e - 2025, 0, TwinData.NY - 1);
+                if (b == null) continue; float p = QuakeP(b); int e = b.Source == "existing_osm" ? TwinData.Y0 : CityStats.EffectiveYearOf(b.Bid);
+                if (e > 2050) continue; int i0 = Mathf.Clamp(e - TwinData.Y0, 0, TwinData.NY - 1);
                 for (int i = i0; i < TwinData.NY; i++) ser[p >= 0.2f ? 0 : 1][i] += p;   // expected heavily damaged buildings
             }
             chart.Series = new[] { ser[0], ser[1] }; chart.Colors = new[] { BAD, WARN }; chart.Stacked = true; chart.Bars = false; chart.StepLast = false; chart.Alerts = null; chart.MarkYear = y; chart.Refresh();
@@ -341,8 +354,8 @@ namespace AlatauCity.DigitalTwin.Modules
             var a1 = new float[TwinData.NY];
             foreach (var b in db.Buildings)
             {
-                if (b == null || b.Bid >= fc.Length || fc[b.Bid] <= 0) continue; int e = b.Source == "existing_osm" ? 2025 : CityStats.EffectiveYearOf(b.Bid);
-                if (e > 2050) continue; for (int i = Mathf.Clamp(e - 2025, 0, TwinData.NY - 1); i < TwinData.NY; i++) a1[i] += 1;
+                if (b == null || b.Bid >= fc.Length || fc[b.Bid] <= 0) continue; int e = b.Source == "existing_osm" ? TwinData.Y0 : CityStats.EffectiveYearOf(b.Bid);
+                if (e > 2050) continue; for (int i = Mathf.Clamp(e - TwinData.Y0, 0, TwinData.NY - 1); i < TwinData.NY; i++) a1[i] += 1;
             }
             chart.Series = new[] { a1 }; chart.Colors = new[] { new Color(0.30f, 0.64f, 1f) }; chart.Stacked = true; chart.Bars = false; chart.StepLast = false; chart.Alerts = null; chart.MarkYear = y; chart.Refresh();
             legend.Add(Widgets.LegendItem(new Color(0.30f, 0.64f, 1f), Loc.T("p_f_buildings")));

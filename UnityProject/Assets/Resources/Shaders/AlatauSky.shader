@@ -18,13 +18,13 @@ Shader "AlatauCity/Sky"
             fixed4 frag(v2f i) : SV_Target
             {
                 float3 d = normalize(i.dir);
-                float3 c = AlatauSky(d);
+                float3 c = AlatauSkyLod(d, 0.0);
                 float s = saturate(dot(d, _AlatauSunDir.xyz));
                 c += _AlatauSunColor.rgb * (smoothstep(0.99965, 0.99985, s) * 3.0 + pow(s, 900.0) * 0.8) * (1.0 - _AlatauNight) * step(-0.02, d.y);
                 // a few soft, high clouds so the sky is not a flat gradient
                 float2 p = d.xz / max(d.y + 0.12, 0.05) * 1.3;
                 float cl = ANoise(p * 0.9 + 3.1) * 0.55 + ANoise(p * 2.3) * 0.30 + ANoise(p * 5.1) * 0.15;
-                cl = smoothstep(0.56, 0.86, cl) * smoothstep(0.02, 0.22, d.y) * 0.45;
+                cl = smoothstep(0.56, 0.86, cl) * smoothstep(0.02, 0.22, d.y) * 0.45 * (1.0 - _AlatauSkyTexOn);      // the photo has its own clouds
                 c = lerp(c, lerp(_AlatauSkyHorizon.rgb, float3(1, 1, 1), 0.55) * (1.0 - 0.75 * _AlatauNight) + _AlatauSunColor.rgb * 0.12 * (1.0 - _AlatauNight), cl);
                 // the Trans-Ili Alatau to the south of the city: a stylised ridge with snow, standing in the haze (not survey data)
                 float az = atan2(d.x, -d.z);                                   // 0 = due south
@@ -34,9 +34,9 @@ Shader "AlatauCity/Sky"
                 float hgt = saturate(e / max(ridge, 1e-3));                    // 0 at the foot, 1 at the crest
                 float snowLine = 0.50 + 0.22 * ANoise(float2(az * 31.0, 2.0));
                 float snow = saturate((hgt - snowLine) / 0.06) * step(0.022, ridge);
-                float3 rock = lerp(_AlatauSkyHorizon.rgb, float3(0.27, 0.34, 0.48), 0.30 + 0.45 * hgt);
+                float3 rock = lerp(_AlatauSkyHorizon.rgb, float3(0.27, 0.34, 0.48), 0.22 + 0.33 * hgt);       // far away: mostly haze
                 float3 mnt = lerp(rock, lerp(float3(0.90, 0.93, 0.98), _AlatauSunColor.rgb, 0.25), snow) * (1.0 - 0.70 * _AlatauNight);
-                c = lerp(c, mnt, m);
+                c = lerp(c, mnt, m * smoothstep(0.0, 0.006, ridge - 0.004));      // the ends of the range sink into the haze instead of stopping
                 return fixed4(c, 1);
             }
             ENDCG

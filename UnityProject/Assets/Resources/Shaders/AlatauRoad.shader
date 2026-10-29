@@ -31,7 +31,7 @@ Shader "AlatauCity/Road"
             if (IN.dims.y > 0.5)
             {
                 // carriageway: asphalt, a lighter wheel track, markings that fade where a line is thinner than a pixel and at junctions
-                c = float3(0.35, 0.355, 0.36) * lerp(float3(1, 1, 1), pa, 0.7) * (0.94 + 0.10 * ANoise(IN.worldPos.xz * 0.08)) * (0.97 + 0.06 * ANoise(IN.worldPos.xz * 0.011 + 3.0));
+                c = float3(0.355, 0.35, 0.345) * lerp(float3(1, 1, 1), pa, 0.7) * (0.94 + 0.10 * ANoise(IN.worldPos.xz * 0.08)) * (0.97 + 0.06 * ANoise(IN.worldPos.xz * 0.011 + 3.0));
                 // a slightly paler wheel track in each lane, a darker oily strip between them
                 float lwT = hw / lanes; float lp = frac(ax / lwT);
                 c *= 1.0 + 0.05 * (smoothstep(0.15, 0.3, lp) - smoothstep(0.7, 0.85, lp)) * saturate(1.5 - xw * 4.0);
@@ -48,7 +48,18 @@ Shader "AlatauCity/Road"
                     sep = Line((frac(xs / lw1 + 0.5) - 0.5) * lw1, 0.07, xw) * dash * step(lw1 * 0.5, xs) * step(xs, 2.0 * hw - lw1 * 0.5);
                 }
                 float edge = Line(ax - (hw - 0.30), 0.07, xw);
-                c = lerp(c, float3(0.93, 0.93, 0.91), saturate(centre + sep + edge) * fade * 0.9);
+                // a real street: repaired patches of fresher (darker) asphalt, a few sealed cracks, darker tyre lanes, a dusty gutter
+                // along the kerb, and markings worn where the wheels cross them
+                float2 wq = IN.worldPos.xz;
+                float patchN = ANoise(wq * 0.045 + 11.0);
+                c *= lerp(1.0, 0.86, smoothstep(0.70, 0.74, patchN));
+                float crack = 1.0 - smoothstep(0.0, 0.035 + xw * 0.5, abs(ANoise(wq * 0.21 + 3.0) - 0.5));
+                c *= 1.0 - 0.10 * crack * saturate(1.5 - xw * 4.0) * step(0.55, ANoise(wq * 0.017 + 5.0));
+                float tyre = frac(ax / max(hw / lanes, 1.0));
+                c *= 1.0 - 0.05 * (exp(-abs(tyre - 0.27) * 14.0) + exp(-abs(tyre - 0.73) * 14.0)) * saturate(1.5 - xw * 3.0);
+                c = lerp(c, c * float3(1.10, 1.07, 1.02), saturate(1.0 - (hw - ax) / 0.6) * 0.6);
+                float wear = lerp(1.0, 0.55 + 0.45 * ANoise(float2(v * 0.9, x * 2.0)), saturate(1.5 - xw * 4.0));
+                c = lerp(c, float3(0.84, 0.84, 0.82), saturate(centre + sep + edge) * fade * 0.80 * wear);
                 if (_AlatauMaket.w > 0.5)
                 {
                     // the maket's light strips: solid lines along the kerbs and the centre, glowing blue-white, brighter after dark;
@@ -65,6 +76,12 @@ Shader "AlatauCity/Road"
             {
                 // pavement beside the carriageway, with a kerb line
                 c = float3(0.64, 0.63, 0.60) * lerp(float3(1, 1, 1), pp, 0.7);
+                // concrete pavers in a half bond along the street, a few a shade different
+                float2 pv = float2(v / 0.6, x / 0.3); pv.x += step(0.5, frac(pv.y * 0.5)) * 0.5;
+                float2 pf = abs(frac(pv) - 0.5), pfw = float2(vw / 0.6, xw / 0.3);
+                float pj = saturate(1.0 - min((0.5 - pf.x) / max(pfw.x, 1e-4), (0.5 - pf.y) / max(pfw.y, 1e-4)) * 0.8);
+                float pdet = saturate(1.5 - max(pfw.x, pfw.y) * 2.0);
+                c *= (1.0 - 0.10 * pj * pdet) * (1.0 + 0.05 * (AHash2(floor(pv)) - 0.5) * pdet) * (0.95 + 0.08 * ANoise(IN.worldPos.xz * 0.05));
                 // a pale concrete kerb against the carriageway
                 c = lerp(c, float3(0.80, 0.79, 0.76), Line(ax - (hw + 0.15), 0.15, xw) * saturate(1.5 - xw * 3.0));
             }

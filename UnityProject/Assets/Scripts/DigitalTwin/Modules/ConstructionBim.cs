@@ -62,13 +62,14 @@ namespace AlatauCity.DigitalTwin.Modules
             }
             var chips = new VisualElement(); chips.AddToClassList("chips"); chips.style.marginTop = 10; top.Add(chips);
             Chip(chips, Loc.T("bim_ghost"), () => ghost, () => { ghost = !ghost; q.SetGhost(ghost); });
+            top.Add(SourceTags.Line(Data.TwinModels.Bim));
 
             Right();
             var sb = Widgets.Block(panel, Loc.T("bim_stages"), Loc.T("bim_stages_sub"));
             bStages = new VisualElement(); sb.Add(bStages);
 
             var cv = Widgets.Block(panel, Loc.T("bim_safety"), Loc.T("bim_safety_sub"));
-            bSafety = new VisualElement(); cv.Add(bSafety);
+            bSafety = new VisualElement(); cv.Add(bSafety); cv.Add(SourceTags.Line(Data.TwinModels.Bim));
 
             var nb = Widgets.Block(panel); bNote = new Label(q.Note + " " + Loc.T("bim_click")); bNote.AddToClassList("note"); nb.Add(bNote);
         }
@@ -88,7 +89,7 @@ namespace AlatauCity.DigitalTwin.Modules
             if (st.Built == 0 && st.InWork == 0) bSummary.text = string.Format(Loc.T("bim_sum0"), D(q.DateOf(0)));
             else if (gap < 1.5f || worst < 0) bSummary.text = string.Format(Loc.T("bim_sum_ok"), D(date), Mathf.RoundToInt(st.FactPct));
             else bSummary.text = string.Format(Loc.T("bim_sum"), D(date), Mathf.RoundToInt(st.FactPct), Mathf.RoundToInt(st.PlanPct), q.stages[worst].Name, Mathf.RoundToInt(wg));
-            SetB(0, Mathf.RoundToInt(st.FactPct) + " %", string.Format(Loc.T("bim_k_ready"), Mathf.RoundToInt(st.PlanPct)), gap > 8 ? "bad" : gap > 2 ? "warn" : "ok");
+            SetB(0, Mathf.RoundToInt(st.FactPct) + " %", string.Format(Loc.T("bim_k_ready"), Mathf.RoundToInt(st.PlanPct)), gap > 8 ? "bad" : gap > 2 ? "warn" : "ok");
             SetB(1, st.Built.ToString("N0", Loc.Ru), string.Format(Loc.T("bim_k_built"), st.Behind.ToString("N0", Loc.Ru)), "");
             SetB(2, Loc.N1(st.Concrete / 1000f), Loc.T("bim_k_concrete"), "");
             SetB(3, st.Workers.ToString("N0", Loc.Ru), Loc.T("bim_k_workers"), "");
@@ -101,7 +102,7 @@ namespace AlatauCity.DigitalTwin.Modules
                 var r = new VisualElement(); r.AddToClassList("stage-row");
                 var t = new VisualElement(); t.AddToClassList("top");
                 var n = new Label(s.Name); n.AddToClassList("n"); t.Add(n);
-                var v = new Label(Mathf.RoundToInt(f) + " / " + Mathf.RoundToInt(p) + " %"); v.AddToClassList("v"); if (p - f > 5) v.style.color = new Color(1f, 0.23f, 0.18f); t.Add(v);
+                var v = new Label(Mathf.RoundToInt(f) + " / " + Mathf.RoundToInt(p) + " %"); v.AddToClassList("v"); if (p - f > 5) v.style.color = new Color(1f, 0.23f, 0.18f); t.Add(v);
                 r.Add(t);
                 var bar = new VisualElement(); bar.AddToClassList("bar");
                 var bp = new VisualElement(); bp.AddToClassList("p"); bp.style.width = Length.Percent(p); bar.Add(bp);
@@ -117,7 +118,7 @@ namespace AlatauCity.DigitalTwin.Modules
                 float h = Hash(day); int cams = 14, viol = Mathf.FloorToInt(h * 4f), helmet = Mathf.Min(viol, 1 + Mathf.FloorToInt(Hash(day + 7) * 2f));
                 float ppe = 100f - (viol * 0.9f + h * 0.8f);
                 bSafety.Add(Widgets.Fact(Loc.T("bim_cams"), cams + " · " + Loc.T("bim_online")));
-                bSafety.Add(Widgets.Fact(Loc.T("bim_ppe"), Loc.N1(ppe) + " %"));
+                bSafety.Add(Widgets.Fact(Loc.T("bim_ppe"), Loc.N1(ppe) + " %"));
                 var vf = Widgets.Fact(Loc.T("bim_viol"), ""); vf.RemoveAt(1);
                 vf.Add(Widgets.Status(viol == 0 ? Loc.T("bim_viol0") : string.Format(Loc.T("bim_viol_n"), viol, helmet, viol - helmet), viol == 0 ? "ok" : viol > 2 ? "bad" : "warn"));
                 vf.style.borderBottomWidth = 0; bSafety.Add(vf);

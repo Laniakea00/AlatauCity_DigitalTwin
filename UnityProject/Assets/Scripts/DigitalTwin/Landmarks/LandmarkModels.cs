@@ -33,7 +33,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
         public static readonly Vector2 Apron = V(0f, 1f);
     }
 
-    public static class LandmarkModels
+    public static partial class LandmarkModels
     {
         static void W(LandmarkKit k, Vector2 w, float y0, float y1) => k.Win(w.x, w.y, y0, y1);
         // palette
@@ -742,19 +742,6 @@ namespace AlatauCity.DigitalTwin.Landmarks
             Trees(k, 430f, -1590f, 430f, -1100f, 22f, 8f, 9f);
         }
 
-        // ------------------------------------------------------------------ L7 by Lotte: slim urban hotel, 26 floors
-        static void HotelL7(LandmarkKit k)
-        {
-            Pad(k, 90f, 70f, 8f, Pave);
-            k.Prism(LandmarkKit.RoundRect(0, 0, 70f, 48f, 6f, 3), 0.3f, 12f, GlassWarm, LM.Glass, 6f, Stone, LM.Paving);
-            k.Prism(LandmarkKit.Chamfer(4f, 4f, 40f, 22f, 3f), 12f, 96f, GlassDark, LM.Fins, 3.4f, Roof, LM.Roof);
-            k.Box(new Vector3(-17f, 54f, 4f), new Vector3(3f, 84f, 23f), 0, White, LM.Solid, 3.4f, White, LM.Roof);
-            k.Box(new Vector3(4f, 98f, 4f), new Vector3(30f, 4f, 16f), 0, MetalG, LM.Metal, 3f, Roof, LM.Roof);
-            // red L7 sign on the crown
-            k.Box(new Vector3(4f, 93f, 4f - 11.4f), new Vector3(10f, 4f, 0.6f), 0, Red, LM.Light, 1f, Red, LM.Light);
-            Trees(k, -38f, -30f, 38f, -30f, 9.5f, 7f, 5f);
-        }
-
         // ------------------------------------------------------------------ food plant (PepsiCo snacks / Mars petfood)
         static void FoodPlant(LandmarkKit k, Color32 brand, bool potato)
         {
@@ -785,8 +772,8 @@ namespace AlatauCity.DigitalTwin.Landmarks
             for (int i = 0; i < 3; i++) k.Cylinder(new Vector3(-185f + i * 17f, 0.3f, 100f), 7f, 11f, 18, MetalW, LM.Metal, 3f, MetalG, LM.Metal, 1.2f);
             k.Prism(LandmarkKit.Rect(40f, -100f, 120f, 50f), 0.3f, 0.36f, Asph, LM.Paving, 3f, Asph, LM.Paving);
             for (int i = 0; i < 7; i++) Truck(k, new Vector3(-12f + i * 16f, 0.3f, -112f), 90f, i % 3 == 0 ? brand : White);
-            Cars(k, -170f, -135f, 22, 3, 3f);
-            Trees(k, -205f, -142f, 205f, -142f, 12f, 7f, 7f);
+            Lot(k, -205f, -90f, -146f, -112f, 0.75f, 3f);
+            Trees(k, -80f, -142f, 205f, -142f, 12f, 7f, 7f);
         }
 
         // ------------------------------------------------------------------ paper mill (tissue / paper machines)
@@ -802,7 +789,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             k.Prism(LandmarkKit.Rect(-140f, 90f, 120f, 40f), 0.3f, 10f, MetalG, LM.Metal, 4f, Roof, LM.Roof);            // pulp / bale store
             k.Prism(LandmarkKit.RoundRect(-170f, -100f, 60f, 20f, 3f, 2), 0.3f, 11f, GlassBlue, LM.Glass, 3.6f, Roof, LM.Roof);
             for (int i = 0; i < 8; i++) Truck(k, new Vector3(-100f + i * 17f, 0.3f, -96f), 90f, White);
-            Cars(k, 60f, -125f, 18, 2, 11f);
+            Lot(k, 40f, 130f, -136f, -112f, 0.7f, 11f);
         }
 
         // ------------------------------------------------------------------ flexible packaging plant
@@ -815,28 +802,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             k.Prism(LandmarkKit.RoundRect(-95f, -62f, 48f, 18f, 3f, 2), 0.3f, 10f, GlassBlue, LM.Glass, 3.4f, Roof, LM.Roof);
             Silos(k, 95f, 60f, 3, 3.2f, 16f, MetalW);
             for (int i = 0; i < 5; i++) Truck(k, new Vector3(20f + i * 15f, 0.3f, -60f), 90f, White);
-            Cars(k, -130f, -88f, 14, 2, 21f);
-        }
-
-        // ------------------------------------------------------------------ logistics park: class A warehouses with dock doors and truck courts
-        static void Logistics(LandmarkKit k, int halls, float L, float D)
-        {
-            float span = D + 70f; Pad(k, L + 80f, halls * span + 60f, 10f, Asph);
-            for (int h = 0; h < halls; h++)
-            {
-                float cz = (h - (halls - 1) * 0.5f) * span;
-                k.Prism(LandmarkKit.Rect(0, cz, L, D), 0.3f, 14f, MetalW, LM.Metal, 4f, Roof, LM.Roof);
-                k.Box(new Vector3(0, 13.2f, cz - D * 0.5f - 0.3f), new Vector3(L, 1.6f, 0.4f), 0, LM.C("#e0261b"), LM.Solid, 3f, Red, LM.Roof);
-                int doors = Mathf.FloorToInt(L / 8f) - 4;
-                for (int i = 0; i < doors; i++)
-                {
-                    float x = -L * 0.5f + 16f + i * 8f;
-                    k.Box(new Vector3(x, 2.6f, cz - D * 0.5f - 0.25f), new Vector3(3f, 3.2f, 0.3f), 0, Steel, LM.Steel, 1f, Steel, LM.Steel);
-                    if ((i * 7) % 3 == 0) Truck(k, new Vector3(x, 0.3f, cz - D * 0.5f - 9f), 90f, (i % 5 == 0) ? LM.C("#2f4f7a") : White);
-                }
-                k.Prism(LandmarkKit.RoundRect(-L * 0.5f + 20f, cz + D * 0.5f + 8f, 34f, 14f, 3f, 2), 0.3f, 9f, GlassBlue, LM.Glass, 3.4f, Roof, LM.Roof);
-            }
-            Cars(k, L * 0.5f - 60f, halls * span * 0.5f + 2f, 18, 2, 31f);
+            Lot(k, -140f, -60f, -96f, -76f, 0.7f, 21f);
         }
 
         // ------------------------------------------------------------------ rail-road terminal (TLC Zhetygen): sidings, gantry cranes, container stacks
@@ -1254,53 +1220,6 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 ParkTree(k, px, qz, 8f + 5f * Hash(qz, px), h);
             }
             k.Part = 0; k.NoWin();
-        }
-
-        // ------------------------------------------------------------------ medical cluster: clinical podium, three ward towers, helipad
-        static void Hospital(LandmarkKit k)
-        {
-            Pad(k, 280f, 210f, 14f, Pave);
-            k.Prism(LandmarkKit.RoundRect(0, 0, 190f, 110f, 10f, 3), 0.3f, 14f, White, LM.Solid, 4.6f, Roof, LM.Roof);
-            k.Prism(LandmarkKit.RoundRect(0, -53f, 170f, 6f, 2f, 2), 2f, 12f, GlassBlue, LM.Glass, 4.6f, Roof, -1);
-            for (int i = 0; i < 3; i++)
-            {
-                float x = -60f + i * 60f;
-                k.Prism(LandmarkKit.RoundRect(x, 10f, 44f, 22f, 6f, 3), 14f, 46f, GlassBlue, LM.Glass, 3.6f, White, -1);
-                k.Box(new Vector3(x, 30f, 10f - 11.4f), new Vector3(36f, 32f, 0.8f), 0, White, LM.Fins, 3.6f, White, LM.Roof);
-                k.Box(new Vector3(x, 46.6f, 10f), new Vector3(46f, 1.4f, 24f), 0, White, LM.Solid, 1f, Roof, LM.Roof);
-            }
-            k.Cylinder(new Vector3(60f, 47.3f, 10f), 9f, 0.5f, 24, MetalG, LM.Metal, 1f, LM.C("#2f7d4e"), LM.Paving);
-            k.Box(new Vector3(60f, 47.85f, 10f), new Vector3(1.2f, 0.1f, 7f), 0, White, LM.Light, 1f, White, LM.Light);
-            k.Box(new Vector3(-90f, 9f, -62f), new Vector3(30f, 1f, 14f), 0, Red, LM.Solid, 1f, Red, LM.Roof);   // emergency canopy
-            Cars(k, 30f, -95f, 22, 2, 41f);
-            Trees(k, -130f, 75f, 130f, 75f, 13f, 8f, 13f);
-        }
-
-        // ------------------------------------------------------------------ K-Park: Korean-style park and pavilions (10 ha)
-        static void KPark(LandmarkKit k)
-        {
-            k.Prism(LandmarkKit.RoundRect(0, 0, 360f, 280f, 60f, 6), -16f, 0.35f, PaveDark, LM.Solid, 3f, Grass, LM.Plant);
-            k.Prism(LandmarkKit.RoundRect(-40f, 20f, 120f, 70f, 34f, 6), 0.35f, 0.45f, Stone, LM.Solid, 1f, Water, LM.Water);
-            k.Prism(LandmarkKit.Rect(0, -100f, 300f, 10f), 0.35f, 0.5f, Stone, LM.Solid, 1f, Pave, LM.Paving);
-            k.Prism(LandmarkKit.Rect(110f, 0, 10f, 200f), 0.35f, 0.5f, Stone, LM.Solid, 1f, Pave, LM.Paving);
-            // pavilions with wide, slightly lifted roofs (hanok-inspired)
-            float[,] pv = { { -40f, 20f, 26f, 16f }, { 60f, 70f, 40f, 22f }, { 60f, -40f, 50f, 26f }, { -130f, -60f, 30f, 18f } };
-            for (int i = 0; i < 4; i++)
-            {
-                float x = pv[i, 0], z = pv[i, 1], w = pv[i, 2], d = pv[i, 3];
-                if (i == 0) z += 0f;
-                k.Prism(LandmarkKit.Rect(x, z, w, d), 0.45f, 1.4f, Stone, LM.Solid, 1f, LM.C("#b9a88c"), LM.Paving);
-                for (int c = 0; c < 4; c++) { float cx = x + (c % 2 == 0 ? -1 : 1) * (w * 0.5f - 1.5f), cz = z + (c < 2 ? -1 : 1) * (d * 0.5f - 1.5f); k.Beam(new Vector3(cx, 1.4f, cz), new Vector3(cx, 6.5f, cz), 0.6f, 0.6f, LM.C("#7a3f2a"), LM.Solid); }
-                k.Prism(LandmarkKit.Rect(x, z, w - 3f, d - 3f), 1.4f, 6.2f, LM.C("#efe7d6"), LM.Solid, 1f, LM.C("#efe7d6"), -1);
-                var eave = LandmarkKit.Rect(x, z, w + 8f, d + 8f); var ridge = LandmarkKit.Rect(x, z, w * 0.75f, 1.2f);
-                k.Prism(eave, 6.5f, 7.1f, LM.C("#3b3d40"), LM.Solid, 1f, LM.C("#3b3d40"), -1);
-                k.Loft(eave, 7.1f, ridge, 7.1f + d * 0.38f, LM.C("#33363a"), LM.Metal, 1f); k.Cap(ridge, 7.1f + d * 0.38f, true, LM.C("#2c2f33"), LM.Roof);
-            }
-            Trees(k, -165f, -125f, 165f, -115f, 15f, 9f, 21f); Trees(k, -165f, 115f, 165f, 125f, 15f, 9f, 22f);
-            Trees(k, 140f, -90f, 160f, 90f, 16f, 9f, 23f);
-            k.Beam(new Vector3(-150f, 0.4f, -120f), new Vector3(-150f, 9f, -120f), 1f, 1f, LM.C("#7a3f2a"), LM.Solid);
-            k.Beam(new Vector3(-150f, 0.4f, -95f), new Vector3(-150f, 9f, -95f), 1f, 1f, LM.C("#7a3f2a"), LM.Solid);
-            k.Beam(new Vector3(-150f, 9f, -124f), new Vector3(-150f, 9f, -91f), 1.4f, 1.2f, LM.C("#2c2f33"), LM.Solid);
         }
 
         // ------------------------------------------------------------------ marina and waterfront club on Kapshagay (Green District concept)

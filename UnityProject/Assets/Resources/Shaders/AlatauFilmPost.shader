@@ -2,7 +2,7 @@
 //   0 ambient occlusion from the depth buffer   1 depth-aware blur of it   2 apply it
 //   3 depth of field (soft foreground and distance around the focus)       4 bloom: keep the bright parts
 //   5 bloom: shrink / blur    6 bloom: grow and add    7 final: exposure, soft highlights, contrast, tone, vignette, grain
-// The project is in gamma colour space, so the curve only bends the highlights and leaves ordinary colours where they were.
+// The project is in gamma colour space: the final pass turns the picture to linear light for the filmic curve and back.
 Shader "Hidden/AlatauCity/FilmPost"
 {
     Properties { _MainTex ("", 2D) = "white" {} }
@@ -14,7 +14,7 @@ Shader "Hidden/AlatauCity/FilmPost"
     float4 _Proj;      // x = 1 / P00, y = 1 / P11, z = AO radius in metres, w = AO strength
     float4 _Fade;      // x = fog density (the occlusion fades with the haze), y = time (grain)
     float4 _Grade;     // exposure, contrast, saturation, vignette
-    float4 _BloomP;    // threshold, intensity
+    float4 _BloomP;    // threshold, intensity, filmic curve (0 = the old soft shoulder, 1 = ACES), exposure into the curve
     float4 _Dir;       // blur step in uv
     float4 _Dof;       // focus distance m, sharp range m, largest blur in pixels, 1 = on
     struct v2f { float4 pos : SV_POSITION; float2 uv : TEXCOORD0; float2 uvD : TEXCOORD1; };
@@ -120,10 +120,18 @@ Shader "Hidden/AlatauCity/FilmPost"
         c *= _Grade.x;
         // soft highlights: untouched below 0.62, then bending towards 1 instead of clipping
         float3 hi = max(c - 0.62, 0.0) / 0.38;
-        c = min(c, 0.62) + 0.38 * (1.0 - exp(-hi));
+        float3 soft = min(c, 0.62) + 0.38 * (1.0 - exp(-hi));
+        // the filmic curve of a camera: to linear light, the fitted ACES curve (Narkowicz 2015: a toe that deepens the shadows,
+        // a long shoulder for the sky and glints), back to display values
+        float3 lin = pow(max(c, 0.0), 2.2) * _BloomP.w;
+        float3 aces = saturate(lin * (2.51 * lin + 0.03) / (lin * (2.43 * lin + 0.59) + 0.14));
+        c = lerp(soft, pow(aces, 0.4545), _BloomP.z);
         c = (c - 0.46) * _Grade.y + 0.46;
         float l = dot(c, float3(0.299, 0.587, 0.114));
         c = lerp(float3(l, l, l), c, _Grade.z);
+        // saturated greens (lawns, planted roofs) towards a natural olive: no "game" green
+        float gm = saturate((c.g - max(c.r, c.b)) * 5.0);
+        c = lerp(c, lerp(float3(l, l, l), c, 0.80) + float3(0.012, 0.0, -0.01), gm * 0.85);
         // warm lights, cool shadows
         c *= lerp(float3(0.955, 0.99, 1.045), float3(1.035, 1.0, 0.955), smoothstep(0.15, 0.85, l));
         float2 q = i.uv - 0.5;

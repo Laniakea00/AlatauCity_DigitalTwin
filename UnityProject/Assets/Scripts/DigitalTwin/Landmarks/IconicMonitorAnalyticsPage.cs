@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UIElements;
 using AlatauCity.DigitalTwin.UI;
+using DSrcA = AlatauCity.DigitalTwin.Data.Sources;
 
 namespace AlatauCity.DigitalTwin.Landmarks
 {
@@ -58,6 +59,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             foreach (var (txt, k) in new[] { ("Сводка", 0), ("Смета", 1), ($"Документы · {docs.Count}", 2) })
             { int kk = k; var b = Widgets.Btn(txt, () => AnView(kk), "small"); b.AddToClassList("an-tab"); seg.Add(b); anTabs.Add(b); }
             Spacer(head);
+            var sl = SourceTags.Line(DSrcA.OlxPrices, DSrcA.NbrkRate, SrcMon); sl.style.marginLeft = 12; sl.style.flexShrink = 0; head.Add(sl);
 
             // the main thing, in one sentence
             int worstSev = finds.Count > 0 ? finds[0].Sev : -1;
@@ -229,7 +231,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             ph.Add(DocChip(At(DP, "r0", "ведомость"), null));
             var pt = Box(pc, "an-ptab", false);
             var phr = Box(pt, "an-ptr an-cth", false);
-            foreach (var (c, cls) in new[] { ("Ресурс", "n"), ("В смете", "m"), ("Сейчас", "m"), ("Изменение", "s") }) Txt(phr, c, "an-ctd " + cls);
+            foreach (var (c, cls) in new[] { ("Ресурс", "n"), ("В смете", "m"), ("Сейчас", "m"), ("Изменение", "s"), ("Цена в смете", "w7-src") }) Txt(phr, c, "an-ctd " + cls);
             for (int r = 0; r < Rsc.Length; r++)
             {
                 float now = PriceAt(r, Report), dp = now / Rsc[r].Base - 1f;
@@ -237,7 +239,9 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 Txt(pr, Rsc[r].Name + (Rsc[r].Unit == "индекс" ? "" : ", " + Rsc[r].Unit), "an-ctd n");
                 Txt(pr, PriceText(r, Rsc[r].Base), "an-ctd m"); Txt(pr, PriceText(r, now), "an-ctd m");
                 var dd = Txt(pr, SPc(dp), "an-ctd s"); dd.AddToClassList(dp > 0.15f ? "bad" : dp > 0.05f ? "warn" : "ok");
+                var sc = Box(pr, "an-ctd w7-src", false); sc.Add(SourceTags.Tag(Rsc[r].Open ?? SrcPrices));
             }
+            Txt(pc, "Цена в смете: синие метки — открытые данные (объявления olx.kz, курс НБ РК), жёлтые — допущение модели. Рост цен до даты съёмки — всегда допущение модели.", "mon-src w7-pnote");
             // right: how the forecast of the item is made
             anDetail = Scroll(row, "an-colR an-detail");
         }
@@ -305,7 +309,8 @@ namespace AlatauCity.DigitalTwin.Landmarks
             {
                 int r = it.R[j]; float now = PriceAt(r, Report), dp = now / Rsc[r].Base - 1f;
                 var pr = Box(pc, "an-res", false);
-                var tx = Box(pr, "an-res-tx", false); Txt(tx, Rsc[r].Name, "an-res-n"); Txt(tx, $"доля в статье {Mathf.RoundToInt(it.W[j] * 100f)} % · {Rsc[r].Src}", "mon-src");
+                var tx = Box(pr, "an-res-tx", false); var rn = Box(tx, "mon-row w7-resn", false); Txt(rn, Rsc[r].Name, "an-res-n"); rn.Add(SourceTags.Tag(Rsc[r].Open ?? SrcPrices));
+                Txt(tx, $"доля в статье {Mathf.RoundToInt(it.W[j] * 100f)} % · {Rsc[r].Src} · рост {Loc.N1(Rsc[r].Growth * 100f)} % в год — допущение модели", "mon-src");
                 var pv = Box(pr, "an-res-v", false); Txt(pv, PriceText(r, Rsc[r].Base) + " → " + PriceText(r, now), "an-res-p");
                 var dd = Txt(pv, SPc(dp), "an-res-d"); dd.AddToClassList(dp > 0.15f ? "bad" : dp > 0.05f ? "warn" : "ok");
             }
@@ -316,6 +321,29 @@ namespace AlatauCity.DigitalTwin.Landmarks
             foreach (int r in it.R) chips.Add(DocChip(At(DP, "r" + r, $"поз. {r + 1}"), null));
             if (ic.Ac > 0f) chips.Add(DocChip(At(DK, "r" + k, $"строка {k + 1}"), null));
             chips.Add(DocChip(k == 4 ? At(DF, "p3.1", "п. 3.1") : At(DC, "p5.4", "п. 5.4"), null));
+            BuildAssumptions(anDetail);
+        }
+
+        /// <summary>The assumptions of the model behind the estimate, each in one line, under one model chip.</summary>
+        void BuildAssumptions(VisualElement parent)
+        {
+            var c = Box(parent, "mon-card an-card w7-assume");
+            var h = Box(c, "an-sec", false); h.Add(TwinUI.Icon("sparkles", 16)); Txt(h, "Допущения модели", "mon-title"); Spacer(h); h.Add(SourceTags.ModelTag(SrcPrices));
+            Txt(c, "чего нет в открытых данных — принято моделью и заменяется данными заказчика", "mon-src");
+            bool kaist = L != null && L.Id == "kaist";
+            foreach (var (k, t) in new[]
+            {
+                ("Фасадные модули", "245 000 ₸/м² — импортный витраж; в смете нет коммерческого предложения поставщика"),
+                ("Труд и аренда крана", "2 700 ₸ за человеко-час монтажника, 7,2 млн ₸ в месяц за башенный кран с машинистом"),
+                ("Отделка и благоустройство", "индексы цен, 100 = 01.10.2026: точных позиций нет до рабочей документации"),
+                ("Рост цен", "от 5 до 10 % в год по ресурсам, курс доллара +5,5 % в год — от даты сметы до даты съёмки"),
+                ("Фиксированная цена", kaist ? "от 20 до 90 % объёма по статьям закуплено по договорам с твёрдой ценой (кампус — на 20 п.п. больше): эта доля не дорожает" : "от 0 до 70 % объёма по статьям закуплено по договорам с твёрдой ценой: эта доля не дорожает"),
+                ("Резерв", "4 % сметы на непредвиденные работы и затраты"),
+                ("Вторая смена", "+25 % к оплате труда в часы второй смены, пока отставание закрывается"),
+            })
+            {
+                var r = Box(c, "w7-as", false); Txt(r, k, "w7-as-k"); Txt(r, t, "w7-as-t");
+            }
         }
 
         // ------------------------------------------------------------------ Документы

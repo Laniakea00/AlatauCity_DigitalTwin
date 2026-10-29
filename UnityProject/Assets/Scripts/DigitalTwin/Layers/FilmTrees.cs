@@ -56,6 +56,8 @@ namespace AlatauCity.DigitalTwin
         /// (_TreeYear, _TreeTint); false while the meshes are not made yet.</summary>
         public bool DrawBatch(int s, Matrix4x4[] m, int count, MaterialPropertyBlock props, bool near, bool shadows)
         {
+            // the trees of other layers (the Gate District round Iconic) stand in every look: make the meshes even if the film is off
+            if (!ready && !failed && TwinData.Ready) Init();
             if (!ready || failed || hi[s] == null) return false;
             Graphics.DrawMeshInstanced(near ? hi[s] : lo[s], 0, mat, m, count, props,
                 shadows ? UnityEngine.Rendering.ShadowCastingMode.On : UnityEngine.Rendering.ShadowCastingMode.Off, true, 0, null);
@@ -215,11 +217,11 @@ namespace AlatauCity.DigitalTwin
             Debug.Log($"[Alatau] film trees: {village} trees in the gardens of existing villages");
             hi[3] = lo[3] = HedgeMesh();
             Debug.Log($"[Alatau] film trees: {plots} house plots");
-            hi[0] = Blob("Tree round", 9, 6, new Vector3(3.3f, 3.5f, 3.3f), 3.2f, 0.28f, 0.22f, new Color(0.17f, 0.27f, 0.13f), new Color(0.31f, 0.42f, 0.19f), 11);
-            hi[1] = Blob("Tree poplar", 8, 7, new Vector3(1.55f, 6.2f, 1.55f), 2.0f, 0.26f, 0.12f, new Color(0.15f, 0.25f, 0.13f), new Color(0.28f, 0.40f, 0.19f), 23);
-            hi[2] = Cones("Tree spruce", 8, 2.5f, 10.5f, new Color(0.09f, 0.18f, 0.14f), new Color(0.17f, 0.29f, 0.21f));
-            lo[0] = Blob("Tree round far", 5, 3, new Vector3(3.3f, 3.5f, 3.3f), 3.2f, 0f, 0.1f, new Color(0.17f, 0.27f, 0.13f), new Color(0.31f, 0.42f, 0.19f), 11);
-            lo[1] = Blob("Tree poplar far", 5, 3, new Vector3(1.55f, 6.2f, 1.55f), 2.0f, 0f, 0.05f, new Color(0.15f, 0.25f, 0.13f), new Color(0.28f, 0.40f, 0.19f), 23);
+            hi[0] = Blob("Tree round", 16, 11, new Vector3(3.3f, 3.5f, 3.3f), 3.2f, 0.28f, 0.30f, new Color(0.17f, 0.27f, 0.13f), new Color(0.31f, 0.42f, 0.19f), 11);
+            hi[1] = Blob("Tree poplar", 12, 12, new Vector3(1.55f, 6.2f, 1.55f), 2.0f, 0.26f, 0.22f, new Color(0.15f, 0.25f, 0.13f), new Color(0.28f, 0.40f, 0.19f), 23);
+            hi[2] = Cones("Tree spruce", 12, 2.5f, 10.5f, new Color(0.09f, 0.18f, 0.14f), new Color(0.17f, 0.29f, 0.21f));
+            lo[0] = Blob("Tree round far", 8, 5, new Vector3(3.3f, 3.5f, 3.3f), 3.2f, 0f, 0.18f, new Color(0.17f, 0.27f, 0.13f), new Color(0.31f, 0.42f, 0.19f), 11);
+            lo[1] = Blob("Tree poplar far", 6, 5, new Vector3(1.55f, 6.2f, 1.55f), 2.0f, 0f, 0.12f, new Color(0.15f, 0.25f, 0.13f), new Color(0.28f, 0.40f, 0.19f), 23);
             lo[2] = Cones("Tree spruce far", 5, 2.5f, 10.5f, new Color(0.09f, 0.18f, 0.14f), new Color(0.17f, 0.29f, 0.21f), 1);
             Debug.Log($"[Alatau] film trees: base map {mw}x{mh}, street rows in {street.Count} cells");
         }
@@ -322,10 +324,15 @@ namespace AlatauCity.DigitalTwin
                     t.Add(b); t.Add(b + 2); t.Add(b + 1); t.Add(b); t.Add(b + 3); t.Add(b + 2);
                 }
             int b0 = v.Count; var rng = new System.Random(seed); float cy = trunkH + r.y * 0.9f;
+            // the crown is a cluster of leaf clumps: a dozen soft bumps on the sphere, so the outline is lumpy, not a polygon
+            var bumps = new Vector3[12]; for (int q = 0; q < bumps.Length; q++) bumps[q] = new Vector3((float)rng.NextDouble() * 2f - 1f, (float)rng.NextDouble() * 1.6f - 0.6f, (float)rng.NextDouble() * 2f - 1f).normalized;
             for (int j = 0; j <= rings; j++) for (int i = 0; i < seg; i++)
             {
-                float th = j / (float)rings * Mathf.PI, ph = i / (float)seg * Mathf.PI * 2f, k = 1f + jitter * ((float)rng.NextDouble() * 2f - 1f);
-                if (j == 0 || j == rings) k = 1f;
+                float th = j / (float)rings * Mathf.PI, ph = i / (float)seg * Mathf.PI * 2f;
+                var dir = new Vector3(Mathf.Sin(th) * Mathf.Cos(ph), Mathf.Cos(th), Mathf.Sin(th) * Mathf.Sin(ph)); float lump = 0f;
+                foreach (var bq in bumps) lump = Mathf.Max(lump, Mathf.Pow(Mathf.Max(0f, Vector3.Dot(dir, bq)), 6f));
+                float k = 1f + jitter * (lump - 0.45f) + jitter * 0.25f * ((float)rng.NextDouble() * 2f - 1f);
+                if (j == 0 || j == rings) k = 1f - jitter * 0.3f;
                 var p = new Vector3(Mathf.Sin(th) * Mathf.Cos(ph) * r.x * k, Mathf.Cos(th) * r.y * k, Mathf.Sin(th) * Mathf.Sin(ph) * r.z * k);
                 v.Add(p + Vector3.up * cy); c.Add(Color.Lerp(low, high, Mathf.Clamp01(p.y / r.y * 0.5f + 0.5f)));
             }
@@ -334,8 +341,29 @@ namespace AlatauCity.DigitalTwin
                 int a = b0 + j * seg + i, b = b0 + j * seg + (i + 1) % seg, d = a + seg, e = b + seg;
                 t.Add(a); t.Add(b); t.Add(d); t.Add(b); t.Add(e); t.Add(d);
             }
-            return Finish(name, v, c, t);
+            var m = Finish(name, v, c, t);
+            // light the crown as one soft volume: its normals mostly point away from the crown's centre
+            var nr = m.normals; var vv = m.vertices; var ctr = new Vector3(0f, cy, 0f);
+            for (int q = b0; q < vv.Length; q++)
+            {
+                var d = vv[q] - ctr; d = new Vector3(d.x / r.x, d.y / r.y, d.z / r.z);
+                nr[q] = Vector3.Lerp(nr[q], d.normalized, 0.65f).normalized;
+            }
+            m.normals = nr; return m;
         }
+
+        /// <summary>The crown shapes of the film trees at a middle level of detail, for models that build their own trees into
+        /// one mesh (LandmarkKit.Tree): 0 round crown, 1 poplar, 2 spruce. Made once, readable.</summary>
+        public static Mesh SpeciesMesh(int s)
+        {
+            s = Mathf.Clamp(s, 0, 2);
+            if (mid[s] != null) return mid[s];
+            mid[s] = s == 0 ? Blob("Tree round mid", 11, 7, new Vector3(3.3f, 3.5f, 3.3f), 3.2f, 0.28f, 0.26f, new Color(0.17f, 0.27f, 0.13f), new Color(0.31f, 0.42f, 0.19f), 11)
+                   : s == 1 ? Blob("Tree poplar mid", 8, 8, new Vector3(1.55f, 6.2f, 1.55f), 2.0f, 0.26f, 0.20f, new Color(0.15f, 0.25f, 0.13f), new Color(0.28f, 0.40f, 0.19f), 23)
+                   : Cones("Tree spruce mid", 8, 2.5f, 10.5f, new Color(0.09f, 0.18f, 0.14f), new Color(0.17f, 0.29f, 0.21f));
+            return mid[s];
+        }
+        static readonly Mesh[] mid = new Mesh[3];
 
         static float MaxDist(List<Vector3> c) { float m = 0; for (int i = 1; i < c.Count; i++) { var d = c[i] - c[0]; d.y = 0; m = Mathf.Max(m, d.magnitude); } return m; }
 

@@ -207,7 +207,8 @@ Shader "AlatauCity/Ground"
                 fixed3 land = lerp(steppe, crop, fieldZone);
                 // grass of parks and lawns: a natural olive, mown, never flat
                 float gb = FBM(wp.xz * 0.012 + 1.7);
-                fixed3 grass = lerp(fixed3(0.33, 0.42, 0.23), fixed3(0.44, 0.49, 0.29), smoothstep(0.3, 0.7, gb));
+                fixed3 grass = lerp(fixed3(0.35, 0.42, 0.25), fixed3(0.45, 0.48, 0.31), smoothstep(0.3, 0.7, gb));
+                grass = lerp(grass, fixed3(0.50, 0.49, 0.33), smoothstep(0.55, 0.85, FBM(wp.xz * 0.0055 + 8.3)) * 0.35);           // drier khaki patches, a few hundred metres
                 grass = lerp(grass, fixed3(0.54, 0.53, 0.35), smoothstep(0.66, 0.85, FBM(wp.xz * 0.004 + 4.4)) * 0.6);
                 grass *= 0.94 + 0.1 * fd;
                 f = lerp(f, land, open * 0.95);
@@ -232,9 +233,11 @@ Shader "AlatauCity/Ground"
                     float resid = saturate((min(c0.r, c0.g) - c0.b) * 6.0), indus = saturate((min(c0.r, c0.b) - c0.g) * 8.0), civic = saturate(1.0 - resid - indus);
                     // the yards follow the block: its orientation from the gradient of the distance to the roads (rectangular blocks give
                     // the same angle from every side, modulo 90°)
-                    float2 e8 = float2(8.0, 0.0) * mU;
-                    float gx = tex2D(_AlatauBlockTex, uv + float2(e8.x, 0)).r - tex2D(_AlatauBlockTex, uv - float2(e8.x, 0)).r;
-                    float gz = tex2D(_AlatauBlockTex, uv + float2(0, 8.0 * mU.y)).r - tex2D(_AlatauBlockTex, uv - float2(0, 8.0 * mU.y)).r;
+                    // read once per patch of 96 m (its centre, a 40 m baseline): an angle that changed from pixel to pixel bent the
+                    // grid of the yards into swirls wherever the nearest road changed (corners, the middle between two streets)
+                    float2 pc96 = (floor(wp.xz / 96.0) + 0.5) * 96.0, uvP = uv + (pc96 - wp.xz) * mU;
+                    float gx = tex2Dlod(_AlatauBlockTex, float4(uvP + float2(40.0 * mU.x, 0), 0, 0)).r - tex2Dlod(_AlatauBlockTex, float4(uvP - float2(40.0 * mU.x, 0), 0, 0)).r;
+                    float gz = tex2Dlod(_AlatauBlockTex, float4(uvP + float2(0, 40.0 * mU.y), 0, 0)).r - tex2Dlod(_AlatauBlockTex, float4(uvP - float2(0, 40.0 * mU.y), 0, 0)).r;
                     float ang = abs(gx) + abs(gz) > 0.004 ? atan2(gz, gx) : 0.35;
                     ang = ang - floor(ang / 1.5707963) * 1.5707963; ang = floor(ang / 0.0872665 + 0.5) * 0.0872665;
                     float car = 0.0;
@@ -311,8 +314,10 @@ Shader "AlatauCity/Ground"
                 float bline = exp(-abs(sdm) / lw);
                 float rim = exp(-max(sdm, 0.0) / 420.0) * inside;
                 fixed3 gold = fixed3(0.98, 0.80, 0.45);
-                c = lerp(c, gold, bline * 0.55) + rim * 0.035;
-                em += gold * bline * 0.65;
+                // in the film look the land is real land: no glowing line drawn over the fields, only a faint hint from far away
+                float lineK = _AlatauFilm > 0.5 ? 0.35 * saturate((_AlatauCamDist - 9000.0) / 12000.0) : 1.0;
+                c = lerp(c, gold, bline * 0.55 * lineK) + rim * 0.035 * lineK;
+                em += gold * bline * 0.65 * lineK;
                 // one district in focus (district picker, presentation): the others step back, its border glows in its colour
                 if (_AlatauFocusD > -0.5)
                 {

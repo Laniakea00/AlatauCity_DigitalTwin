@@ -8,11 +8,13 @@ using static AlatauCity.DigitalTwin.Data.TwinJson;
 namespace AlatauCity.DigitalTwin.Data
 {
     /// <summary>Synthetic, deterministic twin data (Tools/twin_gen, seed 2050) loaded from StreamingAssets/twin/*.json.
-    /// Scenario index = (int)Scenario: 0 base, 1 fast, 2 slow, 3 infra. Year index = year − 2025 (0..25).
+    /// Scenario index = (int)Scenario: 0 base, 1 fast, 2 slow, 3 infra. Year index = year − Y0 (0..25): the tables start one year before the timeline (2026), with the existing city.
     /// Loading runs on a worker thread at start-up; Ready / OnReady tell modules when they can read it.</summary>
     public static class TwinData
     {
         public const int NY = 26, NS = 4;
+        /// <summary>First year of the data tables (the existing city before the project). The timeline itself starts at TwinState.MinYear.</summary>
+        public const int Y0 = 2025;
         public static bool Ready { get; private set; }
         public static string Error { get; private set; }
         public static string Version = "";
@@ -29,8 +31,8 @@ namespace AlatauCity.DigitalTwin.Data
         {
             public string Id, Name, Kind, Res, Note; public float X, Z, Unit, Head; public int District; public bool Synthetic;
             public int[][] Stages; public float[][] Cap, Demand; public int[] DelayedStages;
-            public float CapAt(int s, int year) => Cap == null ? 0 : Cap[s][Mathf.Clamp(year - 2025, 0, NY - 1)];
-            public float DemandAt(int s, int year) => Demand == null ? 0 : Demand[s][Mathf.Clamp(year - 2025, 0, NY - 1)];
+            public float CapAt(int s, int year) => Cap == null ? 0 : Cap[s][Mathf.Clamp(year - Y0, 0, NY - 1)];
+            public float DemandAt(int s, int year) => Demand == null ? 0 : Demand[s][Mathf.Clamp(year - Y0, 0, NY - 1)];
         }
         public struct NetSeg { public int Edge, Size, Fac; public int[] Year; public float Load; }
         public static Facility[] Facilities = new Facility[0];
@@ -202,7 +204,7 @@ namespace AlatauCity.DigitalTwin.Data
         static Balance Bal(object o) => o == null ? null : new Balance { Demand = Floats(G(o, "demand")), Cap = Floats(G(o, "cap")), Deficit = Floats(G(o, "deficit")) };
 
         // ---------------- convenience
-        public static int YI(int year) => Mathf.Clamp(year - 2025, 0, NY - 1);
+        public static int YI(int year) => Mathf.Clamp(year - Y0, 0, NY - 1);
         public static float Load(int s, string key, int district, int year)
         {
             if (!Ready || !Loads[s].TryGetValue(key, out var m)) return 0;

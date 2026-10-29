@@ -37,19 +37,37 @@ float ANoise(float2 p)
     return lerp(lerp(AHash2(i), AHash2(i + float2(1, 0)), f.x), lerp(AHash2(i + float2(0, 1)), AHash2(i + float2(1, 1)), f.x), f.y);
 }
 
-// The sky seen in direction d (unit). No sun disc: that is added by the sky shader only.
-float3 AlatauSky(float3 d)
+// The photographed sky (FilmLook: Resources/Film/Gate/AlatauSkyDome, the upper half of a CC0 Poly Haven HDRI, its sun turned to
+// the left edge): u = azimuth from the sun, v = elevation (0 horizon .. 1 zenith). _AlatauSkyTexOn = how much of it shows (0 at dusk and
+// night, when the gradient alone is right). Read with an explicit level: no derivatives, safe inside branches.
+sampler2D _AlatauSkyTex; float _AlatauSkyTexOn;
+float3 AlatauSkyPhoto(float3 d, float lod, out float w)
+{
+    float el = asin(saturate(d.y)) * 0.63661977;
+    float az = (atan2(d.x, d.z) - atan2(_AlatauSunDir.x, _AlatauSunDir.z)) * 0.15915494;
+    w = _AlatauSkyTexOn * smoothstep(0.0, 0.09, d.y);
+    return tex2Dlod(_AlatauSkyTex, float4(az, max(el, 0.004), 0, lod)).rgb;
+}
+
+// The sky seen in direction d (unit), lod = level of the photo (0 sharp for the sky itself, higher = rougher reflections).
+// No sun disc: that is added by the sky shader only.
+float3 AlatauSkyLod(float3 d, float lod)
 {
     float up = saturate(d.y);
     // warm haze at the horizon, a pale band above it, blue overhead
     float3 mid = lerp(_AlatauSkyHorizon.rgb, _AlatauSkyZenith.rgb, 0.5) + 0.10 * (1.0 - _AlatauNight);
     float3 c = lerp(_AlatauSkyHorizon.rgb, mid, smoothstep(0.0, 0.16, up));
     c = lerp(c, _AlatauSkyZenith.rgb, smoothstep(0.10, 0.85, up));
+    // by day the photographed sky with its clouds over the gradient; the haze band at the horizon stays the gradient (= the fog)
+    float w; float3 ph = AlatauSkyPhoto(d, lod, w);
+    c = lerp(c, ph, w);
     c = lerp(c, _AlatauSkyGround.rgb, saturate(-d.y * 5.0));
     float s = saturate(dot(d, _AlatauSunDir.xyz));
-    c += _AlatauSunColor.rgb * (0.22 * pow(s, 6.0) + 0.5 * pow(s, 64.0)) * (1.0 - _AlatauNight);
+    c += _AlatauSunColor.rgb * (0.22 * pow(s, 6.0) + 0.5 * pow(s, 64.0)) * (1.0 - _AlatauNight) * (1.0 - 0.65 * w) * (lod > 0.5 ? 0.45 : 1.0);     // the photo has its own glow; reflections take less of it (no white-out of a whole facade)
     return c;
 }
+// what glass and water reflect: a slightly softened sky
+float3 AlatauSky(float3 d) { return AlatauSkyLod(d, 1.0); }
 
 // Anti-aliased box: 1 inside |p| < half, 0 outside, with a soft edge of width aa.
 float ABox(float2 p, float2 half_, float2 aa)
@@ -85,7 +103,7 @@ AFacade AlatauFacade(float2 wall, float hy, float H, float floorsN, float style,
     else if (style < 5.5 && style > 4.5)  { wallL = 3.0; bw = 6.0; ww = 0.86; wh = 0.10; sill = 0.72; gf = 0.0; wallC = r1 < 0.5 ? float3(0.74, 0.76, 0.78) : r1 < 0.8 ? float3(0.83, 0.82, 0.79) : float3(0.45, 0.52, 0.60); }
     else if (style < 6.5 && style > 5.5)  { wallL = 1.0; bw = 6.0; ww = 0.86; wh = 0.66; sill = 0.08; wallC = float3(0.32, 0.33, 0.35); }
     else if (style < 8.5 && style > 7.5)  { wallL = r1 < 0.5 ? 0.0 : 11.0; bw = 3.6; ww = 0.56; wh = 0.56; sill = 0.26; wallC = r1 < 0.5 ? float3(0.92, 0.90, 0.85) : float3(0.66, 0.50, 0.36); }
-    else if (style > 9.5)                 { wallL = 0.0; bw = 2.9; ww = 0.56; wh = 0.60; sill = 0.22; gf = 1.0; glassC = float3(0.26, 0.29, 0.32); wallC = r1 < 0.7 ? float3(0.95, 0.95, 0.93) : float3(0.91, 0.91, 0.89); }
+    else if (style > 9.5)                 { wallL = 0.0; bw = 2.9; ww = 0.56; wh = 0.60; sill = 0.22; gf = 1.0; glassC = float3(0.24, 0.28, 0.32); wallC = r1 < 0.45 ? float3(0.88, 0.87, 0.84) : r1 < 0.8 ? float3(0.84, 0.84, 0.82) : float3(0.85, 0.82, 0.76); }
     else if (style > 8.5)                 { wallL = r1 < 0.8 ? 0.0 : 2.0; roofL = r2 < 0.5 ? 4.0 : 10.0; bw = 3.4; ww = 0.40; wh = 0.44; sill = 0.32; gf = 0.0; wallC = r1 < 0.5 ? float3(0.74, 0.73, 0.70) : r1 < 0.8 ? float3(0.80, 0.76, 0.68) : float3(0.63, 0.52, 0.46); }
     wallC = lerp(wallC, tint, style > 9.5 ? 0.0 : 0.14);
 
@@ -106,7 +124,7 @@ AFacade AlatauFacade(float2 wall, float hy, float H, float floorsN, float style,
     float3 tng = float3(-n.z, 0.0, n.x); tng = dot(tng, tng) > 1e-4 ? normalize(tng) : float3(1, 0, 0);
     float3 btn = cross(n, tng);
     float2 metres = flat ? wpos.xz : float2(dot(wpos, tng), sloped ? wpos.y / max(sqrt(1.0 - n.y * n.y), 0.25) : wpos.y);
-    float planted = style > 9.5 ? step(floorsN, 14.5) : step(r3, 0.14) * step(style, 4.5) * step(1.5, style);
+    float planted = style > 9.5 ? step(floorsN, 14.5) * step(r3, 0.45) : step(r3, 0.14) * step(style, 4.5) * step(1.5, style);
     float layer = part > 3.5 ? 7.0 : part > 2.5 || (sloped && style < 1.5 && style > 0.5) ? roofL : part > 1.5 ? 3.0 : part > 0.5 ? wallL : (n.y > 0.45 || wall.y < 0.05) ? lerp(5.0, 8.0, planted) : wallL;
     AMat M = AlatauMat(metres, layer);
     float3 np = normalize(n + (M.nxy.x * tng + M.nxy.y * btn) * 0.85);
@@ -141,8 +159,8 @@ AFacade AlatauFacade(float2 wall, float hy, float H, float floorsN, float style,
         if (style < 1.5 && style > 0.5) roof = r2 < 0.45 ? float3(0.52, 0.30, 0.24) : r2 < 0.8 ? float3(0.33, 0.33, 0.35) : float3(0.44, 0.36, 0.30);
         else if (style < 3.5 && style > 2.5) roof = r2 < 0.5 ? float3(0.56, 0.57, 0.58) : float3(0.40, 0.41, 0.43);
         else if (style > 4.5 && style < 5.5) roof = r2 < 0.5 ? float3(0.62, 0.64, 0.66) : float3(0.48, 0.50, 0.52);      // metal roofs of plants and warehouses
-        else if (r3 < 0.14 && style < 4.5) roof = float3(0.42, 0.52, 0.34);                                    // planted roof
-        else if (style > 9.5) roof = floorsN < 14.5 ? float3(0.34, 0.52, 0.22) * (0.85 + 0.3 * ANoise(wpos.xz * 0.21)) : float3(0.88, 0.88, 0.86);   // model: lawn roofs, white tops on towers
+        else if (r3 < 0.14 && style < 4.5) roof = float3(0.44, 0.49, 0.37);                                    // planted roof
+        else if (style > 9.5) roof = floorsN < 14.5 && r3 < 0.45 ? float3(0.38, 0.47, 0.28) * (0.85 + 0.3 * ANoise(wpos.xz * 0.21)) : r2 < 0.5 ? float3(0.60, 0.60, 0.58) : float3(0.74, 0.74, 0.72);   // model: some sedum roofs, the rest gravel and pale membranes
         roof *= 1.0 + 0.07 * grainFade * (ANoise(wpos.xz * 0.35) * 0.5 + ANoise(wpos.xz * 1.7) * 0.5 - 0.5);
         roof *= surf;
         if ((part > 2.5 && part < 3.5) || (style < 1.5 && style > 0.5))
@@ -186,6 +204,13 @@ AFacade AlatauFacade(float2 wall, float hy, float H, float floorsN, float style,
     if (style > 4.5 && style < 5.5) wallS *= 0.96 + 0.04 * step(0.5, frac(wall.x / 0.9));               // cladding sheets
     wallS = lerp(wallS, wallC * 0.6, 0.5 * ground);                                                    // darker frame at street level
     wallS *= lerp(0.80, 1.0, saturate(hy / 0.7));                                                      // plinth
+    // housing, offices of stone and public buildings stand on a socle of darker stone; housing has a pale cornice band under the roof
+    float hyW = max(cw.y * fh, 0.01);
+    float soc = (1.0 - saturate((hy - 0.75) / hyW + 0.5)) * step(1.5, style) * step(style, 4.5) * step(spandrel, 0.0);
+    float cor = saturate((hy - (H - 0.55)) / hyW + 0.5) * step(1.5, style) * step(style, 2.5) * step(6.0, H);
+    wallS = lerp(wallS, wallC * float3(0.50, 0.49, 0.48) * surf, soc);
+    wallS = lerp(wallS, wallC * 0.90 + 0.08, cor);
+    win *= 1.0 - max(soc, cor);
     // balconies on housing: a pale slab edge and a glass rail under some windows
     if ((style > 1.5 && style < 2.5 || style > 7.5 && style < 8.5) && ground < 0.5)
     {

@@ -3,7 +3,7 @@ import csv, json, math, os
 import numpy as np
 
 SEED = 2050
-Y0, Y1 = 2025, 2050
+Y0, Y1 = 2025, 2050          # Y0: first year of the data tables = the existing city (C# TwinData.Y0); the timeline on screen starts in 2026
 YEARS = list(range(Y0, Y1 + 1))
 NY = len(YEARS)
 AFTER = 2099

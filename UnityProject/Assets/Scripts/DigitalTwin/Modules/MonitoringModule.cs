@@ -28,6 +28,9 @@ namespace AlatauCity.DigitalTwin.Modules
         /// <summary>The year the map shows: the city as designed, every object whole.</summary>
         static int MapYear => TwinState.MaxYear;
 
+        /// <summary>Registers the open climate source and the models of the monitoring before any panel is built.</summary>
+        public MonitoringModule() { IconicMonitor.RegisterSources(); }
+
         static bool wasOpen; static Landmark wasSel;
         readonly List<(Landmark l, VisualElement row)> rows = new List<(Landmark, VisualElement)>();
         IVisualElementScheduledItem tick;
@@ -129,13 +132,17 @@ namespace AlatauCity.DigitalTwin.Modules
                                             ("eye", "«Что изменилось»: новое между съёмками синим, убранное красным"),
                                             ("layers", "BIM 4D: план и факт по этажам, отставание и опережение по каждому корпусу"),
                                             ("cctv", "Камеры на площадке: люди, техника, нарушения ТБ"),
-                                            ("gantt_chart", "График работ и прогноз сдачи по фактическому темпу") })
+                                            ("gantt_chart", "График работ и прогноз сдачи по фактическому темпу"),
+                                            ("trending_up", "Контроль для инвестора: готовность по видам работ, отставание и его тренд, освоенный объём (SPI, CPI, EAC), три главных действия, недельный отчёт"),
+                                            ("triangle_alert", "Дефекты на 3D-модели: место, важность, срок и ответственный"),
+                                            ("cloud_sun", "Люди и техника по дням, погода Алматы и простои по правилам площадки") })
             {
                 var r = new VisualElement(); r.AddToClassList("monmap-gain"); r.style.flexDirection = FlexDirection.Row; r.style.alignItems = Align.FlexStart; r.style.marginBottom = 7;
                 var i = TwinUI.Icon(ic, 15); i.style.marginRight = 8; i.style.marginTop = 1; i.style.flexShrink = 0; r.Add(i);
                 var l2 = new Label(t); l2.AddToClassList("small"); l2.style.flexShrink = 1; l2.style.whiteSpace = WhiteSpace.Normal; r.Add(l2);
                 gain.Add(r);
             }
+            gain.Add(SourceTags.Line(IconicMonitor.SrcMon, IconicMonitor.SrcClimate));
         }
 
         void Group(VisualElement parent, LandmarkSystem sys, string title, bool watched)

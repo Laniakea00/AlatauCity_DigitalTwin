@@ -197,23 +197,41 @@ namespace AlatauCity.DigitalTwin.Landmarks
         /// of a park laid out before the buildings — green from the start of the works (see AlatauLandmark.shader).</summary>
         public const float GreenTag = -5f, ParkTreeTag = -9f;
         public bool Planted;
-        /// <summary>A low-poly tree: trunk + faceted crown.</summary>
+        /// <summary>A tree as the film trees of the city draw it (FilmTrees.SpeciesMesh: the same crowns, colours and tints), built into
+        /// this mesh so it is staged with the landmark (tags, parts, windows, vertex alpha) and shows in every view. h = height in metres;
+        /// the species (round crown mostly, some poplars, a rare spruce) and the tint come from the seed. 'leaf' is kept for the callers:
+        /// the crown colour is the city's.</summary>
         public void Tree(Vector3 p, float h, Color32 leaf, float seed)
         {
-            float r = h * 0.32f; var trunk = LM.C("#5b4a3a");
             float tag = Planted ? ParkTreeTag : TreeTag;
-            Beam(p, p + Vector3.up * (h * 0.45f), 0.35f, 0.35f, trunk, LM.Solid, tag);   // TreeTag: planted at the end of construction
-            var cc = p + Vector3.up * (h * 0.62f);
-            int seg = 6; float rot = seed * 37f;
-            for (int s = 0; s < seg; s++)
+            float r = Mathf.Abs(Mathf.Sin(seed * 91.7f + 3.1f) * 43758.5453f) % 1f, r2 = Mathf.Abs(Mathf.Sin(seed * 47.3f + 1.7f) * 24634.6345f) % 1f;
+            int sp = r < 0.80f ? 0 : r < 0.97f ? 1 : 2;
+            var T = Template(sp);
+            float s = h * (sp == 1 ? 1.2f : 1f) / T.top;
+            float yaw = seed * 137f * Mathf.Deg2Rad, ca = Mathf.Cos(yaw), sa = Mathf.Sin(yaw);
+            float tv = 0.86f + 0.26f * r2, tw = (r * 7.31f) % 1f;
+            var tint = new Vector3(tv * (1f + 0.10f * tw), tv, tv * (1f - 0.12f * tw));
+            int b = v.Count;
+            for (int i = 0; i < T.p.Length; i++)
             {
-                float a0 = (s * 60f + rot) * Mathf.Deg2Rad, a1 = ((s + 1) * 60f + rot) * Mathf.Deg2Rad;
-                var e0 = cc + new Vector3(Mathf.Cos(a0) * r, 0, Mathf.Sin(a0) * r); var e1 = cc + new Vector3(Mathf.Cos(a1) * r, 0, Mathf.Sin(a1) * r);
-                var top = cc + Vector3.up * (h * 0.40f); var bot = cc - Vector3.up * (h * 0.22f);
-                var o = ((e0 + e1) * 0.5f - cc);
-                Tri(top, e0, e1, o + Vector3.up * r, leaf, LM.Plant, tag, new Vector2(top.x, top.z), new Vector2(e0.x, e0.z), new Vector2(e1.x, e1.z));
-                Tri(bot, e1, e0, o - Vector3.up * r, leaf, LM.Plant, tag, new Vector2(bot.x, bot.z), new Vector2(e1.x, e1.z), new Vector2(e0.x, e0.z));
+                var q = T.p[i]; var nq = T.n[i];
+                var w = p + new Vector3((q.x * ca - q.z * sa) * s, q.y * s * (0.92f + 0.16f * r2), (q.x * sa + q.z * ca) * s);
+                v.Add(w); n.Add(new Vector3(nq.x * ca - nq.z * sa, nq.y, nq.x * sa + nq.z * ca));
+                var col = T.c[i]; bool trunk = col.r > col.g;
+                c.Add(trunk ? (Color32)col : (Color32)new Color(Mathf.Clamp01(col.r * tint.x), Mathf.Clamp01(col.g * tint.y), Mathf.Clamp01(col.b * tint.z), 1f));
+                uv0.Add(new Vector2(w.x, w.z)); uv1.Add(new Vector2(trunk ? LM.Solid : LM.Plant, tag)); uv2.Add(new Vector2(Part, 0f)); uv3.Add(Window);
             }
+            foreach (int i in T.t) t.Add(b + i);
+        }
+        class TreeT { public Vector3[] p, n; public Color[] c; public int[] t; public float top; }
+        static readonly TreeT[] trees = new TreeT[3];
+        static TreeT Template(int sp)
+        {
+            if (trees[sp] != null) return trees[sp];
+            var m = FilmTrees.SpeciesMesh(sp);
+            var T = new TreeT { p = m.vertices, n = m.normals, c = m.colors, t = m.triangles, top = Mathf.Max(m.bounds.max.y, 1f) };
+            if (T.c == null || T.c.Length != T.p.Length) { T.c = new Color[T.p.Length]; for (int i = 0; i < T.c.Length; i++) T.c[i] = new Color(0.24f, 0.35f, 0.16f); }
+            return trees[sp] = T;
         }
 
         // ------------------------------------------------------------------ footprints

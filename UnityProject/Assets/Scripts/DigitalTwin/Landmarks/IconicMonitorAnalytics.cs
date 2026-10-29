@@ -19,18 +19,19 @@ namespace AlatauCity.DigitalTwin.Landmarks
     {
         // ================================================================== prices
         /// <summary>A resource whose price drives the cost: its price in the estimate (Almaty, October 2026) and its growth a year.</summary>
-        class Rs { public string Name, Unit, Src; public float Base, Growth; public int Dec; }
+        /// <summary>Open: the id of the open source of the base price (null — the base price is an assumption of the model).</summary>
+        class Rs { public string Name, Unit, Src, Open; public float Base, Growth; public int Dec; }
         static readonly Rs[] Rsc =
         {
-            new Rs { Name = "Бетон товарный В40 (М550)", Unit = "м³", Base = 42000f, Growth = 0.06f, Src = "kaspi.kz, satu.kz · Алматы" },
-            new Rs { Name = "Арматура А500С", Unit = "т", Base = 320000f, Growth = 0.08f, Src = "olx.kz · Алматы, 22–26.10.2026" },
-            new Rs { Name = "Металлопрокат С345 (балки, фермы)", Unit = "т", Base = 430000f, Growth = 0.10f, Src = "прайсы металлобаз Алматы" },
-            new Rs { Name = "Фасадные модули (витраж, импорт)", Unit = "м²", Base = 245000f, Growth = 0.07f, Src = "КП поставщика в $" },
-            new Rs { Name = "Курс доллара для импортного оборудования", Unit = "₸/$", Base = 447.94f, Growth = 0.055f, Src = "НБ РК, 23.10.2026", Dec = 2 },
-            new Rs { Name = "Труд: ставка монтажника", Unit = "чел.-ч", Base = 2700f, Growth = 0.10f, Src = "средняя ставка по Алматы" },
-            new Rs { Name = "Башенный кран с машинистом", Unit = "мес.", Base = 7200000f, Growth = 0.06f, Src = "аренда техники · Алматы" },
-            new Rs { Name = "Отделочные материалы", Unit = "индекс", Base = 100f, Growth = 0.06f, Src = "индекс цен стройматериалов" },
-            new Rs { Name = "Озеленение и мощение", Unit = "индекс", Base = 100f, Growth = 0.05f, Src = "индекс цен стройматериалов" },
+            new Rs { Name = "Бетон товарный В40 (М550)", Unit = "м³", Base = 42000f, Growth = 0.06f, Src = "olx.kz · Алматы, 22–26.10.2026", Open = AlatauCity.DigitalTwin.Data.Sources.OlxPrices },
+            new Rs { Name = "Арматура А500С", Unit = "т", Base = 320000f, Growth = 0.08f, Src = "olx.kz · Алматы, 22–26.10.2026", Open = AlatauCity.DigitalTwin.Data.Sources.OlxPrices },
+            new Rs { Name = "Металлопрокат С345 (балки, фермы)", Unit = "т", Base = 430000f, Growth = 0.10f, Src = "olx.kz · Алматы, 22–26.10.2026", Open = AlatauCity.DigitalTwin.Data.Sources.OlxPrices },
+            new Rs { Name = "Фасадные модули (витраж, импорт)", Unit = "м²", Base = 245000f, Growth = 0.07f, Src = "импорт, цена в $" },
+            new Rs { Name = "Курс доллара для импортного оборудования", Unit = "₸/$", Base = 447.94f, Growth = 0.055f, Src = "НБ РК, 23.10.2026", Dec = 2, Open = AlatauCity.DigitalTwin.Data.Sources.NbrkRate },
+            new Rs { Name = "Труд: ставка монтажника", Unit = "чел.-ч", Base = 2700f, Growth = 0.10f, Src = "ставка по Алматы" },
+            new Rs { Name = "Башенный кран с машинистом", Unit = "мес.", Base = 7200000f, Growth = 0.06f, Src = "аренда с машинистом" },
+            new Rs { Name = "Отделочные материалы", Unit = "индекс", Base = 100f, Growth = 0.06f, Src = "индекс модели, 100 = 01.10.2026" },
+            new Rs { Name = "Озеленение и мощение", Unit = "индекс", Base = 100f, Growth = 0.05f, Src = "индекс модели, 100 = 01.10.2026" },
         };
         /// <summary>The date of the prices of the estimate: 01.10.2026.</summary>
         const float PriceBase = 2026.75f;
@@ -318,7 +319,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 p.R("r" + r, W5, Rsc[r].Name, Rsc[r].Unit, PriceText(r, Rsc[r].Base), PriceText(r, now), SPc(now / Rsc[r].Base - 1f));
             }
             p.P("pRule", "Стоимость оставшихся объёмов = остаток объёма по смете × цена на дату × доля, не закреплённая фиксированной ценой; закреплённая доля — по цене договора поставки.");
-            p.P("pSrc", "Цены сметы: объявления и прайсы поставщиков Алматы (kaspi.kz, satu.kz, olx.kz), курс НБ РК на 23.10.2026. Цены на дату — прогноз цифрового двойника по индексам.");
+            p.P("pSrc", "Цены сметы: бетон, арматура и металлопрокат — объявления olx.kz по Алматы 22–26.10.2026, курс — НБ РК на 23.10.2026; фасадные модули, труд, аренда крана и индексы — допущения модели. Цены на дату — прогноз цифрового двойника по индексам.");
 
             // ---- 4: what is done and paid (KS-3)
             var ks = NewDoc("ks3", "КС-3", "Акт", "file_check", 75, "Справка о стоимости выполненных работ и затрат (КС-3)", $"№ {anKs}", Day(d - 0.02f));

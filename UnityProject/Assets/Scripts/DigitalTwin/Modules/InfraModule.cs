@@ -30,6 +30,9 @@ namespace AlatauCity.DigitalTwin.Modules
 
         Label eyebrow, summary; readonly Label[] kv = new Label[4], kl = new Label[4]; readonly VisualElement[] kb = new VisualElement[4];
         VisualElement rows, card, next, scheme; SchemeView schemeView;
+        VisualElement netBox, netChips; static int netDistrict = 2, lastHeader = -1;
+
+        public InfraModule() { InvestRegistry.Init(); }
 
         public override (Color, string)[] Legend => new[]
         {
@@ -137,11 +140,24 @@ namespace AlatauCity.DigitalTwin.Modules
             Chip(chips, Loc.T("i_chip_lrt"), () => showLrt, () => showLrt = !showLrt);
             Chip(chips, Loc.T("i_chip_planned"), () => showPlanned, () => showPlanned = !showPlanned);
 
+            BuildPublished();
+
             var rb = Widgets.Block(panel, Loc.T("i_balance"), Loc.T("i_balance_sub"));
             rows = new VisualElement(); rb.Add(rows);
 
             Right();
             card = new VisualElement(); panel.Add(card);
+
+            var wb = Widgets.Block(panel, "Когда сети придут на участок", "по району и сценарию");
+            var wi = new Label("Для инвестора: с какого года мощности района хватит, чтобы подключить новый объект, — по каждому ресурсу.");
+            wi.AddToClassList("note"); wi.style.marginBottom = 6; wb.Add(wi);
+            netChips = new VisualElement(); netChips.AddToClassList("chips"); netChips.AddToClassList("w2-chips"); wb.Add(netChips);
+            for (int d = 0; d < CityStats.Districts; d++)
+            {
+                int dd = d; var btn = new Button(() => { netDistrict = dd; RefreshNet(); }) { text = CityStats.DistrictIds[d], focusable = false };
+                btn.AddToClassList("chip"); netChips.Add(btn);
+            }
+            netBox = new VisualElement(); wb.Add(netBox);
 
             var sb = Widgets.Block(panel, Loc.T("i_scheme"), Loc.T("i_scheme_sub"));
             schemeView = new SchemeView(); sb.Add(schemeView);
@@ -241,6 +257,46 @@ namespace AlatauCity.DigitalTwin.Modules
                 next.Add(fct); if (++cnt >= 7) break;
             }
             if (cnt == 0) { var l = new Label(Loc.T("i_next_none")); l.AddToClassList("note"); next.Add(l); }
+            RefreshNet();
+        }
+
+        /// <summary>The published infrastructure items: of the 26 projects of the government summary only some are named in the press.</summary>
+        void BuildPublished()
+        {
+            var b = Widgets.Block(panel, "Инфраструктурные проекты", "что опубликовано в прессе");
+            var grid = new VisualElement(); grid.AddToClassList("kpi-grid"); b.Add(grid);
+            var r = new VisualElement(); r.AddToClassList("kpi-row"); grid.Add(r);
+            void K(string v, string l, string src) { var k = new VisualElement(); k.AddToClassList("kpi"); var a = new Label(l); a.AddToClassList("l"); k.Add(a); var c = new Label(v); c.AddToClassList("v"); c.AddToClassList("w2-kpi-long"); k.Add(c); SourceTags.Attach(k, src); r.Add(k); }
+            K("26", "проектов в программе", Sources.GovSummary);
+            K("365,1\u00A0млрд\u00A0₸", "этап 1, 2026–2027", InvestRegistry.KapInfra);
+            foreach (var it in InvestRegistry.Infra)
+            {
+                var row = new VisualElement(); row.AddToClassList("w2-inf");
+                var top = new VisualElement(); top.AddToClassList("w2-inf-top");
+                var n = new Label(it.Name); n.AddToClassList("w2-inf-n"); top.Add(n);
+                top.Add(Widgets.Status(it.Status, it.StatusCls)); row.Add(top);
+                string meta = it.Amount != null ? string.Format("{0} · {1} · {2}", it.What, it.When, it.Amount) : string.Format("{0} · {1}", it.What, it.When);
+                var m = new Label(meta); m.AddToClassList("note"); row.Add(m);
+                var tagRow = new VisualElement(); tagRow.AddToClassList("w2-inf-tags");
+                var kind = new Label(it.Kind); kind.AddToClassList("w2-kind"); tagRow.Add(kind);
+                tagRow.Add(SourceTags.Tag(it.Src)); row.Add(tagRow);
+                b.Add(row);
+            }
+            var honest = new Label(string.Format("Названо в прессе: {0} позиций (часть — пакеты проектов). Полный список 26 проектов не публиковался. Базовые сети финансирует государство, городу разрешены госзаймы.", InvestRegistry.Infra.Count));
+            honest.AddToClassList("note"); honest.style.marginTop = 6; b.Add(honest);
+            b.Add(SourceTags.Line(InvestRegistry.KapLoans));
+        }
+
+        void RefreshNet()
+        {
+            if (netBox == null) return;
+            if (TwinState.District != lastHeader) { lastHeader = TwinState.District; if (lastHeader >= 0) netDistrict = lastHeader; }   // the header district wins once, chips after it
+            int d = netDistrict;
+            int i = 0; foreach (var c in netChips.Children()) { c.EnableInClassList("active", i == d); i++; }
+            netBox.Clear();
+            var h = new Label(string.Format("{0} District · {1} · отсчёт от октября 2026", CityStats.DistrictIds[d], TwinScenario.Name(TwinState.Scenario)));
+            h.AddToClassList("w2-h"); netBox.Add(h);
+            netBox.Add(InvestCalc.NetRows(d));
         }
 
         void BuildCard(TwinData.Facility f, int s, int y)
@@ -283,11 +339,12 @@ namespace AlatauCity.DigitalTwin.Modules
             static Color C(string st) => st == "bad" ? new Color(1f, 0.23f, 0.18f) : st == "warn" ? new Color(0.96f, 0.65f, 0.14f) : st == "planned" ? new Color(0.35f, 0.35f, 0.35f) : new Color(0.20f, 0.78f, 0.35f);
             void Labels()
             {
-                Clear(); float w = contentRect.width; if (w <= 0) return;
+                // placed in percent of the width: before the first layout contentRect is NaN, which stacked all four labels at the left edge
+                Clear();
                 for (int d = 0; d < 4; d++)
                 {
                     var l = new Label(CityStats.DistrictIds[d]) { pickingMode = PickingMode.Ignore };
-                    l.style.position = Position.Absolute; l.style.left = w * (d + 0.5f) / 4f - 30; l.style.width = 60; l.style.top = 0; l.style.fontSize = 10;
+                    l.style.position = Position.Absolute; l.style.left = Length.Percent(d * 25f); l.style.width = Length.Percent(25f); l.style.top = 0; l.style.fontSize = 10;
                     l.style.unityTextAlign = TextAnchor.UpperCenter; l.style.color = new Color(0.76f, 0.76f, 0.76f); Add(l);
                 }
                 var k = new Label("220 кВ → 110 кВ") { pickingMode = PickingMode.Ignore }; k.style.position = Position.Absolute; k.style.right = 0; k.style.bottom = 0; k.style.fontSize = 10; k.style.color = new Color(0.53f, 0.53f, 0.53f); Add(k);

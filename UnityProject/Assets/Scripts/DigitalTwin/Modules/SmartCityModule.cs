@@ -78,19 +78,20 @@ namespace AlatauCity.DigitalTwin.Modules
                 kl[i] = new Label(); kl[i].AddToClassList("l"); k.Add(kl[i]); kv[i] = new Label("—"); kv[i].AddToClassList("v"); k.Add(kv[i]);
                 kb[i] = k; row.Add(k);
             }
+            top.Add(SourceTags.Line(Data.TwinModels.SmartCity));
 
             var tb = Widgets.Block(panel, "Камеры по назначению", "клик — фильтр");
             typeRows = new VisualElement(); tb.Add(typeRows);
 
             var rb = Widgets.Block(panel, "Обращения iKomek 109", "темы за сутки");
-            reqRows = new VisualElement(); rb.Add(reqRows);
+            reqRows = new VisualElement(); rb.Add(reqRows); rb.Add(SourceTags.Line(Data.TwinModels.SmartCity));
 
             var n = Widgets.Block(panel);
-            var note = new Label("Демо-заглушки: видео — вид из цифрового двойника с места камеры, события и обращения смоделированы. Структура данных повторяет API Smart City Alatau, iKomek 109 и 112 — живые потоки подключаются без переделки интерфейса.");
+            var note = new Label("Демо-данные: видео — вид из цифрового двойника с места камеры, события и обращения смоделированы QTwin. Интерфейс готов к подключению Smart City Alatau, iKomek 109 и 112 — живые потоки встанут на место модели без переделки экранов.");
             note.AddToClassList("note"); n.Add(note);
 
             Right();
-            var fb = Widgets.Block(panel, "Камера · прямой эфир", "заглушка");
+            var fb = Widgets.Block(panel, "Камера · прямой эфир", "демо-поток");
             camTitle = fb.Q<Label>(className: "block-title");
             feed = new CameraFeed(); fb.Add(feed);
             camFacts = new VisualElement(); camFacts.style.marginTop = 8; fb.Add(camFacts);
@@ -100,12 +101,12 @@ namespace AlatauCity.DigitalTwin.Modules
             br.Add(Widgets.Btn("На карте", () => { var cs = Cams; if (sel >= 0 && sel < cs.Count) FlyTo(cs[sel].World); }, "small"));
 
             var eb = Widgets.Block(panel, "Лента событий", "за сутки");
-            feedList = new VisualElement(); eb.Add(feedList);
+            feedList = new VisualElement(); eb.Add(feedList); eb.Add(SourceTags.Line(Data.TwinModels.SmartCity, Data.TwinModels.Ops));
 
             var ib = Widgets.Block(panel, "Интеграции", "");
-            ib.Add(Widgets.Fact("Smart City Alatau", "видеопотоки RTSP · заглушка"));
-            ib.Add(Widgets.Fact("iKomek 109", "обращения жителей · заглушка"));
-            ib.Add(Widgets.Fact("ЕДДС 112", "вызовы и инциденты · заглушка"));
+            ib.Add(Widgets.Fact("Smart City Alatau", "видеопотоки RTSP · демо-поток"));
+            ib.Add(Widgets.Fact("iKomek 109", "обращения жителей · модель QTwin"));
+            ib.Add(Widgets.Fact("ЕДДС 112", "вызовы и инциденты · модель QTwin"));
             var last = Widgets.Fact("Статус", "готово к подключению по API"); last.style.borderBottomWidth = 0; ib.Add(last);
             Widgets.SetCollapsed(ib, true);
         }
@@ -125,18 +126,19 @@ namespace AlatauCity.DigitalTwin.Modules
             int total = SmartCity.CameraCount(y), ev = SmartCity.EventsPerDay(y), req = SmartCity.RequestsPerDay(y);
             float on = SmartCity.OnlineShare(y), solved = SmartCity.SolvedInTime(y);
             eyebrow.text = ("Smart City · " + y + " · " + TwinScenario.Name(TwinState.Scenario)).ToUpperInvariant();
-            summary.text = $"В {y} году в городе {Loc.N0(total)} камер, на связи {Mathf.RoundToInt(on * 100)} %. Видеоаналитика даёт ≈ {Loc.N0(ev)} событий в сутки, жители подают ≈ {Loc.N0(req)} обращений в iKomek 109; {Mathf.RoundToInt(solved * 100)} % решаются в срок, реакция — {SmartCity.ReactionMin(y)} мин.";
-            Set(0, Loc.N0(total), "камер в сети", ""); Set(1, Mathf.RoundToInt(on * 100) + " %", "на связи", on < 0.95f ? "warn" : "ok");
-            Set(2, Loc.N0(req), "обращений iKomek 109 в сутки", ""); Set(3, Mathf.RoundToInt(solved * 100) + " %", "решено в срок", solved < 0.85f ? "warn" : "ok");
+            summary.text = $"В {y} году в городе {Loc.N0(total)} камер, на связи {Mathf.RoundToInt(on * 100)} %. Видеоаналитика даёт ≈ {Loc.N0(ev)} событий в сутки, жители подают ≈ {Loc.N0(req)} обращений в iKomek 109; {Mathf.RoundToInt(solved * 100)} % решаются в срок, реакция — {SmartCity.ReactionMin(y)} мин.";
+            Set(0, Loc.N0(total), "камер в сети", ""); Set(1, Mathf.RoundToInt(on * 100) + " %", "на связи", on < 0.95f ? "warn" : "ok");
+            Set(2, Loc.N0(req), "обращений iKomek 109 в сутки", ""); Set(3, Mathf.RoundToInt(solved * 100) + " %", "решено в срок", solved < 0.85f ? "warn" : "ok");
 
             float[] share = { 0.46f, 0.30f, 0.09f, 0.15f };
             typeRows.Clear();
             for (int t = 0; t < 4; t++)
             {
                 int tt = t; var r = new VisualElement(); r.AddToClassList("status-row"); r.AddToClassList("clickable"); r.style.opacity = typeOn[t] ? 1f : 0.4f;
-                r.Add(Widgets.Dot(SmartCity.CamTypeColor[t], true));
-                var nm = new Label(SmartCity.CamTypeName[t]) { pickingMode = PickingMode.Ignore }; nm.AddToClassList("n"); r.Add(nm);
-                var st = new Label(Loc.N0(total * share[t]) + " · на карте " + cs.Count(c => (int)c.Type == t)) { pickingMode = PickingMode.Ignore }; st.AddToClassList("s"); r.Add(st);
+                var dot = Widgets.Dot(SmartCity.CamTypeColor[t], true); dot.style.flexShrink = 0; dot.style.marginRight = 8; r.Add(dot);
+                var nm = new Label(SmartCity.CamTypeName[t]) { pickingMode = PickingMode.Ignore }; nm.AddToClassList("n");
+                nm.style.flexShrink = 1; nm.style.minWidth = 0; nm.style.marginRight = 12; nm.style.whiteSpace = WhiteSpace.Normal; r.Add(nm);
+                var st = new Label(Loc.N0(total * share[t]) + " · на карте " + cs.Count(c => (int)c.Type == t)) { pickingMode = PickingMode.Ignore }; st.AddToClassList("s"); st.style.flexShrink = 0; r.Add(st);
                 r.AddManipulator(new Clickable(() => { typeOn[tt] = !typeOn[tt]; Pins(); Refresh(); }));
                 typeRows.Add(r);
             }

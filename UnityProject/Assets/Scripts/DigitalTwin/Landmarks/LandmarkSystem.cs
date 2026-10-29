@@ -55,8 +55,10 @@ namespace AlatauCity.DigitalTwin.Landmarks
 
         // ------------------------------------------------------------------ plots: level ground, replaced buildings, no trees
         static byte[] hidden;
-        /// <summary>Generic buildings of the plan that a landmark replaces (hidden in AlatauLit, not pickable).</summary>
-        public static bool IsHiddenBid(int bid) => hidden != null && bid >= 0 && bid < hidden.Length && hidden[bid] != 0 && (hidden[bid] == 1 || TwinState.Year >= 2000 + hidden[bid]);
+        /// <summary>Generic buildings of the plan that a landmark replaces, or that MapOrder removes (hidden in AlatauLit, not pickable:
+        /// pick and line-of-sight rays pass through them).</summary>
+        public static bool IsHiddenBid(int bid) => (hidden != null && bid >= 0 && bid < hidden.Length && hidden[bid] != 0 && (hidden[bid] == 1 || TwinState.Year >= 2000 + hidden[bid]))
+                                                   || MapOrder.Removed(bid);          // removed from the map (wrong place in the base data)
 
         /// <summary>Before anything is draped on the terrain (roads, trees, networks, LRT): every plot is levelled to one height with a soft
         /// edge, the terrain mesh follows, the generic buildings standing on the plot are hidden, and an invisible slab keeps the trees off it.</summary>

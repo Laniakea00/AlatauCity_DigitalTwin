@@ -254,7 +254,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
         static string Usd(float m) => m >= 1000f ? "$" + Loc.N1(m / 1000f) + " млрд" : "$" + Mathf.RoundToInt(m) + " млн";
         static string Cls(int days) => days <= 3 ? "ok" : days <= 21 ? "warn" : "bad";
         static string Dev(St s) => s.Plan <= 0f && s.Fact <= 0f ? "—" : s.Days <= 3 ? "в срок" : "−" + s.Days + " дн.";
-        static string Pct(float v) => Mathf.RoundToInt(v * 100f) + " %";
+        static string Pct(float v) => Mathf.RoundToInt(v * 100f) + "\u00A0%";
         static string Day(float y) { var t = new DateTime(Mathf.FloorToInt(y), 1, 1).AddDays((y - Mathf.Floor(y)) * 365f); return t.ToString("dd.MM.yyyy"); }
         static string Floors(int n) { int m = n % 100, d = n % 10; return m >= 11 && m <= 14 ? "этажей" : d == 1 ? "этаж" : d >= 2 && d <= 4 ? "этажа" : "этажей"; }
 
@@ -304,6 +304,9 @@ namespace AlatauCity.DigitalTwin.Landmarks
         {
             var ii = IconicInterior.Instance; var ls = LandmarkSystem.Instance; if (ii == null || ls == null || !ls.Ready || open) return;
             if (TowerProfile.For(id) == null) return;
+            RegisterSources();
+            // the summary of the other object is computed now, while the window is closed (the AI assistant may ask for it)
+            foreach (var oid in new[] { "iconic", "kaist" }) if (oid != id && !sumCache.ContainsKey(oid)) Dry(oid);
             L = ls.Get(id); if (L == null || L.Parts == null || L.Main < 0) return; H = L.Height;
             // the survey shown first is the one in the middle of the works (MakeSurveys snaps it to a survey date); the list runs to the handover
             Report = L.Begin + 0.5f * (L.Finish - L.Begin); int stage = Mathf.FloorToInt(Report); T0 = Mathf.Floor(L.Begin); T1 = Mathf.Max(Mathf.Ceil(L.Finish + 0.05f), L.EndYear + 1f);
@@ -314,7 +317,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             if (!wasInside) ii.Enter(id);
             if (!IconicInterior.Active || IconicShape.P.Id != id) { RestoreYear(); return; }
             model = ls.ModelOf(id); main = Camera.main; if (model == null || main == null) { RestoreYear(); return; }
-            MakeWorks(); MakeSurveys(); MakeAnalytics(); crewPeak = -1f; ganttOn = false; d4Plan = false; svPlan = false; svTool = 0; rN = 0; vidGroup = 0;
+            MakeModel(); sumCache[id] = Collect(); ctlWeek = 0; chgMode = 0; msgMail = false; defMode = 1; crewPeak = -1f; ganttOn = false; d4Plan = false; svPlan = false; svTool = 0; rN = 0; vidGroup = 0;
             open = true; playing = false; planMode = false; scrubbing = false; tab = 0; date = Report; obj = -1;
             focusFloor = -1; floorT = 0f; uiT = 0f; zoomK = 1f; camYawOff = camPitchOff = 0f; camFov = 58f;
             IconicInterior.Suspended = true; ii.HidePanel();
@@ -572,11 +575,11 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 if (monRT != null)
                 {
                     if (mon.targetTexture != monRT) mon.targetTexture = monRT;
-                    bool live = !(tab == TVid && view != View.Cam) && tab != TAn;          // the camera wall covers the picture: no need to draw it
+                    bool live = !(tab == TVid && view != View.Cam) && tab != TAn && tab != TCtl;          // the camera wall covers the picture: no need to draw it
                     if (mon.enabled != live) mon.enabled = live;
                     if (photo.image != monRT) photo.image = monRT;
                 }
-                Pin(); ObjPins();
+                Pin(); ObjPins(); DefPins();
                 if (tab == TObj || tab == TVid || tab == TInv) Rigs(); else HideRigs();
                 Compare(); SurveyMarks();
             }
@@ -1043,6 +1046,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
         void Pin()
         {
             if (pin == null) return;
+            if (tab == TDef || tab == TCtl) { pin.style.display = DisplayStyle.None; return; }
             bool on = view == View.Floor && focusFloor >= 0 && monRT != null;
             // a work of a building on the complex view: a label at the place where it goes on, with how far it is
             var wk = sel >= 0 && sel < works.Count ? works[sel] : null;
@@ -1168,7 +1172,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
         /// <summary>The labels over the buildings in the view of the complex: what each building is, its readiness and delay. Click: look at it.</summary>
         void ObjPins()
         {
-            bool show = (view == View.Complex || view == View.Tower || view == View.Plan) && monRT != null && tab != TVid && tab != TAn && !(tab == TSurv && lyDiff);
+            bool show = (view == View.Complex || view == View.Tower || view == View.Plan) && monRT != null && tab != TVid && tab != TAn && tab != TCtl && tab != TDef && !(tab == TSurv && lyDiff);
             for (int i = 0; i < opins.Count; i++)
             {
                 var pe = opins[i]; bool on = show && (view == View.Complex || i == obj);
@@ -1206,7 +1210,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             var gh = new VisualElement(); gh.AddToClassList("mon-row"); gh.AddToClassList("mon-g-head"); g.Add(gh);
             gh.Add(TwinUI.Icon("presentation", 16)); var gt = new Label("Инвестору · " + L.Short); gt.AddToClassList("mon-title"); gh.Add(gt);
             var gs = new VisualElement(); gs.style.flexGrow = 1; gh.Add(gs);
-            invNote = new Label("бюджеты, коммерция и отклонения — сценарий цифрового двойника, не данные застройщика") { pickingMode = PickingMode.Ignore }; invNote.AddToClassList("note"); gh.Add(invNote);
+            invNote = new Label("бюджеты, коммерция и отклонения — сценарий цифрового двойника, не данные застройщика") { pickingMode = PickingMode.Ignore }; invNote.AddToClassList("note"); gh.Add(invNote); var mt = SourceTags.ModelTag(SrcMon); mt.style.marginLeft = 8; gh.Add(mt);
             var kr = new VisualElement(); kr.AddToClassList("mon-inv-kpis"); g.Add(kr);
             for (int i = 0; i < 5; i++)
             {

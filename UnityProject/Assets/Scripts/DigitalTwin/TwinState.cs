@@ -7,7 +7,7 @@ namespace AlatauCity.DigitalTwin
     /// Every module and UI element subscribes to the events; nothing else owns these values.</summary>
     public static class TwinState
     {
-        public const int MinYear = 2026, MaxYear = 2050;          // Alatau City gathers pace from 2026; the data tables start in 2025
+        public const int MinYear = 2026, MaxYear = 2050;          // Alatau City gathers pace from 2026; the data tables start in TwinData.Y0
         static readonly int YearId = Shader.PropertyToID("_AlatauYear");
 
         static int year = 2050;

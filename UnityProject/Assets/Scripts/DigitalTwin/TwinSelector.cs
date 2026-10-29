@@ -11,7 +11,7 @@ namespace AlatauCity.DigitalTwin
         bool downOnMap;
         void Update()
         {
-            if (Input.GetKeyDown(KeyCode.Escape)) { Select(-1); if (BimQuarter.Instance != null) BimQuarter.Instance.Select(-1); }
+            if (Input.GetKeyDown(KeyCode.Escape) && !UI.TwinUI.EscTaken) { Select(-1); if (BimQuarter.Instance != null) BimQuarter.Instance.Select(-1); }
             if (Landmarks.IconicInterior.Active) { downOnMap = false; return; }     // inside the tower clicks belong to the interior
             if (Input.GetMouseButtonDown(0)) downOnMap = !MapCamera.BlockInput;   // a press that starts over the UI never selects
             if (!Input.GetMouseButtonUp(0) || !downOnMap) return;

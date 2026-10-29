@@ -91,6 +91,7 @@ namespace AlatauCity.DigitalTwin.Modules
                 kl[i] = new Label(); kl[i].AddToClassList("l"); k.Add(kl[i]); kv[i] = new Label("—"); kv[i].AddToClassList("v"); k.Add(kv[i]);
                 kb[i] = k; r0.Add(k);
             }
+            top.Add(SourceTags.Line(TwinModels.Ops));
             var cr = new VisualElement(); cr.AddToClassList("row"); cr.style.marginTop = 10; top.Add(cr);
             playBtn = Widgets.Btn(Loc.T("pause"), () => { running = !running; playBtn.text = Loc.T(running ? "pause" : "play"); }, "small"); cr.Add(playBtn);
             clockLbl = new Label(); clockLbl.AddToClassList("note"); clockLbl.style.marginLeft = 10; cr.Add(clockLbl);
@@ -295,13 +296,14 @@ namespace AlatauCity.DigitalTwin.Modules
             Row(tab, Loc.T("s_m_people"), Loc.N0(i.Yes.Affected[k]), Loc.N0(i.No.Affected[k]), i.Yes.Affected[k] <= i.No.Affected[k]);
             Row(tab, Loc.T("s_m_damage"), Money(i.Yes.Damage[k]), Money(i.No.Damage[k]), i.Yes.Damage[k] <= i.No.Damage[k]);
             Row(tab, string.Format(Loc.T("s_m_restore"), i.Unit), Restore(i.Yes, i.Unit), Restore(i.No, i.Unit), i.Yes.Restore <= i.No.Restore);
-            if (i.Yes.NbLoad > 0 || i.No.NbLoad > 0) Row(tab, Loc.T("s_m_nb"), Mathf.RoundToInt(i.Yes.NbLoad) + " %", Mathf.RoundToInt(i.No.NbLoad) + " %", i.Yes.NbLoad <= i.No.NbLoad, i.No.NbLoad > 100);
+            if (i.Yes.NbLoad > 0 || i.No.NbLoad > 0) Row(tab, Loc.T("s_m_nb"), Mathf.RoundToInt(i.Yes.NbLoad) + " %", Mathf.RoundToInt(i.No.NbLoad) + " %", i.Yes.NbLoad <= i.No.NbLoad, i.No.NbLoad > 100);
             Row(tab, Loc.T("s_m_co2"), Loc.N1(i.Yes.Co2[k]), Loc.N1(i.No.Co2[k]), i.Yes.Co2[k] <= i.No.Co2[k]);
 
             float dm = i.No.Peak - i.Yes.Peak, dp = i.No.AffectedMax - i.Yes.AffectedMax, dr = i.No.Restore - i.Yes.Restore;
             var res = new Label(dr > 0 ? string.Format(Loc.T("s_effect"), Money(dm), Loc.N0(Mathf.Max(0, dp)), T(dr, i.Unit)) : string.Format(Loc.T("s_effect2"), Money(dm), Loc.N0(Mathf.Max(0, dp))));
             res.AddToClassList("summary"); res.style.fontSize = 14; res.style.marginTop = 8; res.style.color = new Color(0.86f, 0.95f, 0.88f); c.Add(res);
             if (i.Yes.Co2[SituationData.NT - 1] > i.No.Co2[SituationData.NT - 1]) { var w = new Label(Loc.T("s_tradeoff")); w.AddToClassList("note"); w.style.marginTop = 4; c.Add(w); }
+            c.Add(SourceTags.Line(TwinModels.Ops, Data.Sources.ModelCity));
 
             if (!decided.ContainsKey(i.Id) && i.Avail)
             {
@@ -367,6 +369,7 @@ namespace AlatauCity.DigitalTwin.Modules
                 var smp = new Label(s.Sample(r0)); smp.AddToClassList("smp"); r.Add(smp); sampleLabels.Add(smp);
                 b.Add(r);
             }
+            b.Add(SourceTags.Line(TwinModels.Ops));
         }
 
         // ------------------------------------------------------------------ morning briefing
@@ -398,6 +401,7 @@ namespace AlatauCity.DigitalTwin.Modules
             }
             Sec(b, Loc.T("s_b_plan"));
             foreach (var i in incs.Where(x => x.Avail && !x.Today)) Line(b, "· " + i.Title + " — " + StatusText(i).ToLowerInvariant());
+            b.Add(SourceTags.Line(TwinModels.Ops, TwinModels.Loads));
         }
         static void Sec(VisualElement b, string t) { var l = new Label(t.ToUpperInvariant()); l.AddToClassList("note"); l.style.marginTop = 10; l.style.marginBottom = 4; l.style.letterSpacing = 1; b.Add(l); }
         static void Line(VisualElement b, string t) { var l = new Label(t); l.style.fontSize = 12; l.style.marginBottom = 4; l.style.color = new Color(0.9f, 0.9f, 0.9f); b.Add(l); }

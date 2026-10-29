@@ -140,13 +140,13 @@ namespace AlatauCity.DigitalTwin
                 m += 18 + rnd.Next(30);
                 switch (rnd.Next(7))
                 {
-                    case 0: { var c = Cam(CamType.Traffic); if (c == null) break; Add("Smart City · видео", "video", "bad", "ДТП: столкновение двух машин", c.Place + " · камера " + c.Id + " · вызваны ДПС и скорая", "в 112 · " + (3 + rnd.Next(4)) + " мин", m, c); break; }
-                    case 1: { var c = Cam(CamType.Traffic); if (c == null) break; Add("Smart City · ПДД", "video", "warn", "Затор " + (300 + rnd.Next(900)) + " м", c.Place + " · светофоры переведены на адаптивный режим", "в работе", m, c); break; }
-                    case 2: { var c = Cam(CamType.Safety); var rt = RequestTypes[Pick(rnd)]; Add("iKomek 109", "bell", "info", "Обращение: " + rt.name.ToLowerInvariant(), (c != null ? c.Place : "Alatau City") + " · житель через приложение iKomek", rnd.Next(3) == 0 ? "решено за " + (25 + rnd.Next(90)) + " мин" : "передано в службу", m, c); break; }
+                    case 0: { var c = Cam(CamType.Traffic); if (c == null) break; Add("Smart City · видео", "video", "bad", "ДТП: столкновение двух машин", c.Place + " · камера " + c.Id + " · вызваны ДПС и скорая", "в 112 · " + (3 + rnd.Next(4)) + " мин", m, c); break; }
+                    case 1: { var c = Cam(CamType.Traffic); if (c == null) break; Add("Smart City · ПДД", "video", "warn", "Затор " + (300 + rnd.Next(900)) + " м", c.Place + " · светофоры переведены на адаптивный режим", "в работе", m, c); break; }
+                    case 2: { var c = Cam(CamType.Safety); var rt = RequestTypes[Pick(rnd)]; Add("iKomek 109", "bell", "info", "Обращение: " + rt.name.ToLowerInvariant(), (c != null ? c.Place : "Alatau City") + " · житель через приложение iKomek", rnd.Next(3) == 0 ? "решено за " + (25 + rnd.Next(90)) + " мин" : "передано в службу", m, c); break; }
                     case 3: { var c = Cam(CamType.Construction); if (c == null) break; Add("Стройка · видео", "hard_hat", "warn", "Рабочий без каски", c.Place + " · камера " + c.Id + " · уведомлён прораб подрядчика", "штраф подрядчику", m, c); break; }
                     case 4: { var c = Cam(CamType.Utility); if (c == null) break; Add("Smart City · экология", "droplets", "warn", rnd.Next(2) == 0 ? "Несанкционированная свалка" : "Подтопление после полива", c.Place + " · камера " + c.Id, "выехала бригада", m, c); break; }
                     case 5: { var c = Cam(CamType.Safety); if (c == null) break; Add("Smart City · безопасность", "video", "info", "Оставленный предмет", c.Place + " · камера " + c.Id + " · проверено патрулём", "ложная тревога", m, c); break; }
-                    default: { int d = rnd.Next(4); Add("qTwin · прогноз", "sparkles", "info", "Пик нагрузки на сети в 19:00", CityStats.DistrictIds[d] + " · электроэнергия +" + (6 + rnd.Next(9)) + " % к среднему, резерв есть", "мониторинг", m, null, d); break; }
+                    default: { int d = rnd.Next(4); Add("qTwin · прогноз", "sparkles", "info", "Пик нагрузки на сети в 19:00", CityStats.DistrictIds[d] + " · электроэнергия +" + (6 + rnd.Next(9)) + " % к среднему, резерв есть", "мониторинг", m, null, d); break; }
                 }
             }
             day.Sort((a, b) => a.Minute.CompareTo(b.Minute));

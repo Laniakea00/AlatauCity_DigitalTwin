@@ -32,8 +32,11 @@ float QMod2(float x) { return x - 2.0 * floor(x * 0.5); }
 float3 QGrass(float2 p, float fwl)
 {
     float n1 = QFbm(p / 16.0), n2 = QFbm(p / 5.0 + 11.0), g = QFine(p, 2.3, fwl);
-    float3 c = lerp(float3(0.050, 0.085, 0.026), float3(0.085, 0.125, 0.038), smoothstep(0.25, 0.75, n1));
-    c = lerp(c, float3(0.135, 0.140, 0.065), smoothstep(0.62, 0.86, n2) * 0.40);
+    // the greens of a lawn in the steppe climate (olive, a little dry), as the city's own parks: not a putting green
+    float n0 = QNoise(p / 90.0 + 5.0);
+    float3 c = lerp(float3(0.058, 0.082, 0.032), float3(0.088, 0.112, 0.044), smoothstep(0.25, 0.75, n1));
+    c = lerp(c, float3(0.135, 0.135, 0.068), smoothstep(0.62, 0.86, n2) * 0.45);
+    c = lerp(c, float3(0.120, 0.118, 0.062), smoothstep(0.55, 0.80, n0) * 0.35);
     float st = 0.5 + 0.5 * sin(p.x * 0.55 + 0.25 * sin(p.y * 0.05));
     c *= 0.94 + 0.10 * smoothstep(0.3, 0.7, st);
     return c * (0.86 + 0.28 * g);
@@ -237,12 +240,11 @@ QSurf QTwinSurface(int tg, int pid, float u, float y, float fu, float fy, float2
         else if (tg == 31)
         {
             // asphalt, the lane lines (u runs across the road, ± its half width)
-            float n = QHash(floor(wp * 0.7)) * 0.03;
-            o.col = float3(0.030, 0.032, 0.035) + n * 0.5; o.rough = 0.9;
+            o.col = float3(0.042, 0.040, 0.037) * (0.90 + 0.20 * QFbm(wp / 11.0)) * (0.94 + 0.12 * QNoise(wp / 37.0 + 3.0)); o.rough = 0.9;      // worn patches, no tile pattern
             float lane = QLine(u, 3.6, 0.07, fu);
             float dash = step(0.5, frac((wp.x + wp.y) / 9.0));
             o.col *= 0.9 + 0.2 * QFine(wp, 2.0, fwl);
-            o.col = lerp(o.col, float3(0.45, 0.45, 0.45), lane * dash * 0.35);
+            o.col = lerp(o.col, float3(0.40, 0.40, 0.39), lane * dash * 0.30);
             o.emis = float3(1.0, 0.75, 0.45) * night * 0.05;
         }
         else if (tg == 29) { QPat(o, QP_GRASS, wp, fwp, 1.0); o.rough = 0.95; o.soft = true; }
@@ -272,7 +274,7 @@ QSurf QTwinSurface(int tg, int pid, float u, float y, float fu, float fy, float2
         // a residential or office block: light precast stone with deep windows in a regular grid, as on the physical model;
         // the window grid fades to its average colour where it gets smaller than a pixel
         float bw = tg == 21 ? 3.0 : tg == 22 ? 1.9 : tg == 23 ? 2.7 : 2.4, fh2 = 3.3;
-        float3 wall = tg == 21 ? float3(0.70, 0.64, 0.55) : tg == 22 ? float3(0.76, 0.76, 0.75) : tg == 23 ? float3(0.58, 0.45, 0.35) : float3(0.82, 0.79, 0.73);
+        float3 wall = (tg == 21 ? float3(0.70, 0.64, 0.55) : tg == 22 ? float3(0.76, 0.76, 0.75) : tg == 23 ? float3(0.58, 0.45, 0.35) : float3(0.82, 0.79, 0.73)) * 0.86;      // stone, not paper white
         float uu = u / bw, f = y / fh2, du = fu / bw, df = fy / fh2;
         float fuu = frac(uu), ff = frac(f);
         float ww = tg == 22 ? 0.30 : 0.18, wb = 0.24, wt = 0.88;
@@ -284,15 +286,24 @@ QSurf QTwinSurface(int tg, int pid, float u, float y, float fu, float fy, float2
         float far = smoothstep(0.22, 0.55, max(du, df));
         float avg = (1.0 - 2.0 * ww) * (wt - wb);
         win = lerp(win, avg, far);
-        float rev = (smoothstep(wt - 0.08, wt, ff) * step(ff, wt)) * wx * (1.0 - far);
+        float rev = (smoothstep(wt - 0.10, wt, ff) * step(ff, wt)) * wx * (1.0 - far);
+        // the reveal: the side of the opening away from the light falls in shadow (depth), a thin pale frame and a centre bar
+        float side = (1.0 - smoothstep(ww + du, ww + 0.05 + du, fuu)) * wy * (1.0 - far);
+        float fr = max(1.0 - smoothstep(0.012, 0.012 + du * 1.5, abs(fuu - 0.5)), 0.0) * wy * (1.0 - far) * (1.0 - shop);
         float2 cell = float2(floor(uu), floor(y / (shop > 0.5 ? 4.6 : fh2))) + floor(wp / 60.0) * 13.0;
         float h1 = QHash(cell), h2 = QHash(cell.yx + 3.1);
         float3 glass = h1 > 0.78 ? float3(0.34, 0.31, 0.26) : lerp(float3(0.11, 0.14, 0.17), float3(0.20, 0.24, 0.28), h2);    // some with curtains
         if (shop > 0.5) glass = float3(0.08, 0.075, 0.07);
         float band = QLine(y, fh2, 0.08, fy) * 0.06 * (1.0 - shop);
         float3 wc = wall * (1.0 - band) * (1.0 - 0.06 * QHash(floor(wp / 24.0)));
-        o.col = lerp(wc, glass, win) * (1.0 - 0.35 * rev);
-        o.rough = lerp(0.82, h1 > 0.78 ? 0.55 : 0.12, win); o.metal = lerp(0.0, h1 > 0.78 ? 0.0 : 0.45, win);
+        o.col = lerp(wc, glass, win) * (1.0 - 0.45 * rev) * (1.0 - 0.30 * side * win);
+        o.col = lerp(o.col, wall * 0.92, fr * 0.85);
+        // panes differ: clear double glazing mirrors the sky, older or dusty panes less, a few are open (dark)
+        float pr = h1 > 0.78 ? 0.55 : lerp(0.05, 0.32, h2 * h2);
+        // a few panes show a darker room behind (still glass: they keep their reflection)
+        float deep = step(0.90, QHash(cell + 7.7)) * (1.0 - far);
+        o.rough = lerp(0.82, pr, win * (1.0 - fr)); o.metal = lerp(0.0, h1 > 0.78 ? 0.0 : 0.45, win * (1.0 - fr));
+        o.col = lerp(o.col, float3(0.055, 0.052, 0.050), deep * win * (1.0 - fr) * 0.8);
         float lit = step(0.70, h2);
         o.emis = float3(1.0, 0.72, 0.42) * night * win * (0.015 + (shop > 0.5 ? 0.6 : 0.42 * lit) * (1.0 - far * 0.6));
         o.col *= lerp(0.70, 1.0, smoothstep(0.0, 5.0, y));            // the base darker: the street in shadow

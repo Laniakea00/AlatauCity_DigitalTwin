@@ -138,7 +138,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 Id = "griffin", Name = "Griffin Logopark Almaty", Short = "Griffin Logopark", Company = "Griffin Partners · кредит ЕАБР",
                 Purpose = "Логопарк класса А в западном промышленном поясе, у БАКАД", Model = "logistics_griffin",
                 District = 2, Status = LStatus.Construction, StatusNote = "стройка с 07.2026, первый камень — 25.09.2026",
-                StartYear = 2026, EndYear = 2027, YearOfficial = true, X = -5673, Z = 1715, Yaw = 16.6f, PadW = 380f, PadD = 420f, Height = 15f, Radius = 210f, ViewYaw = 200f, ViewPitch = 26f,
+                StartYear = 2026, EndYear = 2027, YearOfficial = true, X = -5713, Z = 1735, Yaw = 38.0f, PadW = 380f, PadD = 420f, Height = 15f, Radius = 210f, ViewYaw = 200f, ViewPitch = 26f,
                 Source = "ЕАБР, bizmedia.kz", SourceDate = "10.08.2026 / 25.09.2026"
             }.F("Инвестиции", "$125 млн").F("Склады", "≈ 120 тыс. м²").F("Рабочие места", "≈ 600").F("Сроки", "1-я фаза — I кв. 2027").Stage2("третий склад", 2031, 2033));
 
@@ -148,7 +148,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 Id = "kaist", Name = "KAIST Kazakhstan · кампус", Short = "KAIST Kazakhstan", Company = "KAIST (Южная Корея) · ACA",
                 Purpose = "Технологический университет и кампус до 40 тыс. студентов (Академгородок)", Model = "campus",
                 District = 1, Status = LStatus.Preparation, StatusNote = "подготовка площадки, старт стройки — 12.12.2026",
-                StartYear = 2026, EndYear = 2030, YearOfficial = false, X = -1457, Z = -12698, Yaw = 45.6f, PadW = 420f, PadD = 360f, Height = 69f, Radius = 210f, ViewYaw = 190f, ViewPitch = 22f,
+                StartYear = 2026, EndYear = 2030, YearOfficial = false, X = -1457, Z = -12698, Yaw = 11.0f, PadW = 420f, PadD = 360f, Height = 69f, Radius = 210f, ViewYaw = 190f, ViewPitch = 22f,
                 Source = "Kazinform, Kapital.kz", SourceDate = "29.09.2025 / 09.2026"
             }.F("Студенты", "до 40 000 (кампус Golden)").F("Сроки", "в демо — 12.2026 → 06.2030").Stage2("общежития и лаборатории", 2034, 2037)
              // the buildings of the campus with their own dates (scenario of the twin, as on the campus's monitoring page): the park and the
@@ -227,7 +227,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 Id = "tlc", Name = "ТЛЦ «Жетыген»", Short = "ТЛЦ «Жетыген»", Company = "Исткомтранс",
                 Purpose = "Транспортно-логистический центр у ж/д Жетыген – Казыбек-бек", Model = "rail_terminal",
                 District = 2, Status = LStatus.Construction, StatusNote = "строится",
-                StartYear = 2025, EndYear = 2027, YearOfficial = false, X = 7870, Z = 9941, Yaw = -29.0f, PadW = 520f, PadD = 220f, Height = 25f, Radius = 260f, ViewYaw = 215f, ViewPitch = 24f,
+                StartYear = 2025, EndYear = 2027, YearOfficial = false, X = 7870, Z = 9941, Yaw = -77.5f, PadW = 520f, PadD = 220f, Height = 25f, Radius = 260f, ViewYaw = 215f, ViewPitch = 24f,
                 Source = "bes.media, Tengrinews", SourceDate = "11.06.2024 / 23.09.2025"
             }.F("Инвестиции", "+$150 млн (2024); 43 млрд ₸").F("Сроки", "не объявлены (в демо — 2027)").Stage2("контейнерный терминал", 2030, 2032));
             L.Add(new Landmark

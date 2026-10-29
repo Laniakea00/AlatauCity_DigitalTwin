@@ -3,7 +3,7 @@ using UnityEngine.UIElements;
 
 namespace AlatauCity.DigitalTwin.UI
 {
-    /// <summary>Light stacked-area / line chart on Painter2D (no package dependency). X axis = years TwinState.MinYear..MaxYear (series that start earlier, from 2025, are cut to it).
+    /// <summary>Light stacked-area / line chart on Painter2D (no package dependency). X axis = years TwinState.MinYear..MaxYear (series that start earlier, from TwinData.Y0, are cut to it).
     /// Series[s][i] are raw values per year; they are stacked bottom-up. A vertical marker shows the current year.</summary>
     public class TwinChart : VisualElement
     {

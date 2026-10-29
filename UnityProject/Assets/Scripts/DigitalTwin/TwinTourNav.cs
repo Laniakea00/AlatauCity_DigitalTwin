@@ -165,7 +165,7 @@ namespace AlatauCity.DigitalTwin
                 navBar = null; NavEnsure(); if (navBar != null) navBar.style.display = DisplayStyle.Flex; ShowList(false); NavRefresh();
                 ui.Middle?.AddToClassList("tnav-on");                       // the rebuilt interface (a new language, say) keeps the room for the bar
             }
-            if (!running && Input.GetKeyDown(KeyCode.Escape) && navPop != null && navPop.style.display == DisplayStyle.Flex) ShowList(false);
+            if (!running && Input.GetKeyDown(KeyCode.Escape) && !TwinUI.EscTaken && navPop != null && navPop.style.display == DisplayStyle.Flex) ShowList(false);
         }
     }
 }

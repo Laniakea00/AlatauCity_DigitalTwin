@@ -285,7 +285,7 @@ namespace AlatauCity.DigitalTwin
                 Enter = () => { LS?.Select(null, false); TwinState.SetDistrict(-1); Notifier.TourToasts = true; SmartCityModule.TourShow(SmartCity.CamType.Traffic, 0); },
                 Story = () =>
                 {
-                    int y = TwinState.Year; var s = new Story { Eyebrow = "Smart City · " + y, Head = "Каждая камера и каждое обращение — на карте двойника", Note = "Демо-заглушки: видео — вид из двойника, события смоделированы · API Smart City, iKomek 109, 112" };
+                    int y = TwinState.Year; var s = new Story { Eyebrow = "Smart City · " + y, Head = "Каждая камера и каждое обращение — на карте двойника", Note = "Демо-данные: видео — вид из двойника, события смоделированы · готово к подключению Smart City, iKomek 109, 112" };
                     s.K(Loc.N0(SmartCity.CameraCount(y)), "камер в сети", CInfo).K(Loc.N0(SmartCity.EventsPerDay(y)), "событий видеоаналитики в сутки", new Color(0.96f, 0.72f, 0.20f)).K(Loc.N0(SmartCity.RequestsPerDay(y)), "обращений iKomek 109 в сутки", new Color(0.80f, 0.60f, 1f));
                     s.R("Решено в срок", Mathf.RoundToInt(SmartCity.SolvedInTime(y) * 100f) + " %", COk, SmartCity.SolvedInTime(y)).R("Время реакции", SmartCity.ReactionMin(y) + " мин", CInfo);
                     for (int t = 0; t < 4; t++) s.R(SmartCity.CamTypeName[t], "", SmartCity.CamTypeColor[t]);
@@ -440,7 +440,7 @@ namespace AlatauCity.DigitalTwin
             if (Input.GetKeyDown(KeyCode.F6) && !MapCamera.Typing) { ToggleVideo(); return; }
             NavTick();
             if (!running) return;
-            if (Input.GetKeyDown(KeyCode.Escape) && !Landmarks.IconicInterior.EscTaken) { if (free) NavMap(Overview); else Stop(); return; }
+            if (Input.GetKeyDown(KeyCode.Escape) && !Landmarks.IconicInterior.EscTaken && !TwinUI.EscTaken) { if (free) NavMap(Overview); else Stop(); return; }
             if (Input.GetKeyDown(KeyCode.Space)) { paused = !paused; Caption(); if (voice != null && video) { if (paused) voice.Pause(); else voice.UnPause(); } }
             if (Input.GetKeyDown(KeyCode.RightArrow)) { Next(); return; }
             if (Input.GetKeyDown(KeyCode.LeftArrow)) { Go(idx - 1); return; }

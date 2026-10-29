@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UIElements;
 using AlatauCity.DigitalTwin.Modules;
+using AlatauCity.DigitalTwin.Data;
 
 namespace AlatauCity.DigitalTwin.UI
 {
@@ -57,6 +58,7 @@ namespace AlatauCity.DigitalTwin.UI
             var ps = Resources.Load<PanelSettings>("UI/TwinPanel");
             if (ps == null) { ps = ScriptableObject.CreateInstance<PanelSettings>(); ps.scaleMode = PanelScaleMode.ConstantPixelSize; ps.themeStyleSheet = Resources.Load<ThemeStyleSheet>("UI/TwinTheme"); }
             doc.panelSettings = ps; doc.sortingOrder = 10;
+            TwinModels.Init();                                   // the models behind the numbers, listed in «Источники и допущения»
             modules.Add(new OverviewModule());
             modules.Add(new ObjectsModule());
             modules.Add(new ConstructionModule());
@@ -72,13 +74,13 @@ namespace AlatauCity.DigitalTwin.UI
         {
             TwinState.OnYearChanged += OnYear; TwinState.OnScenarioChanged += OnScenario; TwinState.OnModuleChanged += OnModule;
             TwinState.OnDistrictChanged += OnDistrict; TwinState.OnSelectionChanged += OnSelection; TwinState.OnLanguageChanged += _ => Build();
-            Data.TwinData.OnReady += Build; TwinState.OnLayersReady += LayersReady;
+            Data.TwinData.OnReady += Build; TwinState.OnLayersReady += LayersReady; Sources.OnOpen += OpenSources;
         }
         void OnDisable()
         {
             TwinState.OnYearChanged -= OnYear; TwinState.OnScenarioChanged -= OnScenario; TwinState.OnModuleChanged -= OnModule;
             TwinState.OnDistrictChanged -= OnDistrict; TwinState.OnSelectionChanged -= OnSelection;
-            Data.TwinData.OnReady -= Build; TwinState.OnLayersReady -= LayersReady;
+            Data.TwinData.OnReady -= Build; TwinState.OnLayersReady -= LayersReady; Sources.OnOpen -= OpenSources;
         }
         void Start() { Build(); }
 
@@ -101,9 +103,12 @@ namespace AlatauCity.DigitalTwin.UI
             pins = new VisualElement { pickingMode = PickingMode.Ignore }; pins.AddToClassList("pins"); scene.Add(pins);
 
             // demo badge under the site pill; legend chips and a fading hint above the dock
-            var badge = new VisualElement { pickingMode = PickingMode.Ignore }; badge.AddToClassList("demo-badge");
+            // the demo badge opens the panel «Источники и допущения»: what is open data, what is a QTwin model
+            var badge = new VisualElement(); badge.AddToClassList("demo-badge"); badge.AddToClassList("clickable");
             var ver = Data.TwinData.Ready ? " · " + Loc.T("data_ver") + " " + (Data.TwinData.Version.Split(' ').Length > 1 ? Data.TwinData.Version.Split(' ')[1] : Data.TwinData.Version) : "";
-            badge.Add(new Label(Loc.T("demo_badge") + ver) { pickingMode = PickingMode.Ignore }); scene.Add(badge);
+            badge.Add(new Label(Loc.T("demo_badge") + ver) { pickingMode = PickingMode.Ignore });
+            var bl = new Label("Источники и допущения ›") { pickingMode = PickingMode.Ignore }; bl.AddToClassList("srcp-link"); badge.Add(bl);
+            badge.tooltip = "Источники и допущения"; badge.AddManipulator(new Clickable(() => Sources.Open(null))); Chrome(badge); scene.Add(badge);
             var over = new VisualElement { pickingMode = PickingMode.Ignore }; over.AddToClassList("over-dock"); scene.Add(over);
             var hint = new Label(Loc.T("hint")) { pickingMode = PickingMode.Ignore }; hint.AddToClassList("hint"); over.Add(hint);
             hint.schedule.Execute(() => hint.AddToClassList("hidden")).StartingIn(12000);
@@ -120,6 +125,7 @@ namespace AlatauCity.DigitalTwin.UI
             langPopup = BuildLangPopup(); root.Add(langPopup); Chrome(langPopup);
 
             active = null; OnModule(TwinState.Module); OnScenario(TwinState.Scenario); OnYear(TwinState.Year); OnSelection(TwinState.Selected); OnDistrict(TwinState.District);
+            srcOverlay = null; if (srcOpen) BuildSources();          // a new language rebuilds the open panel too
         }
 
         VisualElement Column(VisualElement parent, string cls)
@@ -152,6 +158,7 @@ namespace AlatauCity.DigitalTwin.UI
             yearLabel = new Label(); yearLabel.AddToClassList("year-big"); h.Add(yearLabel);
             var sep3 = new VisualElement { pickingMode = PickingMode.Ignore }; sep3.AddToClassList("hsep"); h.Add(sep3);
             h.Add(HeadIcon("sparkles", Loc.T("tab_ai"), () => TwinState.SetModule("ai")));
+            h.Add(HeadIcon("file_text", "Источники и допущения", () => Sources.Open(null)));
             VisualElement bell = null; bell = HeadIcon("bell", "Уведомления · Smart City, iKomek 109", () => Notifier.Instance?.TogglePanel(bell));
             bellBadge = new Label("") { pickingMode = PickingMode.Ignore }; bellBadge.AddToClassList("hbadge"); bell.Add(bellBadge); h.Add(bell);
             Notifier.Instance?.BindBadge(bellBadge as Label);
@@ -429,6 +436,86 @@ namespace AlatauCity.DigitalTwin.UI
             var st = Widgets.Fact(Loc.T("p_status"), ""); st.RemoveAt(1); st.Add(Widgets.Status(status, cls)); st.style.borderBottomWidth = 0; card.Add(st);
         }
 
+        // ------------------------------------------------------------------ sources and assumptions
+        VisualElement srcOverlay; ScrollView srcScroll; bool srcOpen, srcHoldsTyping, srcTypingWas; string srcFocus; int srcClosedFrame = -10;
+        /// <summary>True while the panel «Источники и допущения» is open and in the frame it was closed by Esc: other Esc handlers
+        /// (the presentation, its navigator) must leave that key alone. Typing-aware handlers are kept off by MapCamera.Typing.</summary>
+        public static bool EscTaken => Instance != null && (Instance.srcOpen || Instance.srcClosedFrame >= Time.frameCount - 1);
+        public bool SourcesOpen => srcOpen;
+
+        /// <summary>Sources.OnOpen: a chip, the header button or the demo badge was clicked (id — the entry to show, null — the whole list).</summary>
+        void OpenSources(string id)
+        {
+            if (!srcOpen) { srcTypingWas = MapCamera.Typing; srcHoldsTyping = true; }
+            MapCamera.Typing = true;
+            srcOpen = true; srcFocus = id; HidePopups(); BuildSources();
+        }
+        public void CloseSources()
+        {
+            if (!srcOpen) return;
+            srcOpen = false; srcFocus = null; srcClosedFrame = Time.frameCount;
+            if (srcOverlay != null) { ForgetChrome(srcOverlay); srcOverlay.RemoveFromHierarchy(); srcOverlay = null; }
+        }
+
+        void BuildSources()
+        {
+            if (root == null) return;
+            if (srcOverlay != null) { ForgetChrome(srcOverlay); srcOverlay.RemoveFromHierarchy(); }
+            var ov = srcOverlay = new VisualElement(); ov.AddToClassList("srcp-overlay"); Chrome(ov);
+            ov.RegisterCallback<PointerDownEvent>(e => { if (e.target == ov) CloseSources(); });      // a press on the dimmed backdrop closes
+            var p = new VisualElement(); p.AddToClassList("srcp-panel"); ov.Add(p);
+
+            var head = new VisualElement(); head.AddToClassList("srcp-head");
+            head.Add(Icon("file_text", 18));
+            var t = new Label("Источники и допущения") { pickingMode = PickingMode.Ignore }; t.AddToClassList("t"); head.Add(t);
+            head.Add(Widgets.Btn("×", CloseSources, "small", "ghost")); p.Add(head);
+            var intro = new Label("Контрактов с заказчиком пока нет, поэтому реальных данных города в демо нет. Цифры из открытых источников (пресса 2026 года, сайты государства, OpenStreetMap) отмечены синей меткой с датой. Остальное — модели QTwin, жёлтая метка «модель QTwin»: правдоподобные данные, согласованные с генпланом. После подключения к системам заказчика реальные данные заменят модели.")
+                { pickingMode = PickingMode.Ignore };
+            intro.AddToClassList("srcp-intro"); p.Add(intro);
+
+            srcScroll = new ScrollView(ScrollViewMode.Vertical) { horizontalScrollerVisibility = ScrollerVisibility.Hidden, verticalScrollerVisibility = ScrollerVisibility.Auto };
+            srcScroll.AddToClassList("srcp-scroll"); p.Add(srcScroll);
+            VisualElement focusEl = null;
+            int nOpen = 0, nModel = 0; foreach (var s in Sources.All) if (s.Model) nModel++; else nOpen++;
+            for (int g = 0; g < 2; g++)
+            {
+                bool model = g == 1; if ((model ? nModel : nOpen) == 0) continue;
+                var gh = new VisualElement { pickingMode = PickingMode.Ignore }; gh.AddToClassList("srcp-group");
+                var gl = new Label(model ? "Модели QTwin и допущения" : "Открытые источники") { pickingMode = PickingMode.Ignore }; gl.AddToClassList("gt"); gh.Add(gl);
+                var gn = new Label((model ? nModel : nOpen).ToString()) { pickingMode = PickingMode.Ignore }; gn.AddToClassList("gn"); gh.Add(gn);
+                srcScroll.Add(gh);
+                foreach (var s in Sources.All)
+                {
+                    if (s.Model != model) continue;
+                    var it = new VisualElement(); it.AddToClassList("srcp-item"); it.EnableInClassList("model", s.Model);
+                    var row = new VisualElement { pickingMode = PickingMode.Ignore }; row.AddToClassList("srcp-row");
+                    var col = new VisualElement { pickingMode = PickingMode.Ignore }; col.AddToClassList("srcp-col");
+                    var ti = new Label(s.Title ?? s.Id) { pickingMode = PickingMode.Ignore }; ti.AddToClassList("srcp-title"); col.Add(ti);
+                    string meta = s.Model ? "модель QTwin" : (s.Publisher ?? "") + (string.IsNullOrEmpty(s.Date) ? "" : " · " + s.Date);
+                    if (!string.IsNullOrEmpty(meta)) { var me = new Label(meta) { pickingMode = PickingMode.Ignore }; me.AddToClassList("srcp-meta"); col.Add(me); }
+                    row.Add(col);
+                    if (!s.Model && !string.IsNullOrEmpty(s.Url))
+                    {
+                        var url = s.Url; var ob = Widgets.Btn("Открыть", () => Application.OpenURL(url), "small"); ob.AddToClassList("srcp-open"); ob.tooltip = url; row.Add(ob);
+                    }
+                    it.Add(row);
+                    if (!string.IsNullOrEmpty(s.Note)) { var no = new Label(s.Note) { pickingMode = PickingMode.Ignore }; no.AddToClassList("srcp-note"); it.Add(no); }
+                    if (!s.Model && !string.IsNullOrEmpty(s.Url)) { var ul = new Label(ShortUrl(s.Url)) { pickingMode = PickingMode.Ignore }; ul.AddToClassList("srcp-url"); ul.AddToClassList("no-tr"); it.Add(ul); }
+                    if (srcFocus != null && s.Id == srcFocus) { it.AddToClassList("hl"); focusEl = it; }
+                    srcScroll.Add(it);
+                }
+            }
+            root.Add(ov);
+            hovered.Add(ov); MapCamera.BlockInput = true;            // the overlay appears under a still pointer: no "pointer enter" yet
+            if (focusEl != null) { var f = focusEl; var sv = srcScroll; sv.schedule.Execute(() => { if (f.panel != null) sv.ScrollTo(f); }).ExecuteLater(30); }
+        }
+        static string ShortUrl(string u)
+        {
+            int i = u.IndexOf("://", StringComparison.Ordinal); var r = i >= 0 ? u.Substring(i + 3) : u;
+            if (r.StartsWith("www.", StringComparison.Ordinal)) r = r.Substring(4);
+            return r.Length > 64 ? r.Substring(0, 61) + "…" : r.TrimEnd('/');
+        }
+
         // ------------------------------------------------------------------ input blocking
         void Chrome(VisualElement e)
         {
@@ -463,6 +550,10 @@ namespace AlatauCity.DigitalTwin.UI
         void Update()
         {
             PruneHover();
+            // the sources panel is modal: it keeps the keyboard (MapCamera.Typing) until the frame after it closes, so its Esc
+            // does not also leave the tower camera, the monitoring window or a landmark passport
+            if (srcOpen) { MapCamera.Typing = true; if (Input.GetKeyDown(KeyCode.Escape)) CloseSources(); }
+            else if (srcHoldsTyping && Time.frameCount > srcClosedFrame) { srcHoldsTyping = false; MapCamera.Typing = srcTypingWas; }
             bool open = (popup != null && popup.style.display == DisplayStyle.Flex) || (districtPopup != null && districtPopup.style.display == DisplayStyle.Flex);
             if (open && Input.GetMouseButtonDown(0) && !MapCamera.BlockInput) HidePopups();
             if (playIcon != null)

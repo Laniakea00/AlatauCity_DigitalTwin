@@ -91,7 +91,8 @@ Shader "AlatauCity/Lit"
                 // street axes / highways / main roads / the ring road become asphalt (the film road ribbons with markings lie on top),
                 // railways a dark ballast bed, rivers and the rest stay in quiet colours
                 float3 vc = IN.color.rgb;
-                if (distance(vc, float3(0.9357, 0.3492, 0.7977)) < 0.06) clip(-1.0);
+                // (the plan's magenta, and the lilac MapStyle gives the line: a flat purple strip beside the viaduct is not a track)
+                if (distance(vc, float3(0.9357, 0.3492, 0.7977)) < 0.06 || distance(vc, float3(0.698, 0.518, 0.886)) < 0.05) clip(-1.0);
                 if (AlatauOnPad(IN.worldPos) > 0.5) clip(-1.0);
                 // per layer (FilmLook sets _InfraKind): 3 = drawn by something better in the film (river lines → the ground's water,
                 // the ring-road axis → the road ribbons), 2 = bridge decks: asphalt on top, concrete at the sides, 5 = runway concrete

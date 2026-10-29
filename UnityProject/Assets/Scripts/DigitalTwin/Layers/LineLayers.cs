@@ -97,7 +97,7 @@ namespace AlatauCity.DigitalTwin
             }
             {   // road works: planned streets (they appear in the base map already; the layer marks the year they are built)
                 var edges = new List<int>(); var years = new List<Vector4>();
-                for (int i = 0; i < TwinData.Roads.Length; i++) { var e = TwinData.Roads[i]; if (e.Cls != TwinData.RoadClass.Street || e.Year[0] <= 2025) continue; edges.Add(i); years.Add(new Vector4(e.Year[0], e.Year[1], e.Year[2], e.Year[3])); }
+                for (int i = 0; i < TwinData.Roads.Length; i++) { var e = TwinData.Roads[i]; if (e.Cls != TwinData.RoadClass.Street || e.Year[0] <= TwinData.Y0) continue; edges.Add(i); years.Add(new Vector4(e.Year[0], e.Year[1], e.Year[2], e.Year[3])); }
                 var r = Make("roadworks", edges, years, RoadWorkColor, 0, shader, 0, 4.4f);
                 r.sharedMaterial.SetFloat("_BuiltAlpha", 0f); r.sharedMaterial.SetFloat("_PlannedAlpha", 0f);
             }

@@ -51,7 +51,7 @@ namespace AlatauCity.DigitalTwin.Modules
             b.AddToClassList("chip"); b.EnableInClassList("active", get()); parent.Add(b); return b;
         }
 
-        static string Money(float bln) => bln >= 1000f ? Loc.N1(bln / 1000f) + " трлн ₸" : Loc.N0(bln) + " млрд ₸";
+        static string Money(float bln) => bln >= 1000f ? Loc.N1(bln / 1000f) + " трлн ₸" : Loc.N0(bln) + " млрд ₸";
 
         protected override void Build()
         {
@@ -66,6 +66,7 @@ namespace AlatauCity.DigitalTwin.Modules
                 var k = new VisualElement(); k.AddToClassList("kpi");
                 kl[i] = new Label(); kl[i].AddToClassList("l"); k.Add(kl[i]); kv[i] = new Label("—"); kv[i].AddToClassList("v"); k.Add(kv[i]);
                 kb[i] = k; row.Add(k);
+                SourceTags.Attach(k, i == 1 ? Sources.ModelCity : i == 3 ? TwinModels.Money : TwinModels.Build);
             }
 
 
@@ -80,6 +81,7 @@ namespace AlatauCity.DigitalTwin.Modules
             srcLeg = new VisualElement(); srcLeg.AddToClassList("bc-srcleg"); cbk.Add(srcLeg);
             sGap = new Label(); sGap.AddToClassList("note"); sGap.style.marginTop = 6; cbk.Add(sGap);
             moneyNote = new Label(); moneyNote.style.display = DisplayStyle.None; cbk.Add(moneyNote);
+            cbk.Add(SourceTags.Line(TwinModels.Build, TwinModels.Money));
             // the year runs smoothly in the presentation: the chart follows it every frame
             bChart.schedule.Execute(() => { if (bChart.panel == null) return; float yf = Landmarks.LandmarkSystem.YearNow; if (Mathf.Abs(yf - bChart.Year) > 0.002f) { bChart.Year = yf; bChart.MarkDirtyRepaint(); } }).Every(33);
 
@@ -91,12 +93,13 @@ namespace AlatauCity.DigitalTwin.Modules
             chipTraffic = Chip(chips, Loc.T("c_chip_traffic"), () => showTraffic, () => showTraffic = !showTraffic);
             netRows = new VisualElement(); nb.Add(netRows);
             trafficNote = new Label(); trafficNote.AddToClassList("note"); trafficNote.style.marginTop = 6; nb.Add(trafficNote);
+            nb.Add(SourceTags.Line(Sources.GenPlan, TwinModels.Build, TwinModels.Traffic));
 
             var wb = Widgets.Block(panel, Loc.T("c_worst"), Loc.T("c_worst_sub"));
-            worstList = new VisualElement(); wb.Add(worstList);
+            worstList = new VisualElement(); wb.Add(worstList); wb.Add(SourceTags.Line(TwinModels.Build));
 
             var cb = Widgets.Block(panel, Loc.T("c_contractors"), Loc.T("c_contractors_sub"));
-            contractors = new VisualElement(); cb.Add(contractors);
+            contractors = new VisualElement(); cb.Add(contractors); cb.Add(SourceTags.Line(TwinModels.Build));
 
             var n = Widgets.Block(panel); var note = new Label(Loc.T("c_note")); note.AddToClassList("note"); n.Add(note);
             // secondary blocks start folded: the first screen shows status, plan/fact and the worst sites
@@ -150,8 +153,8 @@ namespace AlatauCity.DigitalTwin.Modules
                     float inf = 0; foreach (var kvp in TwinData.CapexInfra[s]) inf += kvp.Value[i];
                     for (int k = 0; k < 4; k++) { float v = inf * InfraShare[k]; for (int dd = 0; dd < 4; dd++) v += TwinData.CapexSources[s][dd][k][i]; ser[k][i] = v; }
                 }
-                // the chart starts in the first year of the timeline; the data start in 2025
-                int k0 = TwinState.MinYear - 2025; float[] Cut(float[] a) { var r = new float[a.Length - k0]; System.Array.Copy(a, k0, r, 0, r.Length); return r; }
+                // the chart starts in the first year of the timeline; the data start in TwinData.Y0
+                int k0 = TwinState.MinYear - TwinData.Y0; float[] Cut(float[] a) { var r = new float[a.Length - k0]; System.Array.Copy(a, k0, r, 0, r.Length); return r; }
                 bChart.Plan = Cut(pl); bChart.Fact = Cut(fa); bChart.Money = System.Array.ConvertAll(ser, Cut); bChart.Year = Mathf.Max(y, Landmarks.LandmarkSystem.YearNow); bChart.Refresh();
                 srcBar.Clear(); srcLeg.Clear(); int yi2 = TwinData.YI(y); float tot = 0; for (int k = 0; k < 4; k++) tot += ser[k][yi2];
                 string[] srcK = { "src_budget", "src_private", "src_ppp", "src_quasi" };
@@ -160,10 +163,10 @@ namespace AlatauCity.DigitalTwin.Modules
                     float sh = ser[k][yi2] / tot; if (sh <= 0.001f) continue;
                     var seg = new VisualElement(); seg.AddToClassList("bc-seg"); seg.style.flexGrow = sh; seg.style.backgroundColor = SrcColors[k]; srcBar.Add(seg);
                     var it = new VisualElement(); it.AddToClassList("bc-si"); var dot = new VisualElement(); dot.AddToClassList("bc-sdot"); dot.style.backgroundColor = SrcColors[k]; it.Add(dot);
-                    it.Add(new Label(Loc.T(srcK[k]) + " " + Mathf.RoundToInt(sh * 100f) + " %")); srcLeg.Add(it);
+                    it.Add(new Label(Loc.T(srcK[k]) + " " + Mathf.RoundToInt(sh * 100f) + " %")); srcLeg.Add(it);
                 }
-                bcV1.text = Loc.N1(gf) + " млн м²"; bcL1.text = $"введено к {y} · {Mathf.RoundToInt(100f * gf / Mathf.Max(gp, 0.01f))} % плана";
-                bcV2.text = Money(factAll); bcL2.text = $"освоено в {y} · {Mathf.RoundToInt(pct)} % плана года";
+                bcV1.text = Loc.N1(gf) + " млн м²"; bcL1.text = $"введено к {y} · {Mathf.RoundToInt(100f * gf / Mathf.Max(gp, 0.01f))} % плана";
+                bcV2.text = Money(factAll); bcL2.text = $"освоено в {y} · {Mathf.RoundToInt(pct)} % плана года";
                 moneyNote.text = string.Format(Loc.T("c_money_note"), y, Loc.N0(planAll), Loc.N0(factAll), Mathf.RoundToInt(pct), Loc.N0(infra));
             }
 
@@ -227,7 +230,7 @@ namespace AlatauCity.DigitalTwin.Modules
                 {
                     float share = 100f * ConstructionLayer.BehindByContractor[i] / ConstructionLayer.SitesByContractor[i];
                     var f = Widgets.Fact(TwinData.ContractorNames[i] + "  ·  " + Loc.N0(ConstructionLayer.SitesByContractor[i]) + " " + Loc.T("c_sites_short"), "");
-                    f.RemoveAt(1); f.Add(Widgets.Status(Mathf.RoundToInt(share) + " % " + Loc.T("c_behind_short"), share > 15 ? "bad" : share > 5 ? "warn" : "ok"));
+                    f.RemoveAt(1); f.Add(Widgets.Status(Mathf.RoundToInt(share) + " % " + Loc.T("c_behind_short"), share > 15 ? "bad" : share > 5 ? "warn" : "ok"));
                     contractors.Add(f);
                 }
             }

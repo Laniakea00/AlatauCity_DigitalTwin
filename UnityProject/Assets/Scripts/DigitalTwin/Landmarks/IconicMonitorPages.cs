@@ -19,7 +19,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
         // the sections; the index is what the recorded video asks for (VideoTab 0, 1, 2)
         const int TObj = 0, T4D = 1, TVid = 2, TInv = 3, TSurv = 4;
         static readonly (string icon, string name, int tab)[] Rail =
-            { ("house", "Объект", TObj), ("gauge", "Аналитика", TAn), ("history", "Съёмки", TSurv), ("box", "4D", T4D), ("video", "Видео", TVid), ("presentation", "Инвестору", TInv) };
+            { ("house", "Объект", TObj), ("trending_up", "Контроль", TCtl), ("gauge", "Аналитика", TAn), ("triangle_alert", "Дефекты", TDef), ("history", "Съёмки", TSurv), ("box", "4D", T4D), ("video", "Видео", TVid), ("presentation", "Инвестору", TInv) };
         static readonly string[] District = { "Gate District", "Golden District", "Growing District", "Green District" };
 
         VisualElement overlay, body, pin, top, gantt, track, strip, viewSw, dimSw, tools;
@@ -53,6 +53,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             ui.BlockWhileHovered(overlay);
             var win = new VisualElement(); win.AddToClassList("mon-win"); overlay.Add(win);
             BuildHead(win);
+            BuildAnswers(win);                                  // the three answers of the investor over every page
             var row = new VisualElement(); row.AddToClassList("mon-main"); win.Add(row);
             var rail = new VisualElement(); rail.AddToClassList("mon-rail"); row.Add(rail);
             foreach (var (icon, name, t) in Rail)
@@ -104,6 +105,8 @@ namespace AlatauCity.DigitalTwin.Landmarks
             BuildSurveyBar();
             BuildVideo();                                       // the camera wall covers the whole page
             BuildAnalytics();                                   // so does the analytics
+            BuildDefects();                                     // the defects: columns and pins over the live model
+            BuildControl();                                     // the investor control covers the whole page
 
             (mid.parent ?? mid).Add(overlay);                 // the root of the interface: it carries the style sheet, the window covers the header too
             RebuildLists(); SetTab(tab); Refresh();
@@ -133,6 +136,8 @@ namespace AlatauCity.DigitalTwin.Landmarks
             headDate = new Label { pickingMode = PickingMode.Ignore }; headDate.AddToClassList("mon-hdate"); head.Add(headDate);
             var pill = new VisualElement { pickingMode = PickingMode.Ignore }; pill.AddToClassList("mon-pill"); pill.Add(TwinUI.Icon("hard_hat", 14));
             pill.Add(new Label("сценарий двойника") { pickingMode = PickingMode.Ignore }); head.Add(pill);
+            pdfHead = new Button(() => ExportPdf()) { focusable = false }; pdfHead.AddToClassList("btn"); pdfHead.AddToClassList("small"); pdfHead.AddToClassList("w7-pdf");
+            pdfHead.Add(TwinUI.Icon("file_text", 14)); pdfHead.Add(new Label("Отчёт PDF") { pickingMode = PickingMode.Ignore }); head.Add(pdfHead);
             head.Add(Widgets.Btn("×", Close, "small", "ghost"));
         }
         /// <summary>The monitoring of the other object, on the same page.</summary>
@@ -173,8 +178,8 @@ namespace AlatauCity.DigitalTwin.Landmarks
             Vis(svL, t == TSurv); Vis(svR, t == TSurv); Vis(svBar, t == TSurv); Vis(svTools, t == TSurv); Vis(svOver, t == TSurv);
             if (t != TSurv) { Vis(chrono, false); Vis(diffLeg, false); Vis(cmpClip, false); Vis(cmpDiv, false); Vis(chipL, false); Vis(chipR, false); }
             Vis(d4L, t == T4D); Vis(d4R, t == T4D); Vis(gantt, t == T4D && ganttOn); Vis(stg, t == T4D && !ganttOn);
-            Vis(strip, t == T4D || t == TInv); Vis(inv, t == TInv); Vis(anPage, t == TAn);
-            Vis(top, t != TVid && t != TAn); Vis(viewSw, t == TObj || t == TInv); Vis(dimSw, t == TSurv || t == T4D);
+            Vis(strip, t == T4D || t == TInv); Vis(inv, t == TInv); Vis(anPage, t == TAn); Vis(ctlPage, t == TCtl); Vis(defL, t == TDef); Vis(defR, t == TDef);
+            Vis(top, t != TVid && t != TAn && t != TCtl); Vis(viewSw, t == TObj || t == TInv); Vis(dimSw, t == TSurv || t == T4D);
             Vis(vidPage, t == TVid && view != View.Cam); Vis(camBar, t == TVid && view == View.Cam);
             body?.EnableInClassList("mon-t4d", t == T4D && !ganttOn);
             body?.EnableInClassList("mon-tsurv", t == TSurv);         // the right column stands left of the tool rail: the top bar keeps clear of it
@@ -185,9 +190,11 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 if (t == TSurv) { planMode = false; playing = false; SetDate(surveys.Count > 0 ? surveys[svA] : Report, true); SetView(svPlan ? View.Plan : View.Complex); }
                 else if (t == T4D) SetView(d4Plan ? View.Plan : obj >= 0 && obj != TI ? View.Tower : View.Complex);
                 else if (t == TVid) { if (view != View.Cam) view = View.Complex; }
+                else if (t == TDef) { planMode = false; playing = false; SetDate(Report, true); if (defSel >= 0) SelectDef(defSel, true); else SetView(View.Complex); }
                 else if (view == View.Plan || view == View.Cam) SetView(obj >= 0 && obj != TI ? View.Tower : View.Complex);
             }
             if (t == TVid) VidGroup(vidGroup);
+            if (t == TCtl && t != was && ctlView == 3) FillChanges();          // the survey chosen on «Съёмки» may have changed
             dirty = true;
         }
         void SetDim(bool plan)
@@ -201,7 +208,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
         {
             if (overlay == null || works.Count == 0) return;
             bool fc = date > Report + 0.002f;
-            headDate.text = (tab == TAn ? "аналитика на " : tab == TSurv ? "съёмка " : fc ? "прогноз на " : planMode ? "план на " : "факт на ") + Day(tab == TAn ? Report : date);
+            headDate.text = (tab == TCtl ? "контроль на " : tab == TDef ? "дефекты на " : tab == TAn ? "аналитика на " : tab == TSurv ? "съёмка " : fc ? "прогноз на " : planMode ? "план на " : "факт на ") + Day(tab == TAn || tab == TCtl ? Report : date);
             stripDate.text = Day(date);
             stripMode.text = planMode ? "показан план" : fc ? "прогноз после съёмки" : "факт по съёмке";
             playIcon.style.backgroundImage = new StyleBackground(Resources.Load<Texture2D>("UI/Icons/i_" + (playing ? "pause" : "play")));
@@ -264,7 +271,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
         /// <summary>The lists that follow the building looked at: readiness by stages (4D), the stage columns over the timeline.</summary>
         void RebuildLists() { FillStages(); FillStg(); }
 
-        static string Signed(float pp) => (pp >= 0f ? "+" : "−") + Loc.N1(Mathf.Abs(pp)) + " п.п.";
+        static string Signed(float pp) => (pp >= 0f ? "+" : "−") + Loc.N1(Mathf.Abs(pp)) + "\u00A0п.п.";
         static string EndDev(int days) => days > 3 ? $"позже на {days} дн." : days < -3 ? $"раньше на {-days} дн." : "в срок";
         /// <summary>Readiness of the complex weighted by the budgets of its buildings (plan or actual).</summary>
         float Ready(float d, bool fact) { float s = 0f, c = 0f; for (int i = 0; i < L.Parts.Count; i++) { s += L.Parts[i].Capex * (fact ? FactP(i, d) : PlanP(i, d)); c += L.Parts[i].Capex; } return c > 0f ? s / c : 0f; }
@@ -347,7 +354,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 r.Add(Widgets.Btn("Просмотреть", go, "small"));
             }
             N(now.AddMinutes(-4), "truck", "Въехал бетоновоз", "КПП-1 · CAM-05", Blue, () => OpenCam(5));
-            N(now.AddMinutes(-38), "hard_hat", "Подъём опалубки ядра на этаж", "CAM-07 · кран над захваткой", Orange, () => OpenCam(0));
+            N(now.AddMinutes(-38), "hard_hat", L.Id == "kaist" ? "Бетонирование плиты на захватке башни" : "Подъём опалубки ядра на этаж", CamId[0] + " · " + CamName[0], Orange, () => OpenCam(0));
             int worst = -1, wd = 3;
             for (int i = 0; i < L.Parts.Count; i++) { var o = Obj(i, Report); if (o.Fact > 0f && o.Fact < 0.999f && o.Days > wd) { wd = o.Days; worst = i; } }
             if (worst >= 0) { int k = worst; N(now.Date.AddHours(8).AddMinutes(25), "triangle_alert", "Отставание " + wd + " дн. · " + Pt(k).Name, "по съёмке " + Day(Report), new Color(0.96f, 0.65f, 0.14f), () => { SetTab(T4D); SelectObj(k, true); }); }

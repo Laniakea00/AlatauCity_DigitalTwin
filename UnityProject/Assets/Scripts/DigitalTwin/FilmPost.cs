@@ -15,9 +15,11 @@ namespace AlatauCity.DigitalTwin
         [Range(0, 12)] public float maxBlur = 5f;        // pixels at 1080 lines
         [Range(0, 1)] public float bloom = 0.32f;
         [Range(0.5f, 1.2f)] public float bloomThreshold = 0.86f;
-        [Range(0.5f, 2)] public float exposure = 1.06f;
-        [Range(0.8f, 1.4f)] public float contrast = 1.10f;
-        [Range(0, 1.6f)] public float saturation = 1.04f;
+        [Range(0.5f, 2)] public float exposure = 1.10f;
+        [Range(0.8f, 1.4f)] public float contrast = 1.03f;
+        [Range(0, 1.6f)] public float saturation = 1.08f;
+        [Range(0, 1)] public float filmic = 1f;                 // 0 = soft shoulder only, 1 = the ACES camera curve
+        [Range(0.3f, 1.5f)] public float filmicExposure = 0.78f; // light into the curve (0.75 keeps mid grey where it was)
         [Range(0, 1)] public float vignette = 0.30f;
 
         Camera cam; Material mat; bool hdr0; DepthTextureMode depth0;
@@ -40,7 +42,7 @@ namespace AlatauCity.DigitalTwin
             mat.SetVector(ProjId, new Vector4(1f / P.m00, 1f / P.m11, aoRadius, aoStrength));
             mat.SetVector(FadeId, new Vector4(RenderSettings.fog ? RenderSettings.fogDensity : 0f, Time.frameCount % 64, 0, 0));
             mat.SetVector(GradeId, new Vector4(exposure, contrast, saturation, vignette));
-            mat.SetVector(BloomPId, new Vector4(bloomThreshold, bloom, 0, 0));
+            mat.SetVector(BloomPId, new Vector4(bloomThreshold, bloom, filmic, filmicExposure));
             mat.SetVector(DofId, new Vector4(focus, focusRange, maxBlur * h / 1080f, depthOfField ? 1f : 0f));
 
             // 1. ambient occlusion at half size, blurred along the surfaces

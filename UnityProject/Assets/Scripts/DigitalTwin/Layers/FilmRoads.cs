@@ -388,7 +388,51 @@ namespace AlatauCity.DigitalTwin
                 res.Add(new Stroke { Cls = cls, Years = yv, A = f.a >= 0 ? f.a : -1000000 - res.Count * 2, B = f.b >= 0 ? f.b : -1000001 - res.Count * 2,
                     P = pts, Len = L, Ramp = f.k == 2, OneWay = f.k == 1, Fixed = true });
             }
+            DropStubs(res);
             return res;
+        }
+
+        /// <summary>Stubs of the vectorised plan: a short piece (under 80 m, not a ramp) with an end that touches no other road within 16 m
+        /// ends in a field. Such pieces are not drawn (the survey found ≈55 of them, mostly streets).</summary>
+        static void DropStubs(List<Stroke> res)
+        {
+            const float Cell = 32f, Near = 16f;
+            var grid = new Dictionary<long, List<int>>();
+            long Key(int gx, int gz) => ((long)gx << 32) ^ (uint)gz;
+            for (int k = 0; k < res.Count; k++)
+                foreach (var p in res[k].P)
+                {
+                    long key = Key(Mathf.FloorToInt(p.x / Cell), Mathf.FloorToInt(p.y / Cell));
+                    if (!grid.TryGetValue(key, out var l)) grid[key] = l = new List<int>();
+                    if (l.Count == 0 || l[l.Count - 1] != k) l.Add(k);
+                }
+            bool Touches(int self, Vector2 e)
+            {
+                int gx = Mathf.FloorToInt(e.x / Cell), gz = Mathf.FloorToInt(e.y / Cell);
+                for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++)
+                {
+                    if (!grid.TryGetValue(Key(gx + dx, gz + dz), out var l)) continue;
+                    foreach (int j in l)
+                    {
+                        if (j == self) continue; var q = res[j].P;
+                        for (int i = 0; i + 1 < q.Count; i++)
+                        {
+                            var a = q[i]; var ab = q[i + 1] - a; float L2 = ab.sqrMagnitude;
+                            var c = L2 < 1e-6f ? a : a + ab * Mathf.Clamp01(Vector2.Dot(e - a, ab) / L2);
+                            if ((c - e).sqrMagnitude < Near * Near) return true;
+                        }
+                    }
+                }
+                return false;
+            }
+            var drop = new List<int>();
+            for (int k = 0; k < res.Count; k++)
+            {
+                var s = res[k]; if (s.Ramp || s.Len >= 80f || s.P.Count < 2) continue;
+                if (!Touches(k, s.P[0]) || !Touches(k, s.P[s.P.Count - 1])) drop.Add(k);
+            }
+            for (int i = drop.Count - 1; i >= 0; i--) res.RemoveAt(drop[i]);
+            if (drop.Count > 0) Debug.Log("[Alatau] film roads: " + drop.Count + " dead-end stubs of the plan not drawn");
         }
 
         [System.Serializable] class IcPath { public int[] y; public float[] g; }

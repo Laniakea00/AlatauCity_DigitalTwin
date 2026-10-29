@@ -18,7 +18,9 @@ namespace AlatauCity.DigitalTwin
 
         static readonly int FilmId = Shader.PropertyToID("_AlatauFilm"), NightId = Shader.PropertyToID("_AlatauNight"), SunDirId = Shader.PropertyToID("_AlatauSunDir"),
             SunColId = Shader.PropertyToID("_AlatauSunColor"), ZenId = Shader.PropertyToID("_AlatauSkyZenith"), HorId = Shader.PropertyToID("_AlatauSkyHorizon"),
-            GndId = Shader.PropertyToID("_AlatauSkyGround"), StyleId = Shader.PropertyToID("_AlatauStyleTex");
+            GndId = Shader.PropertyToID("_AlatauSkyGround"), StyleId = Shader.PropertyToID("_AlatauStyleTex"),
+            SkyTexId = Shader.PropertyToID("_AlatauSkyTex"), SkyTexOnId = Shader.PropertyToID("_AlatauSkyTexOn");
+        Texture2D skyPhoto;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         static void Boot() { new GameObject("Film look").AddComponent<FilmLook>(); }
@@ -78,6 +80,12 @@ namespace AlatauCity.DigitalTwin
             }
             else { Shader.SetGlobalFloat("_AlatauMatOn", 0f); Debug.LogWarning("[Alatau] film look: material textures not found in Resources/Materials"); }
 
+            // the photographed day sky (upper half of a CC0 Poly Haven HDRI, its sun on the left edge): seen in the sky and in every
+            // reflection; without it the gradient alone is drawn
+            skyPhoto = Resources.Load<Texture2D>("Film/Gate/AlatauSkyDome");
+            if (skyPhoto != null) { skyPhoto.wrapModeU = TextureWrapMode.Repeat; skyPhoto.wrapModeV = TextureWrapMode.Clamp; Shader.SetGlobalTexture(SkyTexId, skyPhoto); }
+            Shader.SetGlobalFloat(SkyTexOnId, 0f);
+
             var blocks = Resources.Load<Texture2D>("Map/map_blocks");
             if (blocks != null) Shader.SetGlobalTexture("_AlatauBlockTex", blocks);
             Shader.SetGlobalFloat("_AlatauBlockOn", blocks != null ? 1f : 0f);
@@ -127,7 +135,7 @@ namespace AlatauCity.DigitalTwin
             float lamps = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(9f, -5f, el));                   // windows light up from dusk on
             Color sunC = Color.Lerp(Color.Lerp(Color.Lerp(new Color(1f, 0.96f, 0.90f), new Color(1f, 0.74f, 0.47f), gold), new Color(1f, 0.56f, 0.40f), dusk), new Color(0.34f, 0.42f, 0.62f), night);
             Color zen = Color.Lerp(Color.Lerp(Color.Lerp(new Color(0.27f, 0.48f, 0.80f), new Color(0.30f, 0.44f, 0.70f), gold), new Color(0.15f, 0.22f, 0.44f), dusk), new Color(0.025f, 0.04f, 0.10f), night);
-            Color hor = Color.Lerp(Color.Lerp(Color.Lerp(new Color(0.76f, 0.85f, 0.93f), new Color(0.97f, 0.78f, 0.58f), gold), new Color(0.93f, 0.56f, 0.40f), dusk), new Color(0.10f, 0.12f, 0.22f), night);
+            Color hor = Color.Lerp(Color.Lerp(Color.Lerp(new Color(0.75f, 0.80f, 0.87f), new Color(0.97f, 0.78f, 0.58f), gold), new Color(0.93f, 0.56f, 0.40f), dusk), new Color(0.10f, 0.12f, 0.22f), night);
             Color gnd = Color.Lerp(hor, new Color(0.5f, 0.5f, 0.5f), 0.35f) * 0.85f;
             if (sun != null)
             {
@@ -152,6 +160,7 @@ namespace AlatauCity.DigitalTwin
             if (roads != null) roads.Show(true);
             Redraw();
             Shader.SetGlobalFloat(FilmId, 1f); Shader.SetGlobalFloat(NightId, lamps); Shader.SetGlobalVector(SunDirId, toSun);
+            Shader.SetGlobalFloat(SkyTexOnId, skyPhoto != null ? (1f - dusk) * (1f - night) * (1f - 0.35f * gold) : 0f);
             Shader.SetGlobalColor(SunColId, sunC); Shader.SetGlobalColor(ZenId, zen); Shader.SetGlobalColor(HorId, hor); Shader.SetGlobalColor(GndId, gnd);
         }
 
@@ -170,7 +179,7 @@ namespace AlatauCity.DigitalTwin
             if (post != null) post.enabled = false;
             foreach (var r in curtains) if (r != null) r.enabled = true;
             if (roads != null) roads.Show(false);
-            Shader.SetGlobalFloat(FilmId, 0f);
+            Shader.SetGlobalFloat(FilmId, 0f); Shader.SetGlobalFloat(SkyTexOnId, 0f);
         }
     }
 }

@@ -1,0 +1,8 @@
+{
+  "name": "alatau-ai-proxy",
+  "private": true,
+  "type": "module",
+  "description": "Proxy between the Alatau City Digital Twin and the Gemini API: owns the system prompt and tools, keeps the key server-side.",
+  "scripts": { "start": "node server.js" },
+  "engines": { "node": ">=22" }
+}

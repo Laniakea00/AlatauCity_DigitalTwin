@@ -11,7 +11,7 @@ namespace AlatauCity.DigitalTwin.UI
     /// texture (10 frames a second, only while a feed is on screen). In front of it live what the camera watches (FeedActors): cars and
     /// buses on the street, people on the pavements, workers, an excavator and a dump truck on a site — seen only by this camera. The
     /// video-analytics boxes are worked out from them every frame the picture is taken: each box sits on a real figure in the picture,
-    /// follows it and leaves when it walks out of the frame or behind a building. On top: REC, camera id, clock and the «ЗАГЛУШКА» mark —
+    /// follows it and leaves when it walks out of the frame or behind a building. On top: REC, camera id, clock and the «ДЕМО-ПОТОК» mark —
     /// the real RTSP / Smart City stream replaces the texture later.</summary>
     public class FeedRig : MonoBehaviour
     {
@@ -353,7 +353,7 @@ namespace AlatauCity.DigitalTwin.UI
                     case K.Excavator: tag = "экскаватор"; col = Amber; break;
                     default: tag = "самосвал"; col = Amber; break;
                 }
-                dets.Add(new FeedRig.Det { R = r, Tag = tag + " · " + Mathf.RoundToInt(Mathf.Clamp(conf, 0.5f, 0.99f) * 100f) + " %", C = col });
+                dets.Add(new FeedRig.Det { R = r, Tag = tag + " · " + Mathf.RoundToInt(Mathf.Clamp(conf, 0.5f, 0.99f) * 100f) + " %", C = col });
             }
         }
         static readonly Color Green = new Color(0.35f, 0.95f, 0.55f, 0.95f), Red = new Color(1f, 0.30f, 0.24f, 0.98f), Amber = new Color(1f, 0.76f, 0.24f, 0.95f);
@@ -525,7 +525,7 @@ namespace AlatauCity.DigitalTwin.UI
             var sp = new VisualElement { pickingMode = PickingMode.Ignore }; sp.style.flexGrow = 1; top.Add(sp);
             lClock = new Label { pickingMode = PickingMode.Ignore }; lClock.AddToClassList("feed-clock"); top.Add(lClock);
             lPlace = new Label { pickingMode = PickingMode.Ignore }; lPlace.AddToClassList("feed-place"); overlay.Add(lPlace);
-            lStub = new Label("ЗАГЛУШКА · ДЕМО-ПОТОК") { pickingMode = PickingMode.Ignore }; lStub.AddToClassList("feed-stub"); overlay.Add(lStub);
+            lStub = new Label("ДЕМО-ПОТОК · МОДЕЛЬ QTWIN") { pickingMode = PickingMode.Ignore }; lStub.AddToClassList("feed-stub"); overlay.Add(lStub);
             RegisterCallback<AttachToPanelEvent>(_ => { if (!attached) { attached = true; FeedRig.Ensure().Use(true); if (cam != null) FeedRig.Instance.Look(cam); } });
             RegisterCallback<DetachFromPanelEvent>(_ => { if (attached) { attached = false; FeedRig.Instance?.Use(false); } });
             schedule.Execute(Tick).Every(100);

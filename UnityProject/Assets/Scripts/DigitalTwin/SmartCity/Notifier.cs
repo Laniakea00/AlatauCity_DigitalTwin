@@ -137,7 +137,7 @@ namespace AlatauCity.DigitalTwin.UI
             }
             if (shown == 0) { var l = new Label("Событий нет."); l.AddToClassList("note"); sv.Add(l); }
             var go = Widgets.Btn("Открыть Smart City: камеры и обращения", () => { HidePanel(); TwinState.SetModule("smartcity"); }, "primary", "wide"); popup.Add(go);
-            var note = new Label("Демо: события смоделированы. Интеграция — API Smart City Alatau, iKomek 109 и 112 (заглушки)."); note.AddToClassList("note"); note.style.marginTop = 6; popup.Add(note);
+            var note = new Label("Демо-сценарий: события смоделированы QTwin. Интеграция — API Smart City Alatau, iKomek 109 и 112 после подключения к системам заказчика."); note.AddToClassList("note"); note.style.marginTop = 6; popup.Add(note);
         }
     }
 }

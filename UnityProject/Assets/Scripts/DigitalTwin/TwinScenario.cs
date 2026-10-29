@@ -21,7 +21,7 @@ namespace AlatauCity.DigitalTwin
             Scenario.Fast => Loc.T("sc_fast_d"), Scenario.Slow => Loc.T("sc_slow_d"), Scenario.InfraFirst => Loc.T("sc_infra_d"), _ => Loc.T("sc_base_d")
         };
 
-        /// <summary>Effective completion year of a building under a scenario. Existing buildings (year ≤ 2025) never move.</summary>
+        /// <summary>Effective completion year of a building under a scenario. Existing buildings (year ≤ TwinState.MinYear) never move.</summary>
         public static int EffectiveYear(BuildingInfo b, Scenario s)
         {
             int y = b.Year; if (y <= TwinState.MinYear || b.Source == "existing_osm") return y;

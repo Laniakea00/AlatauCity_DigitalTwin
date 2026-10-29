@@ -58,10 +58,15 @@ Shader "AlatauCity/Landmark"
         void vert(inout appdata_full v, out Input o)
         {
             UNITY_INITIALIZE_OUTPUT(Input, o); o.fm = float4(v.texcoord.xy, v.texcoord1.xy); o.lp = float2(v.vertex.y, v.texcoord2.x); o.win = v.texcoord3;
+            // tree crowns (planting with a tree tag): normals lean up as in AlatauTree, a soft underside instead of a dark ball
+            float crownV = step(abs(v.texcoord1.x - 6.0), 0.5) * step(v.texcoord1.y, -6.5);
+            v.normal = normalize(lerp(v.normal, float3(0, 1, 0), 0.40 * crownV));
         }
         half4 LightingSoft(SurfaceOutput s, half3 lightDir, half3 viewDir, half atten)
         {
-            half nl = saturate(dot(s.Normal, lightDir));
+            // Gloss = 1 on tree crowns: foliage lets light through, a half-wrapped diffuse as the film trees (AlatauTree)
+            half d = dot(s.Normal, lightDir);
+            half nl = lerp(saturate(d), saturate(d * 0.65 + 0.35), s.Gloss);
             half4 c; c.rgb = s.Albedo * _LightColor0.rgb * (nl * atten); c.a = s.Alpha;
             half3 hv = normalize(lightDir + viewDir);
             c.rgb += _LightColor0.rgb * (pow(saturate(dot(s.Normal, hv)), 140.0) * s.Specular * atten * 1.6);
@@ -78,6 +83,14 @@ Shader "AlatauCity/Landmark"
             else if (q >= 0.999) { rev = 100000.0; bld = 0.0; fcd = 100000.0; lnd = 1.0; }
             else if (treeTag) { rev = 100000.0; bld = 1.0; lnd = q; }       // trees: planted one by one over the window
             else { rev = max(h0 + (h1 - h0) * saturate(q / 0.6), h0 + 0.6); bld = 1.0; fcd = h0 + (h1 - h0) * saturate((q - 0.3) / 0.6); lnd = saturate((q - 0.8) / 0.2); }
+        }
+        // value noise in 3D for the leaf clumps of the crowns (as AlatauTree)
+        float LHash3(float3 p) { return frac(sin(dot(p, float3(127.1, 311.7, 74.7))) * 43758.5453); }
+        float LNoise3(float3 p)
+        {
+            float3 i = floor(p), f = frac(p); f = f * f * (3.0 - 2.0 * f);
+            return lerp(lerp(lerp(LHash3(i), LHash3(i + float3(1, 0, 0)), f.x), lerp(LHash3(i + float3(0, 1, 0)), LHash3(i + float3(1, 1, 0)), f.x), f.y),
+                        lerp(lerp(LHash3(i + float3(0, 0, 1)), LHash3(i + float3(1, 0, 1)), f.x), lerp(LHash3(i + float3(0, 1, 1)), LHash3(i + float3(1, 1, 1)), f.x), f.y), f.z);
         }
         void surf(Input IN, inout SurfaceOutput o)
         {
@@ -137,7 +150,9 @@ Shader "AlatauCity/Landmark"
             if (_Park > 0.5) clip(lnd - st0 + 0.015);                    // grounds not started yet: the old terrain shows through
             if (tree && (!parkTree || pid > 0) && bld > 0.5) clip(land * 1.15 - AHash2(floor(IN.worldPos.xz / 4.0)));
             // photo materials (film look): paving slabs and lawn grass, sampled before any branch
-            AMat mPave = AlatauMat(IN.worldPos.xz, 7.0), mGrass = AlatauMat(IN.worldPos.xz, 8.0);
+            AMat mPave = AlatauMat(IN.worldPos.xz, 7.0), mGrass = AlatauMat(IN.worldPos.xz, 8.0), mAsph = AlatauMat(IN.worldPos.xz, 6.0);
+            // the same photos once more at a coarse scale (a few tens of metres): breaks the repeat of the tiles from the air
+            float macro = ANoise(IN.worldPos.xz * 0.021) * 0.6 + ANoise(IN.worldPos.xz * 0.083) * 0.4;
             float3 a = IN.color.rgb; float3 emit = 0; float spec = 0;
             float film = step(0.5, _AlatauFilm);
             float3 rdir = reflect(-view, n);
@@ -159,6 +174,19 @@ Shader "AlatauCity/Landmark"
                 q = QTwinSurface(qt, pid, uv.x, uv.y, fw.x, fw.y, IN.worldPos.xz, qfw, qfl, n, night);
                 #endif
                 QResolve(q, qfl);
+                // photo detail on the ground of the page: lawns (grass), plazas and paths (paving), streets (asphalt), with a
+                // broad variation so large areas do not look printed
+                if (n.y > 0.6 && (q.soft || qt == 31))
+                {
+                    bool isGrass = q.pat == QP_GRASS || q.pat == QP_GARDEN || q.pat == QP_SLOPE;
+                    bool isAsph = qt == 31;
+                    float3 pp = isGrass ? mGrass.pattern : isAsph ? mAsph.pattern : mPave.pattern;
+                    float pao = isGrass ? mGrass.ao : isAsph ? mAsph.ao : mPave.ao;
+                    float k = (isGrass ? 0.70 : isAsph ? 0.45 : 0.55) * film;
+                    q.col *= lerp(float3(1, 1, 1), pp * lerp(1.0, pao, 0.5), k) * lerp(1.0, 0.86 + 0.28 * macro, film);
+                    // lawns as the city's grass: a natural olive instead of the page's bright green, with broad mown patches
+                    if (isGrass) q.col = lerp(q.col, q.col.ggg * float3(0.80, 1.0, 0.55), 0.30 * film) * lerp(1.0, 0.84 + 0.32 * ANoise(IN.worldPos.xz * 0.0065 + 2.0), film);
+                }
                 float3 f0 = lerp(float3(0.04, 0.04, 0.04), q.col, q.metal);
                 float gloss = (1.0 - q.rough) * (1.0 - q.rough);
                 a = pow(max(q.col * (1.0 - 0.8 * q.metal), 1e-5), 0.4545);
@@ -223,8 +251,20 @@ Shader "AlatauCity/Landmark"
             else if (id == 6)
             {
                 float g2 = ANoise(IN.worldPos.xz * 0.11 + 4.0);
-                a *= 0.78 + 0.30 * grain + 0.12 * g2;
-                if (!tree && n.y > 0.6) a *= lerp(float3(1, 1, 1), mGrass.pattern * lerp(1.0, mGrass.ao, 0.6), 0.85 * film);
+                if (tree)
+                {
+                    // a crown of the film trees: leaf clumps, warmer sunlit tops, the sky on the edge of the leaves
+                    float cl = LNoise3(IN.worldPos * 1.35) * 0.65 + LNoise3(IN.worldPos * 3.4 + 7.0) * 0.35;
+                    a *= lerp(0.74, 1.12, smoothstep(0.25, 0.8, cl));
+                    a *= lerp(float3(0.90, 0.95, 1.05), float3(1.07, 1.04, 0.90), saturate(n.y * 0.5 + 0.5));
+                    float rimT = pow(1.0 - saturate(dot(view, n)), 3.0);
+                    emit += film * (lerp(_AlatauSkyHorizon.rgb, _AlatauSkyZenith.rgb, 0.4) * a * 0.25 + _AlatauSkyHorizon.rgb * rimT * 0.10 * (0.6 + 0.4 * cl));
+                }
+                else
+                {
+                    a *= 0.78 + 0.30 * grain + 0.12 * g2;
+                    if (n.y > 0.6) a *= lerp(float3(1, 1, 1), mGrass.pattern * lerp(1.0, mGrass.ao, 0.6), 0.85 * film);
+                }
             }
             else if (id == 7)
             {
@@ -296,7 +336,7 @@ Shader "AlatauCity/Landmark"
             if (film > 0.5) amb = lerp(_AlatauSkyGround.rgb * 0.62, lerp(_AlatauSkyHorizon.rgb, _AlatauSkyZenith.rgb, 0.5), n.y * 0.5 + 0.5) * 0.84 * lerp(0.75, 1.0, saturate(IN.lp.x / 12.0));
             float rim = pow(1.0 - saturate(dot(n, view)), 4.0);
             emit += hiP * (rim * 0.7 + 0.03) * float3(0.85, 0.30, 0.95);
-            o.Albedo = a; o.Emission = emit + a * amb; o.Specular = spec; o.Alpha = 1;
+            o.Albedo = a; o.Emission = emit + a * amb; o.Specular = spec; o.Alpha = 1; o.Gloss = tree && id == 6 ? 1.0 : 0.0;
             if (dOn)
             {
                 // like a diff before a push: new in blue (the structure deep blue, the facade and the grounds light blue), gone in red,
