@@ -29,6 +29,7 @@ Shader "AlatauCity/Lit"
         #pragma skip_variants LIGHTPROBE_SH
         #include "Assets/Shaders/AlatauFilm.cginc"
         sampler2D _MainTex; fixed4 _Color, _AlatauSelColor; half _Ambient; float _AlatauYear, _AlatauSel, _AlatauScenario, _AlatauMode, _AlatauYearF, _AlatauGrow, _AlatauBldSat, _AlatauBlackout, _InfraKind, _AlatauHiOn, _AlatauHiCur; float4 _AlatauHiWave;
+        float _AlatauDark;         // FilmLook (w12): 0 day .. 1 deep night, a faint blue night fill so dark walls keep their shape
         sampler2D _AlatauYearTex, _AlatauStateTex, _AlatauGeoTex, _AlatauTintTex, _AlatauStyleTex, _AlatauHideTex; float _AlatauHideOn;
         struct Input { float2 uv_MainTex; float4 color : COLOR; float2 info; float2 wall; float3 worldPos; float3 worldNormal; float vface : VFACE; };
         void vert(inout appdata_full v, out Input o) { UNITY_INITIALIZE_OUTPUT(Input, o); o.info = v.texcoord1.xy; o.wall = v.texcoord.xy; }
@@ -52,7 +53,9 @@ Shader "AlatauCity/Lit"
             float3 view = normalize(_WorldSpaceCameraPos - IN.worldPos);
             float4 geoF = tex2Dlod(_AlatauGeoTex, tuv), sty = tex2Dlod(_AlatauStyleTex, tuv);
             float part = IN.wall.y < -0.5 ? round(-IN.wall.y) : 0.0;      // 1 parapet / crown, 2 plant, 3 tile roof (AlatauRoofs)
-            AFacade F = AlatauFacade(IN.wall, IN.worldPos.y - geoF.r, max(geoF.g, 3.0), max(sty.b * 255.0, 1.0), round(sty.r * 255.0), sty.g, IN.color.rgb, wn, view, IN.worldPos, part);
+            float4 rf = tex2Dlod(_AlatauRoofTex, tuv); float ra = (rf.r - 0.5) * 1.5707963;          // which way the building is turned (BuildingChunk)
+            AFacade F = AlatauFacade(IN.wall, IN.worldPos.y - geoF.r, max(geoF.g, 3.0), max(sty.b * 255.0, 1.0), round(sty.r * 255.0), sty.g, IN.color.rgb, wn, view, IN.worldPos, part,
+                                     float3(cos(ra), sin(ra), rf.a * step(0.5, _AlatauRoofOn)));
             // buildings replaced by a landmark (Iconic Complex, plants …) are not drawn
             if (_AlatauHideOn > 0.5 && IN.info.y > 0.5)
             {
@@ -188,7 +191,7 @@ Shader "AlatauCity/Lit"
             o.Albedo = sel ? _AlatauSelColor.rgb : a;
             // ambient light is added here ("noambient" above): the film look shades it by height and facing, the plain look as before
             half3 amb = ShadeSH9(half4(wn, 1.0));
-            if (filmAny) amb = lerp(_AlatauSkyGround.rgb * 0.62, lerp(_AlatauSkyHorizon.rgb, _AlatauSkyZenith.rgb, 0.5), wn.y * 0.5 + 0.5) * 0.84 * F.ao;
+            if (filmAny) amb = (lerp(_AlatauSkyGround.rgb * 0.62, lerp(_AlatauSkyHorizon.rgb, _AlatauSkyZenith.rgb, 0.5), wn.y * 0.5 + 0.5) * 0.84 + _AlatauDark * float3(0.03, 0.04, 0.065)) * F.ao;
             o.Emission = (sel ? _AlatauSelColor.rgb * 0.45 : emit) + o.Albedo * amb;
             o.Specular = filmAny && !sel ? F.spec * (film ? 1.0 : 0.5) : 0.0;
             o.Alpha = 1;

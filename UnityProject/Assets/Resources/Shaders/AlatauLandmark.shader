@@ -44,6 +44,8 @@ Shader "AlatauCity/Landmark"
         #include "Assets/Shaders/AlatauQTwin.cginc"
         #endif
         float _Reveal, _Build, _Ghost, _Hi, _Facade, _Land, _Glow, _H, _Park;
+        // night (FilmLook): _AlatauDark 0..1 how dark it is (a cool sky fill keeps the models legible), _AlatauLampOn the city's lights
+        float _AlatauDark, _AlatauLampOn;
         // buildings of a complex (LandmarkSystem.Parts): x reveal, y build, z facade, w landscaping · x glow, y height, z outline, w progress
         float4 _PartA[8], _PartB[8];
         // BIM look of the construction monitoring (4D page), set only around its own camera: 0 off, 1 built parts as flat slate
@@ -334,6 +336,17 @@ Shader "AlatauCity/Landmark"
             // ambient: in the film look shaded by facing and height like the city (AlatauLit), else spherical harmonics
             half3 amb = ShadeSH9(half4(n, 1.0));
             if (film > 0.5) amb = lerp(_AlatauSkyGround.rgb * 0.62, lerp(_AlatauSkyHorizon.rgb, _AlatauSkyZenith.rgb, 0.5), n.y * 0.5 + 0.5) * 0.84 * lerp(0.75, 1.0, saturate(IN.lp.x / 12.0));
+            // at night: the sky glow over a lit city as fill, and warm floodlights at the foot of the facades washing up the walls;
+            // Iconic, the hero of the night, gets a stronger wash that carries up to the top of the tower
+            float darkF = _AlatauDark * film, lampF = _AlatauLampOn * film;
+            amb += darkF * half3(0.03, 0.04, 0.065);
+            float wallU = (1.0 - saturate(abs(n.y) * 2.0)) * (tree ? 0.0 : 1.0);
+            float upl = exp(-max(IN.lp.x, 0.0) / max(hgt * 0.22, 12.0)) * wallU;
+            #if defined(ALATAU_QT_ICONIC)
+            emit += a * float3(1.0, 0.80, 0.56) * lampF * (upl * 0.9 + wallU * (0.04 + 0.10 * saturate(IN.lp.x / max(hgt, 1.0))));
+            #else
+            emit += a * float3(1.0, 0.80, 0.56) * lampF * upl * 0.45;
+            #endif
             float rim = pow(1.0 - saturate(dot(n, view)), 4.0);
             emit += hiP * (rim * 0.7 + 0.03) * float3(0.85, 0.30, 0.95);
             o.Albedo = a; o.Emission = emit + a * amb; o.Specular = spec; o.Alpha = 1; o.Gloss = tree && id == 6 ? 1.0 : 0.0;

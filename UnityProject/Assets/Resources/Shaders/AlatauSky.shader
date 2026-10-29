@@ -1,4 +1,6 @@
-// The sky of the film look: a gradient from the horizon haze to the zenith with the sun and its glow.
+// The sky of the film look: a gradient from the horizon haze to the zenith with the sun and its glow; at sunset a wide glow along the
+// horizon toward the sun, then the blue hour; at night stars (procedural, fading into the city haze), the moon (where FilmLook puts
+// the night light) and the warm glow of the lit city low on the horizon (_AlatauDusk, _AlatauDark set by FilmLook).
 // Colours and the sun direction are globals set by FilmLook.cs; the same function (AlatauSky) is what glass and water reflect.
 Shader "AlatauCity/Sky"
 {
@@ -13,7 +15,9 @@ Shader "AlatauCity/Sky"
             #pragma fragment frag
             #include "UnityCG.cginc"
             #include "Assets/Shaders/AlatauFilm.cginc"
+            float _AlatauDusk, _AlatauDark;
             struct v2f { float4 pos : SV_POSITION; float3 dir : TEXCOORD0; };
+            float SHash3(float3 p) { return frac(sin(dot(p, float3(127.1, 311.7, 74.7))) * 43758.5453); }
             v2f vert(appdata_base v) { v2f o; o.pos = UnityObjectToClipPos(v.vertex); o.dir = v.vertex.xyz; return o; }
             fixed4 frag(v2f i) : SV_Target
             {
@@ -21,6 +25,24 @@ Shader "AlatauCity/Sky"
                 float3 c = AlatauSkyLod(d, 0.0);
                 float s = saturate(dot(d, _AlatauSunDir.xyz));
                 c += _AlatauSunColor.rgb * (smoothstep(0.99965, 0.99985, s) * 3.0 + pow(s, 900.0) * 0.8) * (1.0 - _AlatauNight) * step(-0.02, d.y);
+                // sunset: a wide band of orange and pink along the horizon, strongest toward the sun, purple higher up
+                float2 hs = normalize(_AlatauSunDir.xz + 1e-4), hd = normalize(d.xz + 1e-4);
+                float toward = saturate(dot(hs, hd) * 0.5 + 0.5), low = exp(-max(d.y, 0.0) * 9.0);
+                float glowK = _AlatauDusk * (1.0 - _AlatauDark);
+                c += glowK * low * (float3(1.0, 0.42, 0.16) * 0.55 * pow(toward, 3.0) + float3(0.55, 0.30, 0.42) * 0.16 * (1.0 - toward)) * step(-0.02, d.y);
+                c += glowK * exp(-max(d.y, 0.0) * 3.0) * float3(0.30, 0.16, 0.30) * 0.10 * toward;
+                // night: stars (a few thousand, most faint), sparser and dimmer toward the hazy horizon over the city
+                float3 sp = d * 420.0; float3 cell = floor(sp); float h = SHash3(cell);
+                float3 jit = float3(SHash3(cell + 17.1), SHash3(cell + 31.7), SHash3(cell + 47.3)) * 0.6 + 0.2;
+                float pix = max(length(fwidth(sp)), 1e-3);
+                float star = step(0.9955, h) * exp(-dot(sp - cell - jit, sp - cell - jit) / (pix * pix * 0.35));
+                float mag = pow(SHash3(cell + 5.3), 6.0) * 1.6 + 0.25;
+                c += star * mag * float3(0.92, 0.95, 1.0) * _AlatauDark * smoothstep(0.06, 0.40, d.y) * 0.9;
+                // the moon (the night light comes from it): a pale disc with a soft halo
+                float sm = dot(d, normalize(_AlatauSunDir.xyz));
+                c += _AlatauDark * (smoothstep(0.99990, 0.99994, sm) * float3(0.95, 0.94, 0.88) * 1.4 + pow(saturate(sm), 1800.0) * float3(0.30, 0.34, 0.45) * 0.35 + pow(saturate(sm), 60.0) * float3(0.05, 0.06, 0.09));
+                // the glow of the lit city on the haze, low along the whole horizon
+                c += _AlatauDark * exp(-max(d.y, 0.0) * 16.0) * float3(0.55, 0.33, 0.17) * 0.22 * step(-0.05, d.y);
                 // a few soft, high clouds so the sky is not a flat gradient
                 float2 p = d.xz / max(d.y + 0.12, 0.05) * 1.3;
                 float cl = ANoise(p * 0.9 + 3.1) * 0.55 + ANoise(p * 2.3) * 0.30 + ANoise(p * 5.1) * 0.15;

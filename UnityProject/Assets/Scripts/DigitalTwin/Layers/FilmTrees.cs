@@ -17,7 +17,7 @@ namespace AlatauCity.DigitalTwin
         /// <summary>Set by the capture tool: place every tree in range at once instead of a few cells per frame.</summary>
         public static bool Sync;
 
-        class CellData { public Matrix4x4[][] m = new Matrix4x4[Species][]; public MaterialPropertyBlock[] props = new MaterialPropertyBlock[Species]; public Bounds bounds; public int count; }
+        class CellData { public Matrix4x4[][] m = new Matrix4x4[Species][]; public float[][] y = new float[Species][]; public Vector4[][] t = new Vector4[Species][]; public MaterialPropertyBlock[] props = new MaterialPropertyBlock[Species]; public Bounds bounds; public int count; }
         struct Seg { public Vector2 a, b; public float half; }
 
         readonly Dictionary<long, CellData> cells = new Dictionary<long, CellData>();
@@ -27,7 +27,7 @@ namespace AlatauCity.DigitalTwin
         readonly Dictionary<Collider, bool> isGround = new Dictionary<Collider, bool>();
         readonly List<long> wanted = new List<long>();
         Color32[] plan; byte[] dev; int mw, mh; float ua, ub, va, vb;
-        Mesh[] hi = new Mesh[Species], lo = new Mesh[Species]; Material mat; bool ready, failed;
+        Mesh[] hi = new Mesh[Species], lo = new Mesh[Species], nearM = new Mesh[Species]; Material mat; bool ready, failed;
         readonly Plane[] planes = new Plane[6];
         readonly List<Matrix4x4>[] tmpM = { new List<Matrix4x4>(), new List<Matrix4x4>(), new List<Matrix4x4>(), new List<Matrix4x4>() };
         readonly List<float>[] tmpY = { new List<float>(), new List<float>(), new List<float>(), new List<float>() };
@@ -59,9 +59,67 @@ namespace AlatauCity.DigitalTwin
             // the trees of other layers (the Gate District round Iconic) stand in every look: make the meshes even if the film is off
             if (!ready && !failed && TwinData.Ready) Init();
             if (!ready || failed || hi[s] == null) return false;
-            Graphics.DrawMeshInstanced(near ? hi[s] : lo[s], 0, mat, m, count, props,
-                shadows ? UnityEngine.Rendering.ShadowCastingMode.On : UnityEngine.Rendering.ShadowCastingMode.Off, true, 0, null);
+            var sh = shadows ? UnityEngine.Rendering.ShadowCastingMode.On : UnityEngine.Rendering.ShadowCastingMode.Off;
+            var cam = Camera.main;
+            if (near && cam != null && s < 3 && nearM[s] != null)
+            {
+                // the per-tree year and tint of this batch, read once from its block (the caller passes the same arrays every frame)
+                if (!batchData.TryGetValue(m, out var bd))
+                {
+                    var yl = new List<float>(); var tl = new List<Vector4>(); props.GetFloatArray(YearId, yl); props.GetVectorArray(TintId, tl);
+                    bd = yl.Count >= count && tl.Count >= count ? (yl.ToArray(), tl.ToArray()) : (null, null); batchData[m] = bd;
+                }
+                if (bd.y != null) { DrawSplit(s, m, count, bd.y, bd.t, props, sh, cam.transform.position); return true; }
+            }
+            Graphics.DrawMeshInstanced(near ? hi[s] : lo[s], 0, mat, m, count, props, sh, true, 0, null);
             return true;
+        }
+        readonly Dictionary<Matrix4x4[], (float[] y, Vector4[] t)> batchData = new Dictionary<Matrix4x4[], (float[] y, Vector4[] t)>();
+
+        // ---------------- the fine crowns near the camera
+        // Within NearR of the camera a tree is drawn with its fine mesh (leaf clumps, leaf cards with a broken edge, branches); over
+        // the next Band metres the two meshes cross-dissolve (the tint's w carries the share), so no tree pops. Only a few hundred
+        // trees at a time (FineCap), the rest keep the light crowns.
+        static readonly int YearId = Shader.PropertyToID("_TreeYear"), TintId = Shader.PropertyToID("_TreeTint");
+        const float Band = 24f;
+        static float NearR => Application.platform == RuntimePlatform.WebGLPlayer ? 60f : 110f;
+        static int FineCap => Application.platform == RuntimePlatform.WebGLPlayer ? 160 : 480;
+        class Scratch { public Matrix4x4[] m = new Matrix4x4[1023]; public float[] y = new float[1023]; public Vector4[] t = new Vector4[1023]; public MaterialPropertyBlock p = new MaterialPropertyBlock(); }
+        readonly List<Scratch> pool = new List<Scratch>(); int poolUsed, fineUsed, poolFrame = -1;
+        Scratch Take()
+        {
+            if (poolUsed >= 40) return null;
+            if (poolUsed == pool.Count) pool.Add(new Scratch());
+            return pool[poolUsed++];
+        }
+
+        /// <summary>Draws a batch, the trees near the camera with the fine mesh and the others with the light one.</summary>
+        void DrawSplit(int s, Matrix4x4[] m, int count, float[] yr, Vector4[] tn, MaterialPropertyBlock props, UnityEngine.Rendering.ShadowCastingMode sh, Vector3 cp)
+        {
+            if (Time.frameCount != poolFrame) { poolFrame = Time.frameCount; poolUsed = 0; fineUsed = 0; }
+            float far = NearR + Band, far2 = far * far; bool any = false;
+            for (int i = 0; i < count; i++)
+            {
+                float dx = m[i].m03 - cp.x, dy = m[i].m13 - cp.y, dz = m[i].m23 - cp.z;
+                if (dx * dx + dy * dy + dz * dz < far2) { any = true; break; }
+            }
+            Scratch R = any && fineUsed < FineCap ? Take() : null, F = R != null ? Take() : null;
+            if (F == null) { Graphics.DrawMeshInstanced(hi[s], 0, mat, m, count, props, sh, true, 0, null); return; }
+            int nr = 0, nf = 0;
+            for (int i = 0; i < count; i++)
+            {
+                float dx = m[i].m03 - cp.x, dy = m[i].m13 - cp.y, dz = m[i].m23 - cp.z, d2 = dx * dx + dy * dy + dz * dz;
+                var t = tn[i];
+                if (d2 < far2 && fineUsed < FineCap)
+                {
+                    float fade = Mathf.Clamp((far - Mathf.Sqrt(d2)) / Band, 0.002f, 1f);
+                    F.m[nf] = m[i]; F.y[nf] = yr[i]; t.w = fade; F.t[nf] = t; nf++; fineUsed++;
+                    if (fade < 1f) { R.m[nr] = m[i]; R.y[nr] = yr[i]; t.w = 1f + fade; R.t[nr] = t; nr++; }
+                }
+                else { R.m[nr] = m[i]; R.y[nr] = yr[i]; t.w = 1f; R.t[nr] = t; nr++; }
+            }
+            if (nr > 0) { R.p.SetFloatArray(YearId, R.y); R.p.SetVectorArray(TintId, R.t); Graphics.DrawMeshInstanced(hi[s], 0, mat, R.m, nr, R.p, sh, true, 0, null); }
+            if (nf > 0) { F.p.SetFloatArray(YearId, F.y); F.p.SetVectorArray(TintId, F.t); Graphics.DrawMeshInstanced(nearM[s], 0, mat, F.m, nf, F.p, UnityEngine.Rendering.ShadowCastingMode.On, true, 0, null); }
         }
 
         /// <summary>Called every frame by FilmLook while the film look is on.</summary>
@@ -80,10 +138,14 @@ namespace AlatauCity.DigitalTwin
                 if (!cells.TryGetValue(k, out var cd)) { wanted.Add(k); continue; }
                 if (cd.count == 0 || !GeometryUtility.TestPlanesAABB(planes, cd.bounds)) continue;
                 float d = (cd.bounds.center - cp).magnitude; bool near = d < 1500f;
+                bool fineHere = cd.bounds.SqrDistance(cp) < (NearR + Band) * (NearR + Band);
                 for (int s = 0; s < Species; s++)
                     if (cd.m[s] != null && cd.m[s].Length > 0)
-                        Graphics.DrawMeshInstanced(near ? hi[s] : lo[s], 0, mat, cd.m[s], cd.m[s].Length, cd.props[s],
-                            d < 2600f ? UnityEngine.Rendering.ShadowCastingMode.On : UnityEngine.Rendering.ShadowCastingMode.Off, true, 0, null);
+                    {
+                        var sh = d < 2600f ? UnityEngine.Rendering.ShadowCastingMode.On : UnityEngine.Rendering.ShadowCastingMode.Off;
+                        if (fineHere && s < 3 && nearM[s] != null) DrawSplit(s, cd.m[s], cd.m[s].Length, cd.y[s], cd.t[s], cd.props[s], sh, cp);
+                        else Graphics.DrawMeshInstanced(near ? hi[s] : lo[s], 0, mat, cd.m[s], cd.m[s].Length, cd.props[s], sh, true, 0, null);
+                    }
             }
             if (wanted.Count == 0) { Sync = false; return; }
             // place the missing cells, the nearest to the focus first; a few milliseconds per frame unless a capture asks for all
@@ -217,12 +279,19 @@ namespace AlatauCity.DigitalTwin
             Debug.Log($"[Alatau] film trees: {village} trees in the gardens of existing villages");
             hi[3] = lo[3] = HedgeMesh();
             Debug.Log($"[Alatau] film trees: {plots} house plots");
-            hi[0] = Blob("Tree round", 16, 11, new Vector3(3.3f, 3.5f, 3.3f), 3.2f, 0.28f, 0.30f, new Color(0.17f, 0.27f, 0.13f), new Color(0.31f, 0.42f, 0.19f), 11);
-            hi[1] = Blob("Tree poplar", 12, 12, new Vector3(1.55f, 6.2f, 1.55f), 2.0f, 0.26f, 0.22f, new Color(0.15f, 0.25f, 0.13f), new Color(0.28f, 0.40f, 0.19f), 23);
+            // the near crowns: finer on Windows and in the film recording (a smooth outline up close), lighter on the web
+            bool fine = Application.platform != RuntimePlatform.WebGLPlayer;
+            hi[0] = Blob("Tree round", fine ? 24 : 16, fine ? 16 : 11, new Vector3(3.3f, 3.5f, 3.3f), 3.2f, 0.28f, 0.30f, new Color(0.17f, 0.27f, 0.13f), new Color(0.31f, 0.42f, 0.19f), 11);
+            hi[1] = Blob("Tree poplar", fine ? 16 : 12, fine ? 16 : 12, new Vector3(1.55f, 6.2f, 1.55f), 2.0f, 0.26f, 0.22f, new Color(0.15f, 0.25f, 0.13f), new Color(0.28f, 0.40f, 0.19f), 23);
             hi[2] = Cones("Tree spruce", 12, 2.5f, 10.5f, new Color(0.09f, 0.18f, 0.14f), new Color(0.17f, 0.29f, 0.21f));
             lo[0] = Blob("Tree round far", 8, 5, new Vector3(3.3f, 3.5f, 3.3f), 3.2f, 0f, 0.18f, new Color(0.17f, 0.27f, 0.13f), new Color(0.31f, 0.42f, 0.19f), 11);
             lo[1] = Blob("Tree poplar far", 6, 5, new Vector3(1.55f, 6.2f, 1.55f), 2.0f, 0f, 0.12f, new Color(0.15f, 0.25f, 0.13f), new Color(0.28f, 0.40f, 0.19f), 23);
             lo[2] = Cones("Tree spruce far", 5, 2.5f, 10.5f, new Color(0.09f, 0.18f, 0.14f), new Color(0.17f, 0.29f, 0.21f), 1);
+            // the fine crowns near the camera: leaf clumps with leaf cards round them and branches into the crown
+            nearM[0] = Clumped("Tree round near", new Vector3(3.3f, 3.5f, 3.3f), 3.2f, 0.28f, new Color(0.17f, 0.27f, 0.13f), new Color(0.31f, 0.42f, 0.19f), 11, fine ? 11 : 8, fine ? 9 : 7, fine ? 6 : 5, true, 5);
+            nearM[1] = Clumped("Tree poplar near", new Vector3(1.55f, 6.2f, 1.55f), 2.0f, 0.26f, new Color(0.15f, 0.25f, 0.13f), new Color(0.28f, 0.40f, 0.19f), 23, fine ? 10 : 7, fine ? 8 : 6, fine ? 6 : 5, true, 4);
+            nearM[2] = Spruce("Tree spruce near", fine ? 7 : 5, fine ? 14 : 10, 2.5f, 10.5f, new Color(0.09f, 0.18f, 0.14f), new Color(0.17f, 0.29f, 0.21f));
+            Debug.Log($"[Alatau] film trees: near crowns {nearM[0].triangles.Length / 3} / {nearM[1].triangles.Length / 3} / {nearM[2].triangles.Length / 3} triangles");
             Debug.Log($"[Alatau] film trees: base map {mw}x{mh}, street rows in {street.Count} cells");
         }
 
@@ -298,7 +367,7 @@ namespace AlatauCity.DigitalTwin
             var cd = new CellData();
             for (int s = 0; s < Species; s++)
             {
-                cd.m[s] = tmpM[s].ToArray(); cd.count += cd.m[s].Length;
+                cd.m[s] = tmpM[s].ToArray(); cd.y[s] = tmpY[s].ToArray(); cd.t[s] = tmpT[s].ToArray(); cd.count += cd.m[s].Length;
                 if (cd.m[s].Length > 0) { cd.props[s] = new MaterialPropertyBlock(); cd.props[s].SetFloatArray("_TreeYear", tmpY[s]); cd.props[s].SetVectorArray("_TreeTint", tmpT[s]); }
             }
             if (cd.count > 0) cd.bounds = new Bounds(new Vector3((cx + 0.5f) * Cell, (ymin + ymax) * 0.5f + 8f, (cz + 0.5f) * Cell), new Vector3(Cell + 12f, ymax - ymin + 30f, Cell + 12f));
@@ -347,9 +416,152 @@ namespace AlatauCity.DigitalTwin
             for (int q = b0; q < vv.Length; q++)
             {
                 var d = vv[q] - ctr; d = new Vector3(d.x / r.x, d.y / r.y, d.z / r.z);
-                nr[q] = Vector3.Lerp(nr[q], d.normalized, 0.65f).normalized;
+                nr[q] = Vector3.Lerp(nr[q], d.normalized, 0.78f).normalized;
             }
             m.normals = nr; return m;
+        }
+
+        /// <summary>A crown made of leaf clumps: a dark core, a ring of lumpy clumps (each shaded on its own, darker where it faces
+        /// into the crown) and, for the near trees, two crossed leaf cards through every clump (vertex alpha 0, uv = card uv + a seed:
+        /// the shader cuts their broken edge), so the outline is foliage with sky between the leaves, not a polygon. A trunk with
+        /// branches running up into the lower clumps. Same size as Blob() with the same r, trunk and colours.</summary>
+        static Mesh Clumped(string name, Vector3 r, float trunkH, float trunkR, Color low, Color high, int seed, int clumps, int seg, int rings, bool cards, int branches)
+        {
+            var v = new List<Vector3>(); var nn = new List<Vector3>(); var c = new List<Color>(); var uv = new List<Vector3>(); var t = new List<int>();
+            var rng = new System.Random(seed * 31 + clumps); float R01() => (float)rng.NextDouble();
+            var brown = new Color(0.33f, 0.25f, 0.19f, 1f);
+            float cy = trunkH + r.y * 0.9f; var ctr = new Vector3(0f, cy, 0f); var inv = new Vector3(1f / r.x, 1f / r.y, 1f / r.z);
+            Vector3 Radial(Vector3 p) => Vector3.Scale(p - ctr, inv).normalized;
+            void Tri(int a, int b, int d, Vector3 outward)
+            {
+                if (Vector3.Dot(Vector3.Cross(v[b] - v[a], v[d] - v[a]), outward) < 0f) { int q = b; b = d; d = q; }
+                t.Add(a); t.Add(b); t.Add(d);
+            }
+            void Tube(Vector3 a, Vector3 b, float ra, float rb, int sides)
+            {
+                var ax = (b - a).normalized; var u = Vector3.Cross(ax, Mathf.Abs(ax.y) < 0.9f ? Vector3.up : Vector3.right).normalized; var w = Vector3.Cross(ax, u);
+                int k0 = v.Count;
+                for (int i = 0; i < sides; i++)
+                {
+                    float an = i / (float)sides * Mathf.PI * 2f; var dir = u * Mathf.Cos(an) + w * Mathf.Sin(an);
+                    v.Add(a + dir * ra); v.Add(b + dir * rb); nn.Add(dir); nn.Add(dir); c.Add(brown); c.Add(brown); uv.Add(Vector3.zero); uv.Add(Vector3.zero);
+                }
+                for (int i = 0; i < sides; i++)
+                {
+                    int p0 = k0 + i * 2, p1 = p0 + 1, q0 = k0 + (i + 1) % sides * 2, q1 = q0 + 1;
+                    var mid = (v[p0] + v[q1]) * 0.5f; var o = mid - (a + Vector3.Project(mid - a, ax));
+                    Tri(p0, p1, q0, o); Tri(q0, p1, q1, o);
+                }
+            }
+            void Ball(Vector3 cc, Vector3 rad, int sg, int rg, float jit, float shade, float alpha)
+            {
+                int b0 = v.Count; var bumps = new Vector3[4];
+                for (int q = 0; q < bumps.Length; q++) bumps[q] = new Vector3(R01() * 2f - 1f, R01() * 2f - 1f, R01() * 2f - 1f).normalized;
+                for (int j = 0; j <= rg; j++) for (int i = 0; i < sg; i++)
+                {
+                    float th = j / (float)rg * Mathf.PI, ph = (i + 0.5f * (j & 1)) / sg * Mathf.PI * 2f;
+                    var dir = new Vector3(Mathf.Sin(th) * Mathf.Cos(ph), Mathf.Cos(th), Mathf.Sin(th) * Mathf.Sin(ph)); float lump = 0f;
+                    foreach (var bq in bumps) lump = Mathf.Max(lump, Mathf.Pow(Mathf.Max(0f, Vector3.Dot(dir, bq)), 4f));
+                    float k = j == 0 || j == rg ? 1f - jit * 0.2f : 1f + jit * (lump - 0.4f) + jit * 0.3f * (R01() * 2f - 1f);
+                    var p = cc + Vector3.Scale(dir * k, rad); var rd = Radial(p);
+                    // shaded as one soft volume with a hint of each clump (no dark creases between the clumps)
+                    v.Add(p); nn.Add((dir * 0.28f + rd * 0.72f).normalized); uv.Add(Vector3.zero);
+                    float hf = Mathf.Clamp01((p.y - cy) / r.y * 0.5f + 0.5f), ao = Mathf.Lerp(0.78f, 1f, Mathf.Clamp01(Vector3.Dot(dir, rd) * 0.6f + 0.5f));
+                    var col = Color.Lerp(low, high, hf) * (ao * shade); col.a = alpha; c.Add(col);
+                }
+                for (int j = 0; j < rg; j++) for (int i = 0; i < sg; i++)
+                {
+                    int a = b0 + j * sg + i, b = b0 + j * sg + (i + 1) % sg, d = a + sg, e = b + sg;
+                    Tri(a, b, d, (v[a] + v[b] + v[d]) / 3f - cc); Tri(b, e, d, (v[b] + v[e] + v[d]) / 3f - cc);
+                }
+            }
+            // the clumps: spread over the crown, fewer underneath; each about half the crown wide, so they overlap with notches between
+            var cc = new Vector3[clumps]; var cr = new Vector3[clumps];
+            float crx = r.x * 0.52f, cry = Mathf.Min(r.y * 0.55f, r.x * 0.95f);
+            for (int q = 0; q < clumps; q++)
+            {
+                float yy = Mathf.Lerp(0.92f, -0.60f, (q + 0.5f) / clumps), ph = q * 2.39996f + R01() * 0.6f, rr = Mathf.Sqrt(Mathf.Max(0f, 1f - yy * yy));
+                float k = 0.86f + 0.26f * R01(); cr[q] = new Vector3(crx * k, cry * k, crx * k);
+                cc[q] = ctr + new Vector3(rr * Mathf.Cos(ph) * (r.x - cr[q].x), yy * (r.y - cr[q].y) * 0.95f, rr * Mathf.Sin(ph) * (r.z - cr[q].z));
+            }
+            // trunk, and branches from its top into the lower clumps (seen where the trunk meets the crown)
+            Tube(Vector3.zero, new Vector3(0f, cy, 0f), trunkR, trunkR * 0.55f, 6);
+            for (int bI = 0; bI < branches; bI++)
+            {
+                int q = clumps - 1 - (bI * 2) % clumps;
+                var st = new Vector3(0f, Mathf.Min(trunkH * (0.85f + 0.10f * bI), cy - 0.5f), 0f);
+                Tube(st, Vector3.Lerp(st, cc[q], 0.8f), trunkR * 0.48f, trunkR * 0.20f, 4);
+            }
+            if (cards) Ball(ctr, new Vector3(r.x * 0.62f, r.y * 0.70f, r.z * 0.62f), Mathf.Max(5, seg - 2), Mathf.Max(3, rings - 1), 0.10f, 0.72f, 1f);    // the shaded inside
+            for (int q = 0; q < clumps; q++) Ball(cc[q], cr[q], seg, rings, 0.22f, 0.92f + 0.16f * R01(), cards ? 0.75f : 1f);
+            if (cards)
+                for (int q = 0; q < clumps; q++)
+                {
+                    var o = Vector3.Scale(cc[q] - ctr, inv); if (o.sqrMagnitude < 1e-4f) o = Vector3.up; o.Normalize();
+                    var t1 = Vector3.Cross(o, Mathf.Abs(o.y) < 0.9f ? Vector3.up : Vector3.right).normalized; float an = R01() * Mathf.PI;
+                    t1 = Quaternion.AngleAxis(an * Mathf.Rad2Deg, o) * t1; var t2 = Vector3.Cross(o, t1);
+                    float sz = (cr[q].x + cr[q].y) * 0.5f * 1.22f; var mid = cc[q] + o * (0.28f * sz);
+                    foreach (var T in new[] { t1, t2 })
+                    {
+                        int k0 = v.Count; float sd = R01();
+                        Vector3[] P = { mid - o * sz - T * sz, mid - o * sz + T * sz, mid + o * sz + T * sz, mid + o * sz - T * sz };
+                        Vector2[] U = { new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(1f, 1f), new Vector2(0f, 1f) };
+                        for (int i = 0; i < 4; i++)
+                        {
+                            v.Add(P[i]); nn.Add((Radial(P[i]) + Vector3.up * 0.2f).normalized); uv.Add(new Vector3(U[i].x, U[i].y, sd));
+                            var col = Color.Lerp(low, high, Mathf.Clamp01((P[i].y - cy) / r.y * 0.5f + 0.62f)); col.a = 0f; c.Add(col);
+                        }
+                        t.Add(k0); t.Add(k0 + 1); t.Add(k0 + 2); t.Add(k0); t.Add(k0 + 2); t.Add(k0 + 3);          // both sides
+                        t.Add(k0); t.Add(k0 + 2); t.Add(k0 + 1); t.Add(k0); t.Add(k0 + 3); t.Add(k0 + 2);
+                    }
+                }
+            var m = new Mesh { name = name }; m.SetVertices(v); m.SetNormals(nn); m.SetColors(c); m.SetUVs(0, uv); m.SetTriangles(t, 0); m.RecalculateBounds();
+            if (cards) { var bb = m.bounds; bb.Expand(1f); m.bounds = bb; }          // room for the sway (the models read the plain bounds)
+            return m;
+        }
+
+        /// <summary>A near spruce: tiers of drooping branches with a jagged rim (alternate tips and notches), closed underneath so a
+        /// tree seen from the street is not hollow, on a visible trunk.</summary>
+        static Mesh Spruce(string name, int tiers, int seg, float radius, float height, Color low, Color high)
+        {
+            var v = new List<Vector3>(); var nn = new List<Vector3>(); var c = new List<Color>(); var t = new List<int>();
+            var brown = new Color(0.30f, 0.23f, 0.18f, 1f); var rng = new System.Random(tiers * 13 + seg);
+            void Tri(int a, int b, int d, Vector3 outward)
+            {
+                if (Vector3.Dot(Vector3.Cross(v[b] - v[a], v[d] - v[a]), outward) < 0f) { int q = b; b = d; d = q; }
+                t.Add(a); t.Add(b); t.Add(d);
+            }
+            // trunk
+            int k0 = v.Count;
+            for (int i = 0; i < 5; i++)
+            {
+                float an = i / 5f * Mathf.PI * 2f; var dir = new Vector3(Mathf.Cos(an), 0f, Mathf.Sin(an));
+                v.Add(dir * 0.22f); v.Add(dir * 0.07f + Vector3.up * height * 0.85f); nn.Add(dir); nn.Add(dir); c.Add(brown); c.Add(brown);
+            }
+            for (int i = 0; i < 5; i++) { int p0 = k0 + i * 2, q0 = k0 + (i + 1) % 5 * 2; var o = v[p0] + v[q0]; o.y = 0f; Tri(p0, p0 + 1, q0, o); Tri(q0, p0 + 1, q0 + 1, o); }
+            for (int k = 0; k < tiers; k++)
+            {
+                float f = k / (float)tiers, y0 = 1.0f + (height - 2.2f) * f, y1 = k == tiers - 1 ? height : y0 + (height - 1.0f) / tiers * 1.9f;
+                float rr = radius * Mathf.Lerp(1.05f, 0.30f, f), off = (float)rng.NextDouble() * Mathf.PI;
+                int apex = v.Count; v.Add(new Vector3(0f, y1, 0f)); nn.Add(Vector3.up); c.Add(Color.Lerp(low, high, 0.9f));
+                int under = v.Count; v.Add(new Vector3(0f, y0 + (y1 - y0) * 0.22f, 0f)); nn.Add(Vector3.down); c.Add(low * 0.7f + new Color(0, 0, 0, 0.3f));
+                int r0 = v.Count, n = seg * 2;
+                for (int i = 0; i < n; i++)
+                {
+                    bool tip = (i & 1) == 0; float an = off + i / (float)n * Mathf.PI * 2f, rad = rr * (tip ? 1f : 0.72f) * (0.92f + 0.16f * (float)rng.NextDouble());
+                    var dir = new Vector3(Mathf.Cos(an), 0f, Mathf.Sin(an));
+                    v.Add(dir * rad + Vector3.up * (y0 - (tip ? 0.28f : -0.05f))); nn.Add((dir * 0.8f + Vector3.up * 0.6f).normalized);
+                    var col = Color.Lerp(low, high, 0.35f + 0.5f * f + (tip ? 0.15f : -0.1f)); col.a = 1f; c.Add(col);
+                }
+                for (int i = 0; i < n; i++)
+                {
+                    int a = r0 + i, b = r0 + (i + 1) % n; var mid = (v[a] + v[b]) * 0.5f; var rad = new Vector3(mid.x, 0f, mid.z);
+                    Tri(apex, a, b, rad + Vector3.up * rr * 0.6f);
+                    Tri(under, a, b, rad * 0.3f + Vector3.down);
+                }
+            }
+            var m = new Mesh { name = name }; m.SetVertices(v); m.SetNormals(nn); m.SetColors(c); m.SetTriangles(t, 0); m.RecalculateBounds();
+            var bb = m.bounds; bb.Expand(1f); m.bounds = bb; return m;
         }
 
         /// <summary>The crown shapes of the film trees at a middle level of detail, for models that build their own trees into
@@ -358,8 +570,9 @@ namespace AlatauCity.DigitalTwin
         {
             s = Mathf.Clamp(s, 0, 2);
             if (mid[s] != null) return mid[s];
-            mid[s] = s == 0 ? Blob("Tree round mid", 11, 7, new Vector3(3.3f, 3.5f, 3.3f), 3.2f, 0.28f, 0.26f, new Color(0.17f, 0.27f, 0.13f), new Color(0.31f, 0.42f, 0.19f), 11)
-                   : s == 1 ? Blob("Tree poplar mid", 8, 8, new Vector3(1.55f, 6.2f, 1.55f), 2.0f, 0.26f, 0.20f, new Color(0.15f, 0.25f, 0.13f), new Color(0.28f, 0.40f, 0.19f), 23)
+            // a few leaf clumps and branches (no leaf cards: the models draw them opaque), so a crown up close is not one polygon ball
+            mid[s] = s == 0 ? Clumped("Tree round mid", new Vector3(3.3f, 3.5f, 3.3f), 3.2f, 0.28f, new Color(0.17f, 0.27f, 0.13f), new Color(0.31f, 0.42f, 0.19f), 11, 6, 7, 5, false, 3)
+                   : s == 1 ? Clumped("Tree poplar mid", new Vector3(1.55f, 6.2f, 1.55f), 2.0f, 0.26f, new Color(0.15f, 0.25f, 0.13f), new Color(0.28f, 0.40f, 0.19f), 23, 6, 7, 5, false, 2)
                    : Cones("Tree spruce mid", 8, 2.5f, 10.5f, new Color(0.09f, 0.18f, 0.14f), new Color(0.17f, 0.29f, 0.21f));
             return mid[s];
         }

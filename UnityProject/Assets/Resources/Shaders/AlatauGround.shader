@@ -219,7 +219,8 @@ Shader "AlatauCity/Ground"
                 float3 pg = AlatauMat(wp.xz, 8.0).pattern, pg2 = AlatauMat(xr, 8.0).pattern;
                 float3 ps = AlatauMat(wp.xz, 9.0).pattern, ps2 = AlatauMat(xr, 9.0).pattern;
                 float3 pp = AlatauMat(wp.xz, 7.0).pattern, pa = AlatauMat(wp.xz, 6.0).pattern;
-                pg = lerp(float3(1, 1, 1), pg, 0.7) * lerp(float3(1, 1, 1), pg2, 0.5); ps = lerp(float3(1, 1, 1), ps, 0.55) * lerp(float3(1, 1, 1), ps2, 0.45);
+                pg = lerp(float3(1, 1, 1), pg, 0.6) * lerp(float3(1, 1, 1), pg2, 0.3);          // the larger copy softer: no dark blotches on the lawns
+                ps = lerp(float3(1, 1, 1), ps, 0.55) * lerp(float3(1, 1, 1), ps2, 0.45);
                 float built = saturate(1.0 - green - open - water);
                 f *= lerp(float3(1, 1, 1), pg, green) * lerp(float3(1, 1, 1), ps, open) * lerp(float3(1, 1, 1), pp, built * 0.45);
                 if (_AlatauBlockOn > 0.5)
@@ -291,6 +292,16 @@ Shader "AlatauCity/Ground"
                 f = lerp(f, body * 0.55, water);
                 f = lerp(f, fixed3(0.85, 0.87, 0.86), foam * 0.35 * water);
                 c = f; em = c * _Ambient + (refl * lerp(0.22, 0.95, fres) * 0.7 + _AlatauSunColor.rgb * glint * 2.0) * water;
+                // at night the lit city on the banks trembles on the water: warm and white streaks drawn out towards the viewer,
+                // near the banks of a built quarter, broken by the ripples
+                {
+                    float2 fwd = normalize(view.xz + float2(1e-4, 0)), side = float2(-fwd.y, fwd.x);
+                    float2 sp = float2(dot(wp.xz, side) * 0.09, dot(wp.xz, fwd) * 0.012 + hx * 0.8);
+                    float st = smoothstep(0.62, 0.92, ANoise(sp + float2(0.0, t * 0.05))) * (0.6 + 0.4 * ANoise(wp.xz * 0.5 + t * 0.7));
+                    float nearBank = 1.0 - saturate((wdeep - 0.35) * 2.0);
+                    float3 cityC = lerp(float3(1.0, 0.72, 0.40), float3(0.95, 0.92, 0.85), ANoise(sp * 3.0));
+                    em += cityC * st * nearBank * done * water * _AlatauNight * 0.55;
+                }
                 // spotlight wave of the presentation: a ring of light runs over the ground in the colour of the category
                 float dR = distance(wp.xz, _AlatauHiWave.xy);
                 em += _AlatauHiCol.rgb * exp(-abs(_AlatauHiWave.z - dR) / 55.0) * 0.9 * _AlatauHiOn * (1.0 - saturate(_AlatauHiWave.z / max(_AlatauHiWave.w, 1.0)));

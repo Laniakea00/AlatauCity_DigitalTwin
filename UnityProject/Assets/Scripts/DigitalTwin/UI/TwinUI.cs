@@ -17,8 +17,8 @@ namespace AlatauCity.DigitalTwin.UI
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         static void Boot() { if (FindFirstObjectByType<TwinUI>() == null) new GameObject("Twin UI").AddComponent<TwinUI>(); }
 
-        UIDocument doc; VisualElement root, leftPanel, rightPanel, popup, districtPopup, langPopup, card, scene, scenarioBtn, sitePill, rail, bellBadge;
-        Label yearLabel, scenarioName, siteName, clockLabel, dockYear; Button playBtn; VisualElement playIcon; TwinSlider slider;
+        UIDocument doc; VisualElement root, leftPanel, rightPanel, popup, districtPopup, langPopup, timePopup, placeIcon, card, scene, scenarioBtn, sitePill, rail, bellBadge;
+        Label yearLabel, scenarioName, siteName, clockLabel, dockYear; SkyGlyph skyGlyph; VisualElement placeBtn; Button playBtn; VisualElement playIcon; TwinSlider slider;
         readonly Dictionary<string, VisualElement> railBtns = new Dictionary<string, VisualElement>();
         readonly HashSet<VisualElement> hovered = new HashSet<VisualElement>();
         readonly List<ITwinModule> modules = new List<ITwinModule>();
@@ -123,6 +123,7 @@ namespace AlatauCity.DigitalTwin.UI
             popup = BuildPopup(); root.Add(popup); Chrome(popup);
             districtPopup = BuildDistrictPopup(); root.Add(districtPopup); Chrome(districtPopup);
             langPopup = BuildLangPopup(); root.Add(langPopup); Chrome(langPopup);
+            timePopup = TimeOfDay.BuildPopup(); root.Add(timePopup); Chrome(timePopup);
 
             active = null; OnModule(TwinState.Module); OnScenario(TwinState.Scenario); OnYear(TwinState.Year); OnSelection(TwinState.Selected); OnDistrict(TwinState.District);
             srcOverlay = null; if (srcOpen) BuildSources();          // a new language rebuilds the open panel too
@@ -141,13 +142,15 @@ namespace AlatauCity.DigitalTwin.UI
             var logo = new VisualElement { pickingMode = PickingMode.Ignore }; logo.AddToClassList("logo");
             var tex = Resources.Load<Texture2D>("UI/qtwin_logo"); if (tex != null) logo.style.backgroundImage = new StyleBackground(tex); h.Add(logo);
             var sep = new VisualElement { pickingMode = PickingMode.Ignore }; sep.AddToClassList("hsep"); h.Add(sep);
-            var place = new VisualElement { pickingMode = PickingMode.Ignore }; place.AddToClassList("place2");
-            place.Add(Icon("cloud_sun", 24));
+            // the place and weather block opens the time of day of the twin (TimeOfDay); while a time is picked it shows that time
+            var place = new VisualElement(); place.AddToClassList("place2"); place.AddToClassList("time-btn"); place.tooltip = "Время суток в двойнике";
+            place.Add(placeIcon = Icon("cloud_sun", 24)); place.Add(skyGlyph = new SkyGlyph());
             var pc = new VisualElement { pickingMode = PickingMode.Ignore }; pc.AddToClassList("pcol");
             var p1 = new Label(Loc.T("place2")) { pickingMode = PickingMode.Ignore }; p1.AddToClassList("p1"); pc.Add(p1);
             clockLabel = new Label { pickingMode = PickingMode.Ignore }; clockLabel.AddToClassList("p2"); pc.Add(clockLabel); place.Add(pc); h.Add(place);
             var sep2 = new VisualElement { pickingMode = PickingMode.Ignore }; sep2.AddToClassList("hsep"); h.Add(sep2);
-            UpdateClock(); h.schedule.Execute(UpdateClock).Every(20000);
+            place.AddManipulator(new Clickable(() => TogglePopup(timePopup, place))); placeBtn = place;
+            UpdateClock(); h.schedule.Execute(UpdateClock).Every(500);
 
             var spacer = new VisualElement { pickingMode = PickingMode.Ignore }; spacer.AddToClassList("grow"); h.Add(spacer);
             scenarioBtn = new VisualElement(); scenarioBtn.AddToClassList("scenario-btn");
@@ -190,6 +193,16 @@ namespace AlatauCity.DigitalTwin.UI
         void UpdateClock()
         {
             if (clockLabel == null) return;
+            bool tw = FilmLook.ViewerTime;
+            if (placeIcon != null) placeIcon.style.display = tw ? DisplayStyle.None : DisplayStyle.Flex;
+            if (skyGlyph != null) { skyGlyph.style.display = tw ? DisplayStyle.Flex : DisplayStyle.None; skyGlyph.SetHour(FilmLook.Hour); }
+            if (tw)
+            {
+                string t = TimeOfDay.HourText(FilmLook.Hour);
+                string txt = FilmLook.Cycling ? string.Format("Сутки за 2 минуты · {0}", t) : string.Format("Время в двойнике · {0}", t);
+                if (clockLabel.text != txt) clockLabel.text = txt;
+                return;
+            }
             var n = DateTime.Now; string s = n.ToString("ddd, d MMM", Loc.Ru); s = char.ToUpper(s[0]) + s.Substring(1);
             clockLabel.text = s + " · " + n.ToString("HH:mm");
         }
@@ -339,6 +352,13 @@ namespace AlatauCity.DigitalTwin.UI
             float w = root.resolvedStyle.width, pw = p.resolvedStyle.width > 10 ? p.resolvedStyle.width : 340;
             p.style.left = Mathf.Clamp(anchor.worldBound.center.x - pw / 2, 8, w - pw - 8);
         }
+        /// <summary>The time-of-day menu, open under the place block of the header (for the presentation and the capture tools).</summary>
+        public void OpenTimeMenu()
+        {
+            if (timePopup == null || placeBtn == null) return;
+            if (timePopup.style.display == DisplayStyle.None) TogglePopup(timePopup, placeBtn);
+            timePopup.schedule.Execute(() => { float w = root.resolvedStyle.width, pw = timePopup.resolvedStyle.width; timePopup.style.left = Mathf.Clamp(placeBtn.worldBound.center.x - pw / 2, 8, w - pw - 8); }).ExecuteLater(1);
+        }
         /// <summary>The language menu, open under its button (the video shows it).</summary>
         public void OpenLangMenu()
         {
@@ -352,7 +372,7 @@ namespace AlatauCity.DigitalTwin.UI
             float w = root.resolvedStyle.width, pw = 190f, cx = btn.worldBound.width > 1f ? btn.worldBound.center.x : w - 260f;
             langPopup.style.left = Mathf.Clamp(cx - pw / 2, 8, w - pw - 8);
         }
-        public void HidePopups() { if (popup != null) popup.style.display = DisplayStyle.None; if (districtPopup != null) districtPopup.style.display = DisplayStyle.None; if (langPopup != null) langPopup.style.display = DisplayStyle.None; }
+        public void HidePopups() { if (timePopup != null) timePopup.style.display = DisplayStyle.None; if (popup != null) popup.style.display = DisplayStyle.None; if (districtPopup != null) districtPopup.style.display = DisplayStyle.None; if (langPopup != null) langPopup.style.display = DisplayStyle.None; }
 
         // ------------------------------------------------------------------ passport card
         VisualElement middleEl;
@@ -517,6 +537,7 @@ namespace AlatauCity.DigitalTwin.UI
         }
 
         // ------------------------------------------------------------------ input blocking
+        bool TimeOpen => timePopup != null && timePopup.style.display == DisplayStyle.Flex;
         void Chrome(VisualElement e)
         {
             e.RegisterCallback<PointerEnterEvent>(_ => { hovered.Add(e); MapCamera.BlockInput = true; });
@@ -525,9 +546,11 @@ namespace AlatauCity.DigitalTwin.UI
             e.RegisterCallback<PointerDownEvent>(ev =>
             {
                 var t = ev.target as VisualElement; if (t == null) return;
-                bool open = (popup != null && popup.style.display == DisplayStyle.Flex) || (districtPopup != null && districtPopup.style.display == DisplayStyle.Flex);
+                bool open = (popup != null && popup.style.display == DisplayStyle.Flex) || (districtPopup != null && districtPopup.style.display == DisplayStyle.Flex) || TimeOpen;
                 if (!open) return;
                 if (popup.Contains(t) || districtPopup.Contains(t) || scenarioBtn.Contains(t) || sitePill.Contains(t) || t == popup || t == districtPopup || t == scenarioBtn || t == sitePill) return;
+                if (timePopup != null && (timePopup.Contains(t) || t == timePopup)) return;
+                if (placeBtn != null && (placeBtn.Contains(t) || t == placeBtn)) return;
                 HidePopups();
             }, TrickleDown.TrickleDown);
         }
@@ -554,7 +577,7 @@ namespace AlatauCity.DigitalTwin.UI
             // does not also leave the tower camera, the monitoring window or a landmark passport
             if (srcOpen) { MapCamera.Typing = true; if (Input.GetKeyDown(KeyCode.Escape)) CloseSources(); }
             else if (srcHoldsTyping && Time.frameCount > srcClosedFrame) { srcHoldsTyping = false; MapCamera.Typing = srcTypingWas; }
-            bool open = (popup != null && popup.style.display == DisplayStyle.Flex) || (districtPopup != null && districtPopup.style.display == DisplayStyle.Flex);
+            bool open = (popup != null && popup.style.display == DisplayStyle.Flex) || (districtPopup != null && districtPopup.style.display == DisplayStyle.Flex) || TimeOpen;
             if (open && Input.GetMouseButtonDown(0) && !MapCamera.BlockInput) HidePopups();
             if (playIcon != null)
             {

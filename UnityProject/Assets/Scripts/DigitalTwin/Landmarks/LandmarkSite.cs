@@ -47,7 +47,8 @@ namespace AlatauCity.DigitalTwin.Landmarks
             return k.ToMesh("Crane mast");
         }
 
-        /// <summary>Slewing part of a tower crane at the mast top: jib (length j), counter-jib with ballast, cab, A-frame, trolley and hook.</summary>
+        /// <summary>Slewing part of a tower crane at the mast top: jib (length j), counter-jib with ballast, cab and A-frame. The trolley and the
+        /// hook are separate pieces moved by CraneMotion.</summary>
         public static Mesh Head(float j)
         {
             var k = new LandmarkKit(); float cj = j * 0.32f;
@@ -74,11 +75,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             k.Beam(apex, new Vector3(-cj, y0 + 0.3f, 0), 0.07f, 0.07f, Cable, LM.Steel);
             // counterweight blocks
             k.Box(new Vector3(-cj + 2.2f, y0 - 0.9f, 0), new Vector3(4f, 2.6f, 2.4f), 0, Ballast, LM.Solid, 1.3f, Ballast, LM.Solid);
-            // trolley + hook line + load
-            float tx = j * 0.58f;
-            k.Box(new Vector3(tx, y0 - 0.35f, 0), new Vector3(1.6f, 0.5f, 2.0f), 0, Cab, LM.Steel, 1f, Cab, LM.Steel);
-            k.Beam(new Vector3(tx, y0 - 0.6f, 0), new Vector3(tx, y0 - 22f, 0), 0.06f, 0.06f, Cable, LM.Steel);
-            k.Box(new Vector3(tx, y0 - 23.2f, 0), new Vector3(3.2f, 1.6f, 1.2f), 0, Ballast, LM.Solid, 1.6f, Ballast, LM.Solid);
+            // the trolley, the hook line and the load move on their own (CraneMotion)
             return k.ToMesh("Crane head");
         }
 
@@ -184,6 +181,116 @@ namespace AlatauCity.DigitalTwin.Landmarks
             Vector3 c = Vector3.zero; int n = 0;
             foreach (var v in vs) if (v.y > maxY * 0.92f) { c += v; n++; }
             c /= Mathf.Max(n, 1); c.y = maxY; return c;
+        }
+
+        // ------------------------------------------------------------------ the crane at work
+        static Mesh trolleyM, cableM, hookM;
+        /// <summary>The trolley under the jib (origin at its running rail, 1.8 m above the slewing ring).</summary>
+        public static Mesh Trolley()
+        {
+            if (trolleyM != null) return trolleyM;
+            var k = new LandmarkKit();
+            k.Box(new Vector3(0, -0.35f, 0), new Vector3(1.6f, 0.5f, 2.0f), 0, Cab, LM.Steel, 1f, Cab, LM.Steel);
+            k.Box(new Vector3(0, -0.75f, 0), new Vector3(0.7f, 0.35f, 0.7f), 0, Cab, LM.Steel, 1f, Cab, LM.Steel);
+            return trolleyM = k.ToMesh("Crane trolley");
+        }
+        /// <summary>The hoist ropes: 1 m long downwards from the origin (scaled in y to the hook depth).</summary>
+        public static Mesh HoistRope()
+        {
+            if (cableM != null) return cableM;
+            var k = new LandmarkKit();
+            k.Beam(new Vector3(-0.18f, 0f, 0f), new Vector3(-0.18f, -1f, 0f), 0.05f, 0.05f, Cable, LM.Steel);
+            k.Beam(new Vector3(0.18f, 0f, 0f), new Vector3(0.18f, -1f, 0f), 0.05f, 0.05f, Cable, LM.Steel);
+            return cableM = k.ToMesh("Crane hoist rope");
+        }
+        /// <summary>The hook block with its load (a bundle of rebar on slings, or a concrete skip): origin at the top of the block.</summary>
+        public static Mesh Hook()
+        {
+            if (hookM != null) return hookM;
+            var k = new LandmarkKit();
+            k.Box(new Vector3(0, -0.45f, 0), new Vector3(0.7f, 0.9f, 0.45f), 0, CraneYellow, LM.Steel, 1f, CraneYellow, LM.Steel);
+            k.Beam(new Vector3(0, -0.9f, 0), new Vector3(-1.4f, -3.0f, 0), 0.04f, 0.04f, Cable, LM.Steel);
+            k.Beam(new Vector3(0, -0.9f, 0), new Vector3(1.4f, -3.0f, 0), 0.04f, 0.04f, Cable, LM.Steel);
+            k.Box(new Vector3(0, -3.3f, 0), new Vector3(4.2f, 0.6f, 0.9f), 0, Rebar, LM.Steel, 1f, Rebar, LM.Steel);
+            return hookM = k.ToMesh("Crane hook and load");
+        }
+        static readonly Color32 Rebar = LM.C("#6b5446");
+
+        /// <summary>A tower crane at work, added to every crane head (FilmLife does it once the landmarks stand): it slews slowly to a
+        /// new heading (about 1.5° a second, a full turn in four minutes, easing in and out), runs the trolley along the jib to a new
+        /// radius (0.5 m/s), lowers the hook (0.8 m/s), waits while the load is slung, lifts it and moves on. The heading it takes
+        /// overrides the plain spin LandmarkSystem gives the head; the hook never goes below the roof or the ground under it.</summary>
+        public class CraneMotion : MonoBehaviour
+        {
+            Transform trolley, cable, hook; float jib, yaw, yaw0, yawT, slewT, slewDur, rad, radT, drop, dropT, wait; int stage; System.Random rnd;
+            const float Rail = 1.8f;
+
+            void Start()
+            {
+                var mf = GetComponent<MeshFilter>(); var mr = GetComponent<MeshRenderer>();
+                if (mf == null || mf.sharedMesh == null || mr == null) { enabled = false; return; }
+                jib = Mathf.Max(20f, mf.sharedMesh.bounds.max.x);
+                rnd = new System.Random(GetInstanceID() * 7919 + Mathf.RoundToInt(transform.position.x));
+                yaw = transform.localEulerAngles.y; yawT = yaw; rad = jib * (0.35f + 0.4f * (float)rnd.NextDouble()); radT = rad; drop = 6f; dropT = drop;
+                stage = rnd.Next(4); wait = (float)rnd.NextDouble() * 6f; yaw0 = yaw; yawT = yaw + 50f; slewDur = 40f;
+                trolley = Piece("Crane trolley", Trolley(), mr.sharedMaterial, transform);
+                cable = Piece("Crane hoist rope", HoistRope(), mr.sharedMaterial, trolley);
+                hook = Piece("Crane hook", Hook(), mr.sharedMaterial, trolley);
+                Place();
+            }
+            static Transform Piece(string name, Mesh m, Material mat, Transform parent)
+            {
+                var go = new GameObject(name); go.transform.SetParent(parent, false);
+                go.AddComponent<MeshFilter>().sharedMesh = m; var r = go.AddComponent<MeshRenderer>(); r.sharedMaterial = mat;
+                r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.On; return go.transform;
+            }
+            /// <summary>How deep the hook may go from the jib: down to 3 m above whatever is under the trolley (the building, the plot, the ground).</summary>
+            float MaxDrop()
+            {
+                var p = transform.TransformPoint(new Vector3(rad, Rail - 1f, 0f));
+                float ground = CityGround.HeightAt(p.x, p.z), lim = p.y - ground - 3f;
+                if (Physics.Raycast(p, Vector3.down, out var hit, 600f, ~0, QueryTriggerInteraction.Ignore)) lim = Mathf.Min(lim, hit.distance - 3f);
+                return Mathf.Max(lim, 2f);
+            }
+            void LateUpdate()
+            {
+                if (trolley == null) return;
+                float dt = Mathf.Min(Time.deltaTime, 0.1f);
+                switch (stage)
+                {
+                    case 0:     // slew to a new heading and run the trolley out or in at the same time
+                        slewT += dt; float k = Mathf.Clamp01(slewT / slewDur); yaw = Mathf.LerpAngle(yaw0, yawT, k * k * (3f - 2f * k));
+                        rad = Mathf.MoveTowards(rad, radT, 0.5f * dt);
+                        if (k >= 1f && Mathf.Abs(rad - radT) < 0.01f) { stage = 1; dropT = Mathf.Min(MaxDrop(), 12f + 30f * (float)rnd.NextDouble()); }
+                        break;
+                    case 1:     // lower the hook
+                        drop = Mathf.MoveTowards(drop, dropT, 0.8f * dt); if (Mathf.Abs(drop - dropT) < 0.01f) { stage = 2; wait = 8f + 10f * (float)rnd.NextDouble(); }
+                        break;
+                    case 2:     // the load is slung or set down
+                        wait -= dt; if (wait <= 0f) { stage = 3; dropT = 4f + 3f * (float)rnd.NextDouble(); }
+                        break;
+                    default:    // lift, then pick the next move
+                        drop = Mathf.MoveTowards(drop, dropT, 0.8f * dt);
+                        if (Mathf.Abs(drop - dropT) < 0.01f)
+                        {
+                            float turn = (40f + 120f * (float)rnd.NextDouble()) * (rnd.Next(2) == 0 ? 1f : -1f);
+                            yaw0 = yaw; yawT = yaw + turn; slewT = 0f; slewDur = Mathf.Abs(turn) / 1.5f + 6f;
+                            radT = jib * (0.25f + 0.67f * (float)rnd.NextDouble()); stage = 0;
+                        }
+                        break;
+                }
+                drop = Mathf.Min(drop, MaxDropCached());
+                transform.localRotation = Quaternion.Euler(0f, yaw, 0f);
+                Place();
+            }
+            float cachedDrop = 1000f, cacheT;
+            float MaxDropCached() { if (Time.time - cacheT > 0.5f || cachedDrop > 999f) { cachedDrop = MaxDrop(); cacheT = Time.time; } return cachedDrop; }
+            void Place()
+            {
+                trolley.localPosition = new Vector3(rad, Rail, 0f);
+                cable.localPosition = new Vector3(0f, -0.6f, 0f); cable.localScale = new Vector3(1f, Mathf.Max(drop - 0.6f, 0.1f), 1f);
+                hook.localPosition = new Vector3(0f, -drop, 0f);
+            }
         }
     }
 }

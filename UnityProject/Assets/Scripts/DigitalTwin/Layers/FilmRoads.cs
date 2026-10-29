@@ -35,64 +35,82 @@ namespace AlatauCity.DigitalTwin
             var sh = Shader.Find("AlatauCity/Road"); if (sh == null) { Debug.LogWarning("[Alatau] film roads: shader missing"); return; }
             var mat = new Material(sh) { name = "Film roads" };
             root = new GameObject("Film roads");
-            var V = new List<Vector3>(); var U0 = new List<Vector2>(); var U1 = new List<Vector4>(); var U2 = new List<Vector4>(); var T = new List<int>();
+            var V = new List<Vector3>(); var U0 = new List<Vector4>(); var U1 = new List<Vector4>(); var U2 = new List<Vector4>(); var U3 = new List<Vector4>(); var T = new List<int>();
             var along = new List<float>(); int meshes = 0; float km = 0;
             void Flush()
             {
                 if (V.Count == 0) return;
                 var m = new Mesh { name = "Film roads " + meshes, indexFormat = UnityEngine.Rendering.IndexFormat.UInt32 };
-                m.SetVertices(V); m.SetUVs(0, U0); m.SetUVs(1, U1); m.SetUVs(2, U2); m.SetTriangles(T, 0); m.RecalculateNormals(); m.RecalculateBounds();
+                m.SetVertices(V); m.SetUVs(0, U0); m.SetUVs(1, U1); m.SetUVs(2, U2); m.SetUVs(3, U3); m.SetTriangles(T, 0); m.RecalculateNormals(); m.RecalculateBounds();
                 var go = new GameObject(m.name); go.transform.SetParent(root.transform, false);
                 go.AddComponent<MeshFilter>().sharedMesh = m; var mr = go.AddComponent<MeshRenderer>(); mr.sharedMaterial = mat;
                 mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off; mr.receiveShadows = true;
-                V.Clear(); U0.Clear(); U1.Clear(); U2.Clear(); T.Clear(); meshes++;
+                V.Clear(); U0.Clear(); U1.Clear(); U2.Clear(); U3.Clear(); T.Clear(); meshes++;
             }
-            var strokes = Strokes(); drawn = strokes;
+            var strokes = Strokes(); drawn = strokes; Lamps.Clear();
+            // the junctions first: a crossing is set back from the junction's patch, so its size must be known before the arms are drawn
             foreach (var st in strokes)
             {
-                Dims(st.Cls, out float half, out float walk, out int lanes, out float lift);
-                if (st.Ramp) { half = 4f; walk = 0f; lanes = -1; lift -= 0.05f; }          // a one-lane ramp, under the main carriageway
-                else if (st.OneWay)
-                {
-                    // one carriageway of a dual road (the plan draws each direction as its own line, 8–25 m apart): lanes of one direction only
-                    switch (st.Cls)
-                    {
-                        case TwinData.RoadClass.Highway: half = 6f; lanes = -3; break;
-                        case TwinData.RoadClass.Ring: half = 5.5f; lanes = -3; break;
-                        case TwinData.RoadClass.Main: half = 3.8f; lanes = -2; break;
-                        default: half = 3.2f; lanes = -1; break;
-                    }
-                }
+                if (st.Ramp || st.P == null || st.P.Count < 2) continue;
+                StrokeDims(st, out float h0, out float w0, out _, out float l0); var p0 = st.P;
+                Node(st.A, p0[0], (p0[Mathf.Min(1, p0.Count - 1)] - p0[0]).normalized, st.Cls, h0, w0, l0, st.Years);
+                Node(st.B, p0[p0.Count - 1], (p0[Mathf.Max(p0.Count - 2, 0)] - p0[p0.Count - 1]).normalized, st.Cls, h0, w0, l0, st.Years);
+            }
+            // T-junctions the plan draws as a street ending on the middle of another road: crossings on the through road on both
+            // sides of the side street, and on the side street set back from the through road's kerb
+            var mids = MidJunctions(strokes);
+            for (int si = 0; si < strokes.Count; si++)
+            {
+                var st = strokes[si];
+                StrokeDims(st, out float half, out float walk, out int lanes, out float lift);
                 var pts = st.P; float len = 0; along.Clear(); along.Add(0);
                 for (int i = 1; i < pts.Count; i++) { len += (pts[i] - pts[i - 1]).magnitude; along.Add(len); }
                 if (len < 0.5f) continue;
                 km += len / 1000f;
                 var years = st.Years;
+                // street lamps (FilmLamps places the posts, AlatauRoad draws their light on the ground by the same rule) and pedestrian
+                // crossings with a stop line on the arms of street junctions
+                FilmLamps.Rule(st.Cls, st.Ramp, st.OneWay, out float lampStep, out int lampMode, out int lampCls);
+                if (lampMode == 3 && TwinOnRight(strokes, si)) lampMode = 6;     // the other carriageway lies at x < 0: the outer kerb is x > 0
+                float cA = st.Ramp ? 0f : CrossAt(st.A, st.Cls), cB = st.Ramp ? 0f : CrossAt(st.B, st.Cls);
+                if (cA + cB + 2f * CrossW(st.Cls) + 16f > len) { cA = 0f; cB = 0f; }
+                var u3 = new Vector4(lampStep, lampMode + 8 * lampCls, cA, cB);
+                mids.TryGetValue(si, out var ml);
+                if (lampMode > 0) Lamps.Add(new LampRun { P = pts, Along = along.ToArray(), Half = half, Len = len, Step = lampStep, Mode = lampMode, Cls = lampCls, Years = years, Mids = ml });
+                // the crossings in the middle of this road (uv0.zw = along of the junction, set back of its crossings): each segment takes
+                // the nearest junction; where that changes, the row of vertices is doubled so the value never blends between two
+                Vector2 Mid(int seg)
+                {
+                    if (ml == null || seg < 1 || seg >= pts.Count) return Vector2.zero;
+                    float m = (along[seg - 1] + along[seg]) * 0.5f; Vector2 best = Vector2.zero; float bd = float.MaxValue;
+                    foreach (var j in ml) { float dd = Mathf.Abs(j.x - m); if (dd < bd) { bd = dd; best = j; } }
+                    return best;
+                }
                 for (int pass = walk > 0f ? 0 : 1; pass < 2; pass++)
                 {
-                    float w = pass == 0 ? half + walk : half, up = pass == 0 ? 0.12f : lift; int v0 = V.Count;
-                    for (int i = 0; i < pts.Count; i++)
+                    float w = pass == 0 ? half + walk : half, up = pass == 0 ? 0.12f : lift; int prev = -1;
+                    int Row(int i, Vector2 jm)
                     {
+                        int r0 = V.Count;
                         Vector2 d = (pts[Mathf.Min(i + 1, pts.Count - 1)] - pts[Mathf.Max(i - 1, 0)]).normalized, left = new Vector2(-d.y, d.x);
                         for (int sd = -1; sd <= 1; sd++)
                         {
                             Vector2 p = pts[i] + left * (w * sd);
-                            V.Add(new Vector3(p.x, CityGround.HeightAt(p.x, p.y) + up, p.y)); U0.Add(new Vector2(w * sd, along[i]));
-                            U1.Add(new Vector4(half, pass, len, lanes)); U2.Add(years);
+                            V.Add(new Vector3(p.x, CityGround.HeightAt(p.x, p.y) + up, p.y)); U0.Add(new Vector4(w * sd, along[i], jm.x, jm.y));
+                            U1.Add(new Vector4(half, pass, len, lanes)); U2.Add(years); U3.Add(u3);
                         }
-                        if (i > 0)
-                        {
-                            int a = v0 + (i - 1) * 3, b = v0 + i * 3;
-                            for (int k = 0; k < 2; k++) { T.Add(a + k); T.Add(a + k + 1); T.Add(b + k); T.Add(a + k + 1); T.Add(b + k + 1); T.Add(b + k); }      // facing up
-                        }
+                        return r0;
+                    }
+                    for (int i = 0; i < pts.Count; i++)
+                    {
+                        Vector2 jR = Mid(i + 1), jL = i > 0 ? Mid(i) : jR;
+                        int b = Row(i, jL);
+                        if (prev >= 0)
+                            for (int k = 0; k < 2; k++) { T.Add(prev + k); T.Add(prev + k + 1); T.Add(b + k); T.Add(prev + k + 1); T.Add(b + k + 1); T.Add(b + k); }      // facing up
+                        prev = jR != jL && i < pts.Count - 1 ? Row(i, jR) : b;
                     }
                 }
                 if (V.Count > 180000) Flush();
-                if (!st.Ramp)
-                {
-                    Node(st.A, pts[0], (pts[Mathf.Min(1, pts.Count - 1)] - pts[0]).normalized, st.Cls, half, walk, lift, years);
-                    Node(st.B, pts[pts.Count - 1], (pts[Mathf.Max(pts.Count - 2, 0)] - pts[pts.Count - 1]).normalized, st.Cls, half, walk, lift, years);
-                }
             }
             // junctions: a round patch of plain asphalt (and of pavement under it) where streets meet, so their ends never show and lines
             // never cross inside a junction. A motorway or ring road that runs straight through keeps its markings (ramps just merge).
@@ -104,11 +122,11 @@ namespace AlatauCity.DigitalTwin
                 for (int pass = nd.Walk > 0f ? 0 : 1; pass < 2; pass++)
                 {
                     float r = pass == 0 ? nd.Half + nd.Walk : nd.Half * 1.02f, up = pass == 0 ? 0.13f : nd.Lift + 0.025f; int c0 = V.Count; const int N = 20;
-                    V.Add(new Vector3(nd.P.x, CityGround.HeightAt(nd.P.x, nd.P.y) + up, nd.P.y)); U0.Add(new Vector2(0f, 0f)); U1.Add(new Vector4(nd.Half, pass, 0f, 1f)); U2.Add(nd.Years);
+                    V.Add(new Vector3(nd.P.x, CityGround.HeightAt(nd.P.x, nd.P.y) + up, nd.P.y)); U0.Add(Vector4.zero); U1.Add(new Vector4(nd.Half, pass, 0f, 1f)); U2.Add(nd.Years); U3.Add(new Vector4(0f, 5f, 0f, 0f));
                     for (int i = 0; i < N; i++)
                     {
                         float a = i * Mathf.PI * 2f / N; var p = nd.P + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * r;
-                        V.Add(new Vector3(p.x, CityGround.HeightAt(p.x, p.y) + up, p.y)); U0.Add(new Vector2(r, 0f)); U1.Add(new Vector4(nd.Half, pass, 0f, 1f)); U2.Add(nd.Years);
+                        V.Add(new Vector3(p.x, CityGround.HeightAt(p.x, p.y) + up, p.y)); U0.Add(new Vector4(r, 0f, 0f, 0f)); U1.Add(new Vector4(nd.Half, pass, 0f, 1f)); U2.Add(nd.Years); U3.Add(new Vector4(0f, 5f, 0f, 0f));
                         T.Add(c0); T.Add(c0 + 1 + (i + 1) % N); T.Add(c0 + 1 + i);
                     }
                 }
@@ -118,9 +136,136 @@ namespace AlatauCity.DigitalTwin
             Debug.Log($"[Alatau] film roads: {km:0} km in {meshes} meshes");
         }
 
+        /// <summary>Cross-section of one drawn stroke: its class, or a one-lane ramp, or one carriageway of a dual road.</summary>
+        static void StrokeDims(Stroke st, out float half, out float walk, out int lanes, out float lift)
+        {
+            Dims(st.Cls, out half, out walk, out lanes, out lift);
+            if (st.Ramp) { half = 4f; walk = 0f; lanes = -1; lift -= 0.05f; }          // a one-lane ramp, under the main carriageway
+            else if (st.OneWay)
+            {
+                // one carriageway of a dual road (the plan draws each direction as its own line, 8–25 m apart): lanes of one direction only
+                switch (st.Cls)
+                {
+                    case TwinData.RoadClass.Highway: half = 6f; lanes = -3; break;
+                    case TwinData.RoadClass.Ring: half = 5.5f; lanes = -3; break;
+                    case TwinData.RoadClass.Main: half = 3.8f; lanes = -2; break;
+                    default: half = 3.2f; lanes = -1; break;
+                }
+            }
+        }
+
+        /// <summary>Where a pedestrian crossing starts on the arm of a street junction, metres from the junction centre (0 = none): a
+        /// junction of three or more streets or main roads (never on the motorway or the ring), set back 1 m from the junction's
+        /// pavement patch. Width of the crossing: CrossW; the stop line lies 3 m behind it (AlatauRoad draws both).</summary>
+        float CrossAt(int node, TwinData.RoadClass cls)
+        {
+            if (cls == TwinData.RoadClass.Highway || cls == TwinData.RoadClass.Ring) return 0f;
+            if (!nodes.TryGetValue(node, out var nd) || nd.Fast) return 0f;
+            float r = nd.Deg >= 3 ? nd.Half + nd.Walk + 1f : 0f;
+            return Mathf.Max(r, nd.ThroughOff);                              // a street ending on a through road: behind its kerb
+        }
+        /// <summary>Junction nodes that lie on the middle of another street or main road (not its ends): per through stroke the along
+        /// position of each such junction and the set back of its crossings (the side street's half width and pavement + 1 m). Sets
+        /// the node's ThroughOff (the through road's half width and pavement + 1 m) for the side street's own crossing.</summary>
+        Dictionary<int, List<Vector2>> MidJunctions(List<Stroke> strokes)
+        {
+            const float SC = 40f; var res = new Dictionary<int, List<Vector2>>();
+            var grid = new Dictionary<long, List<(int s, int k)>>(); var alongs = new float[strokes.Count][];
+            long Key(int x, int z) => ((long)x << 32) ^ (uint)z;
+            for (int s = 0; s < strokes.Count; s++)
+            {
+                var q = strokes[s]; if (q.P == null || q.P.Count < 2) continue;
+                var al = new float[q.P.Count]; for (int k = 1; k < q.P.Count; k++) al[k] = al[k - 1] + (q.P[k] - q.P[k - 1]).magnitude; alongs[s] = al;
+                if (q.Ramp || q.Cls == TwinData.RoadClass.Highway || q.Cls == TwinData.RoadClass.Ring) continue;
+                for (int k = 1; k < q.P.Count; k++)
+                {
+                    var m = (q.P[k] + q.P[k - 1]) * 0.5f; long key = Key(Mathf.FloorToInt(m.x / SC), Mathf.FloorToInt(m.y / SC));
+                    if (!grid.TryGetValue(key, out var l)) grid[key] = l = new List<(int, int)>(); l.Add((s, k));
+                }
+            }
+            foreach (var kv in nodes)
+            {
+                var nd = kv.Value; if (nd.Fast) continue;
+                int gx = Mathf.FloorToInt(nd.P.x / SC), gz = Mathf.FloorToInt(nd.P.y / SC); int bs = -1; float bd = float.MaxValue, ba = 0f;
+                for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++)
+                {
+                    if (!grid.TryGetValue(Key(gx + dx, gz + dz), out var l)) continue;
+                    foreach (var (s, k) in l)
+                    {
+                        var q = strokes[s]; if (q.A == kv.Key || q.B == kv.Key) continue;
+                        var a = q.P[k - 1]; var ab = q.P[k] - a; float L2 = ab.sqrMagnitude; if (L2 < 1e-6f) continue;
+                        float t = Mathf.Clamp01(Vector2.Dot(nd.P - a, ab) / L2); float d = (a + ab * t - nd.P).magnitude;
+                        if (d < bd) { bd = d; bs = s; ba = alongs[s][k - 1] + t * Mathf.Sqrt(L2); }
+                    }
+                }
+                if (bs < 0) continue;
+                StrokeDims(strokes[bs], out float th, out float tw, out _, out _);
+                var alb = alongs[bs]; float len = alb[alb.Length - 1];
+                if (bd > th * 0.7f + 1.5f || ba < 12f || ba > len - 12f) continue;
+                nd.ThroughOff = Mathf.Max(nd.ThroughOff, th + tw + 1f);
+                if (!res.TryGetValue(bs, out var list)) res[bs] = list = new List<Vector2>();
+                list.Add(new Vector2(ba, nd.Half + nd.Walk + 1f));
+            }
+            int n = 0; foreach (var l in res.Values) n += l.Count;
+            Debug.Log("[Alatau] film roads: " + n + " T-junctions on through roads get crossings");
+            return res;
+        }
+        /// <summary>For one carriageway of a dual road: whether its twin (the other direction) lies on its right (x &lt; 0 across the
+        /// ribbon), judged from a few points along it; then its lamps stand on the left kerb, away from the median.</summary>
+        static Dictionary<long, List<int>> twinGrid;
+        static bool TwinOnRight(List<Stroke> strokes, int si)
+        {
+            const float C = 60f; long Key(int x, int z) => ((long)x << 32) ^ (uint)z;
+            if (twinGrid == null)
+            {
+                twinGrid = new Dictionary<long, List<int>>();
+                for (int s = 0; s < strokes.Count; s++)
+                {
+                    var q = strokes[s]; if (!q.OneWay || q.P == null) continue;
+                    for (int k = 0; k < q.P.Count; k += 2)
+                    {
+                        long key = Key(Mathf.FloorToInt(q.P[k].x / C), Mathf.FloorToInt(q.P[k].y / C));
+                        if (!twinGrid.TryGetValue(key, out var l)) twinGrid[key] = l = new List<int>();
+                        if (l.Count == 0 || l[l.Count - 1] != s) l.Add(s);
+                    }
+                }
+            }
+            var st = strokes[si]; var P = st.P; int right = 0, leftN = 0;
+            for (int f = 1; f <= 5; f++)
+            {
+                int i = Mathf.Clamp(P.Count * f / 6, 1, P.Count - 1); var p = P[i]; var d = (P[i] - P[i - 1]).normalized; var lft = new Vector2(-d.y, d.x);
+                float bd = 40f; float sideSign = 0f;
+                int gx = Mathf.FloorToInt(p.x / C), gz = Mathf.FloorToInt(p.y / C);
+                for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++)
+                {
+                    if (!twinGrid.TryGetValue(Key(gx + dx, gz + dz), out var l)) continue;
+                    foreach (int s in l)
+                    {
+                        if (s == si || strokes[s].Cls != st.Cls) continue; var q = strokes[s].P;
+                        for (int k = 1; k < q.Count; k++)
+                        {
+                            var a = q[k - 1]; var ab = q[k] - a; float L2 = ab.sqrMagnitude; if (L2 < 1e-6f) continue;
+                            if (Mathf.Abs(Vector2.Dot(ab.normalized, d)) < 0.9f) continue;
+                            var c = a + ab * Mathf.Clamp01(Vector2.Dot(p - a, ab) / L2); float dist = (c - p).magnitude;
+                            if (dist > 3f && dist < bd) { bd = dist; sideSign = Vector2.Dot(c - p, lft); }
+                        }
+                    }
+                }
+                if (sideSign < 0f) right++; else if (sideSign > 0f) leftN++;
+            }
+            return right > leftN;
+        }
+        /// <summary>Width of a crossing along the road: 5 m on main roads, 4 m on streets (stripes 0.5 m with 0.5 m gaps).</summary>
+        public static float CrossW(TwinData.RoadClass cls) => cls == TwinData.RoadClass.Main ? 5f : 4f;
+
+        /// <summary>A drawn road with street lamps: centre line, metres along it at each point, half width of the carriageway, lamp
+        /// spacing and placement (FilmLamps.Rule) and the opening years. Filled when the film roads are built.</summary>
+        public class LampRun { public List<Vector2> P; public float[] Along; public float Half, Len, Step; public int Mode, Cls; public Vector4 Years; public List<Vector2> Mids; }
+        public static readonly List<LampRun> Lamps = new List<LampRun>();
+
         class Junction
         {
-            public Vector2 P; public int Deg; public float Half, Walk, Lift; public bool Fast, Through; public Vector4 Years = new Vector4(9999, 9999, 9999, 9999);
+            public Vector2 P; public int Deg; public float Half, Walk, Lift, ThroughOff; public bool Fast, Through; public Vector4 Years = new Vector4(9999, 9999, 9999, 9999);
             public readonly List<(Vector2 dir, TwinData.RoadClass cls)> Arms = new List<(Vector2, TwinData.RoadClass)>();
         }
         readonly Dictionary<int, Junction> nodes = new Dictionary<int, Junction>();
@@ -138,6 +283,13 @@ namespace AlatauCity.DigitalTwin
         // ---------------------------------------------------------------- strokes: the road graph as long, smooth lines
         class Stroke { public List<Vector2> P; public TwinData.RoadClass Cls; public Vector4 Years; public int A, B; public float Len; public bool Ramp, OneWay, Fixed; }
         static List<Stroke> drawn; static Dictionary<int, List<int>> drawnAt;
+
+        /// <summary>A road as the film look draws it, for what is placed on the roads (traffic, street lamps): centre line, class, opening
+        /// year per scenario (x..w = scenario 0..3), whether it is a ramp or one carriageway of a dual road (then it runs in point order),
+        /// its end nodes in TwinData.RoadNodes and its length in metres. Cross-section: Dims. No ways until the film roads are built.</summary>
+        public struct Way { public IReadOnlyList<Vector2> P; public TwinData.RoadClass Cls; public Vector4 Years; public bool Ramp, OneWay; public int A, B; public float Len; }
+        public static int WayCount => drawn != null ? drawn.Count : 0;
+        public static Way GetWay(int i) { var q = drawn[i]; return new Way { P = q.P, Cls = q.Cls, Years = q.Years, Ramp = q.Ramp, OneWay = q.OneWay, A = q.A, B = q.B, Len = q.Len }; }
 
         /// <summary>The road as it is drawn nearest to p (open in 'year' of scenario 'sc', no ramps), continued at each junction by the
         /// straightest drawn road (turning less than ~55°) until 'reach' metres are added on each side: its centre line, class and

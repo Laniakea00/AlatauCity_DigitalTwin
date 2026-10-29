@@ -11,6 +11,19 @@ namespace AlatauCity.DigitalTwin
         public bool on = true;
         [Range(4, 22)] public float hour = 17.0f;
         public static FilmLook Instance;
+        /// <summary>The light of the moment for the systems that change with it (traffic, people, lamps): 0..1 how dark it is, how far the
+        /// lamps and windows are lit, how much of the dusk glow there is; Active while the film look is applied.</summary>
+        public static float Night, Lamps, Dusk; public static bool Active;
+        /// <summary>The hour of the film look (4..22), for the capture tools and the interface. Stops the accelerated day; the header then shows the twin's time.</summary>
+        public static void SetHour(float h) { if (Instance != null) { Instance.hour = Mathf.Clamp(h, 4f, 22f); Cycling = false; ViewerTime = true; } }
+        /// <summary>The hour shown now (4..22).</summary>
+        public static float Hour => Instance != null ? Instance.hour : 17f;
+        /// <summary>The viewer has picked a time of day in the header (the header then shows the twin's time instead of the clock).</summary>
+        public static bool ViewerTime;
+        /// <summary>"Сутки за 2 минуты": the day runs from 5:00 to 22:00 in two minutes, over and over, until a time is picked.</summary>
+        public static bool Cycling;
+        public const float CycleFrom = 5f, CycleTo = 22f, CycleSeconds = 120f;
+        public static void StartCycle() { if (Instance != null && (Instance.hour < CycleFrom || Instance.hour >= CycleTo - 0.05f)) Instance.hour = CycleFrom; Cycling = true; ViewerTime = true; }
 
         Light sun; Camera cam; MapCamera mc; Material sky; bool applied; FilmPost post; Renderer[] curtains = new Renderer[0]; FilmRoads roads; FilmTrees trees;
         // what the scene looked like before, to give it back
@@ -19,6 +32,7 @@ namespace AlatauCity.DigitalTwin
         static readonly int FilmId = Shader.PropertyToID("_AlatauFilm"), NightId = Shader.PropertyToID("_AlatauNight"), SunDirId = Shader.PropertyToID("_AlatauSunDir"),
             SunColId = Shader.PropertyToID("_AlatauSunColor"), ZenId = Shader.PropertyToID("_AlatauSkyZenith"), HorId = Shader.PropertyToID("_AlatauSkyHorizon"),
             GndId = Shader.PropertyToID("_AlatauSkyGround"), StyleId = Shader.PropertyToID("_AlatauStyleTex"),
+            DuskId = Shader.PropertyToID("_AlatauDusk"), DarkId = Shader.PropertyToID("_AlatauDark"), LampOnId = Shader.PropertyToID("_AlatauLampOn"),
             SkyTexId = Shader.PropertyToID("_AlatauSkyTex"), SkyTexOnId = Shader.PropertyToID("_AlatauSkyTexOn");
         Texture2D skyPhoto;
 
@@ -108,10 +122,18 @@ namespace AlatauCity.DigitalTwin
 
         void Update()
         {
+            LateCycle();
             if (MapCamera.Typing) return;
             if (Input.GetKeyDown(KeyCode.F6)) on = !on;
-            if (Input.GetKey(KeyCode.F7)) hour = Mathf.Max(4f, hour - 2f * Time.deltaTime);
-            if (Input.GetKey(KeyCode.F8)) hour = Mathf.Min(22f, hour + 2f * Time.deltaTime);
+            if (Input.GetKey(KeyCode.F7)) { hour = Mathf.Max(4f, hour - 2f * Time.deltaTime); Cycling = false; }
+            if (Input.GetKey(KeyCode.F8)) { hour = Mathf.Min(22f, hour + 2f * Time.deltaTime); Cycling = false; }
+        }
+
+        void LateCycle()
+        {
+            if (!Cycling) return;
+            hour += (CycleTo - CycleFrom) / CycleSeconds * Time.unscaledDeltaTime;
+            if (hour >= CycleTo) hour = CycleFrom;
         }
 
         void LateUpdate()
@@ -128,6 +150,10 @@ namespace AlatauCity.DigitalTwin
             // the sun: up at 5:30 in the east, highest in the south, down at 18:30 in the west
             float day = (hour - 5.5f) / 13f, el = day >= 0f && day <= 1f ? Mathf.Sin(day * Mathf.PI) * 58f : -Mathf.Min(12f, (day < 0f ? -day : day - 1f) * 13f * 8f);
             float az = Mathf.Lerp(75f, 285f, Mathf.Clamp01(day)) * Mathf.Deg2Rad, e = Mathf.Max(el, 4f) * Mathf.Deg2Rad;
+            // after dark the light comes from the moon, high in the south-east (the sky draws its disc there): grazing light from a
+            // sun under the horizon would leave the ground black
+            float nightK = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(-3f, -11f, el));
+            e = Mathf.Lerp(e, 38f * Mathf.Deg2Rad, nightK); az = Mathf.Lerp(az, (day < 0.5f ? 120f : 150f) * Mathf.Deg2Rad, nightK);
             var toSun = new Vector3(Mathf.Sin(az) * Mathf.Cos(e), Mathf.Sin(e), Mathf.Cos(az) * Mathf.Cos(e));
             float gold = 1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(6f, 30f, el));              // low sun
             float dusk = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(7f, -2f, el));                    // the sun is going, the horizon glows
@@ -140,14 +166,18 @@ namespace AlatauCity.DigitalTwin
             if (sun != null)
             {
                 sun.transform.rotation = Quaternion.LookRotation(-toSun);
-                sun.color = sunC; sun.intensity = Mathf.Lerp(Mathf.Lerp(Mathf.Lerp(1.0f, 0.95f, gold), 0.50f, dusk), 0.20f, night); sun.shadowStrength = Mathf.Lerp(0.86f, 0.55f, dusk);
+                // after dark the "sun" is the moon: a cool, soft light that keeps the city legible
+                sun.color = sunC; sun.intensity = Mathf.Lerp(Mathf.Lerp(Mathf.Lerp(1.0f, 0.95f, gold), 0.50f, dusk), 0.27f, night); sun.shadowStrength = Mathf.Lerp(Mathf.Lerp(0.86f, 0.55f, dusk), 0.40f, night);
             }
             float skyLight = Mathf.Lerp(1f, 1.35f, dusk) * Mathf.Lerp(1f, 0.9f, night);                    // after sunset the sky is most of the light
             RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Trilight;
             RenderSettings.ambientSkyColor = Color.Lerp(zen, hor, 0.45f) * 0.80f * skyLight; RenderSettings.ambientEquatorColor = Color.Lerp(hor, zen, 0.5f * dusk) * 0.62f * skyLight; RenderSettings.ambientGroundColor = gnd * 0.45f;
+            // night fill: the sky glow over a lit city (cool from above, warm from the streets below), so a night aerial still reads
+            RenderSettings.ambientSkyColor += new Color(0.035f, 0.045f, 0.075f) * night; RenderSettings.ambientEquatorColor += new Color(0.03f, 0.035f, 0.055f) * night;
+            RenderSettings.ambientGroundColor += new Color(0.04f, 0.03f, 0.02f) * night;
             // haze: the further the camera is from what it looks at, the further it sees
             float dist = mc != null ? mc.distance : 3000f, vis = Mathf.Clamp(dist * 7f, 22000f, 320000f);
-            RenderSettings.fog = true; RenderSettings.fogMode = FogMode.ExponentialSquared; RenderSettings.fogDensity = 0.83f / vis; RenderSettings.fogColor = Color.Lerp(hor, zen, 0.12f + 0.3f * dusk);
+            RenderSettings.fog = true; RenderSettings.fogMode = FogMode.ExponentialSquared; RenderSettings.fogDensity = 0.83f / vis; RenderSettings.fogColor = Color.Lerp(hor, zen, 0.12f + 0.3f * dusk) + new Color(0.025f, 0.015f, 0.008f) * night;
             QualitySettings.shadowDistance = Mathf.Clamp(dist * 3.2f, 900f, 40000f);
             if (cam != null && sky != null) { RenderSettings.skybox = sky; cam.clearFlags = CameraClearFlags.Skybox; }
             if (post != null)
@@ -159,13 +189,15 @@ namespace AlatauCity.DigitalTwin
             Shader.SetGlobalFloat("_AlatauScenIdx", (int)TwinState.Scenario);
             if (roads != null) roads.Show(true);
             Redraw();
+            Active = true; Night = night; Lamps = lamps; Dusk = dusk;
             Shader.SetGlobalFloat(FilmId, 1f); Shader.SetGlobalFloat(NightId, lamps); Shader.SetGlobalVector(SunDirId, toSun);
+            Shader.SetGlobalFloat(DuskId, dusk); Shader.SetGlobalFloat(DarkId, night); Shader.SetGlobalFloat(LampOnId, lamps);
             Shader.SetGlobalFloat(SkyTexOnId, skyPhoto != null ? (1f - dusk) * (1f - night) * (1f - 0.35f * gold) : 0f);
             Shader.SetGlobalColor(SunColId, sunC); Shader.SetGlobalColor(ZenId, zen); Shader.SetGlobalColor(HorId, hor); Shader.SetGlobalColor(GndId, gnd);
         }
 
         /// <summary>Things drawn frame by frame (the trees). The capture tool calls this right before it renders by hand.</summary>
-        public void Redraw() { if (applied && trees != null && cam != null && mc != null) trees.Draw(cam, mc.target, mc.distance); }
+        public void Redraw() { if (applied && trees != null && cam != null && mc != null) trees.Draw(cam, mc.target, mc.distance); if (applied) FilmLamps.DrawNow(); }
 
         void Restore()
         {
@@ -179,7 +211,9 @@ namespace AlatauCity.DigitalTwin
             if (post != null) post.enabled = false;
             foreach (var r in curtains) if (r != null) r.enabled = true;
             if (roads != null) roads.Show(false);
+            Active = false; Night = 0f; Lamps = 0f; Dusk = 0f;
             Shader.SetGlobalFloat(FilmId, 0f); Shader.SetGlobalFloat(SkyTexOnId, 0f);
+            Shader.SetGlobalFloat(DuskId, 0f); Shader.SetGlobalFloat(DarkId, 0f); Shader.SetGlobalFloat(LampOnId, 0f);
         }
     }
 }

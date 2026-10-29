@@ -209,8 +209,12 @@ namespace AlatauCity.DigitalTwin.Landmarks
             var T = Template(sp);
             float s = h * (sp == 1 ? 1.2f : 1f) / T.top;
             float yaw = seed * 137f * Mathf.Deg2Rad, ca = Mathf.Cos(yaw), sa = Mathf.Sin(yaw);
-            float tv = 0.86f + 0.26f * r2, tw = (r * 7.31f) % 1f;
-            var tint = new Vector3(tv * (1f + 0.10f * tw), tv, tv * (1f - 0.12f * tw));
+            // natural summer greens, one of a few hues per tree (deep green, olive, grey-green, fresh), never lime
+            float tv = 0.80f + 0.30f * r2, tw = (r * 7.31f) % 1f;
+            var hue = tw < 0.34f ? new Vector3(0.78f, 0.92f, 0.84f) : tw < 0.62f ? new Vector3(0.95f, 0.93f, 0.74f) : tw < 0.84f ? new Vector3(0.82f, 0.90f, 0.88f) : new Vector3(0.88f, 0.97f, 0.80f);
+            var tint = hue * tv;
+            // planted in rows, but never on a ruler: half a metre either way
+            p += new Vector3((((r2 * 13.7f) % 1f) - 0.5f) * 1.0f, 0f, (((r * 29.3f) % 1f) - 0.5f) * 1.0f);
             int b = v.Count;
             for (int i = 0; i < T.p.Length; i++)
             {

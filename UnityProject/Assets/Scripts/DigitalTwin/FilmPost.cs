@@ -8,7 +8,7 @@ namespace AlatauCity.DigitalTwin
     [RequireComponent(typeof(Camera))]
     public class FilmPost : MonoBehaviour
     {
-        [Range(0, 2)] public float aoStrength = 1.25f;
+        [Range(0, 2)] public float aoStrength = 1.55f;
         public float aoRadius = 14f;                     // metres; FilmLook sets it from the camera distance
         public bool depthOfField = true;
         public float focus = 2000f, focusRange = 1200f;  // metres; FilmLook follows the camera target

@@ -274,10 +274,13 @@ QSurf QTwinSurface(int tg, int pid, float u, float y, float fu, float fy, float2
         // a residential or office block: light precast stone with deep windows in a regular grid, as on the physical model;
         // the window grid fades to its average colour where it gets smaller than a pixel
         float bw = tg == 21 ? 3.0 : tg == 22 ? 1.9 : tg == 23 ? 2.7 : 2.4, fh2 = 3.3;
-        float3 wall = (tg == 21 ? float3(0.70, 0.64, 0.55) : tg == 22 ? float3(0.76, 0.76, 0.75) : tg == 23 ? float3(0.58, 0.45, 0.35) : float3(0.82, 0.79, 0.73)) * 0.86;      // stone, not paper white
+        // light stone and pale panel, a shade per building (warmer, cooler, lighter): finished, not the white of a card model
+        float bh = QHash(floor(wp / 24.0) + 5.3);
+        float3 wall = (tg == 21 ? float3(0.70, 0.64, 0.55) : tg == 22 ? float3(0.74, 0.74, 0.73) : tg == 23 ? float3(0.58, 0.45, 0.35) : float3(0.80, 0.77, 0.71)) * 0.70;      // stone, not paper white
+        wall *= (bh < 0.35 ? float3(1.04, 1.0, 0.94) : bh < 0.7 ? float3(0.97, 0.99, 1.02) : float3(1.06, 1.05, 1.03)) * (0.92 + 0.12 * QHash(floor(wp / 24.0) + 1.7));
         float uu = u / bw, f = y / fh2, du = fu / bw, df = fy / fh2;
         float fuu = frac(uu), ff = frac(f);
-        float ww = tg == 22 ? 0.30 : 0.18, wb = 0.24, wt = 0.88;
+        float ww = tg == 22 ? 0.24 : 0.13, wb = 0.18, wt = 0.90;          // tall windows: the facade reads as glazing in a stone frame
         float shop = 1.0 - step(4.6, y);
         if (shop > 0.5) { wb = 0.10; wt = 0.80; ww = 0.06; ff = y / 4.6; df = fy / 4.6; }
         float wx = smoothstep(ww - du, ww + du, fuu) - smoothstep(1.0 - ww - du, 1.0 - ww + du, fuu);
@@ -296,6 +299,7 @@ QSurf QTwinSurface(int tg, int pid, float u, float y, float fu, float fy, float2
         if (shop > 0.5) glass = float3(0.08, 0.075, 0.07);
         float band = QLine(y, fh2, 0.08, fy) * 0.06 * (1.0 - shop);
         float3 wc = wall * (1.0 - band) * (1.0 - 0.06 * QHash(floor(wp / 24.0)));
+        wc = lerp(wc, wall * float3(0.42, 0.41, 0.40), shop);                // a darker stone plinth round the shopfronts
         o.col = lerp(wc, glass, win) * (1.0 - 0.45 * rev) * (1.0 - 0.30 * side * win);
         o.col = lerp(o.col, wall * 0.92, fr * 0.85);
         // panes differ: clear double glazing mirrors the sky, older or dusty panes less, a few are open (dark)
@@ -304,8 +308,10 @@ QSurf QTwinSurface(int tg, int pid, float u, float y, float fu, float fy, float2
         float deep = step(0.90, QHash(cell + 7.7)) * (1.0 - far);
         o.rough = lerp(0.82, pr, win * (1.0 - fr)); o.metal = lerp(0.0, h1 > 0.78 ? 0.0 : 0.45, win * (1.0 - fr));
         o.col = lerp(o.col, float3(0.055, 0.052, 0.050), deep * win * (1.0 - fr) * 0.8);
-        float lit = step(0.70, h2);
-        o.emis = float3(1.0, 0.72, 0.42) * night * win * (0.015 + (shop > 0.5 ? 0.6 : 0.42 * lit) * (1.0 - far * 0.6));
+        // at night: about four rooms in ten lit, warm or a cooler white, each its own brightness; the shops bright
+        float lit = step(0.64, h2);
+        float3 lampC = h1 < 0.55 ? float3(1.0, 0.72, 0.42) : h1 < 0.85 ? float3(1.0, 0.86, 0.66) : float3(0.80, 0.88, 1.0);
+        o.emis = lampC * night * win * (0.015 + (shop > 0.5 ? 0.6 : (0.14 + 0.26 * QHash(cell + 2.9)) * lit) * (1.0 - far * 0.75));      // from afar the towers stay dark with lit specks, not glowing blocks
         o.col *= lerp(0.70, 1.0, smoothstep(0.0, 5.0, y));            // the base darker: the street in shadow
     }
     return o;

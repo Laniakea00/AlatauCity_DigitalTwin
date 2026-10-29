@@ -30,7 +30,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
         readonly List<Part> parts = new List<Part>();
         class Train { public Route R; public float S, Dir = 1, Dwell; public int NextStop; public Transform A, B; }
         readonly List<Train> trains = new List<Train>();
-        Material mat; Mesh carMesh; bool built; int lastYear = -1; Scenario lastSc = (Scenario)(-1);
+        Material mat; Mesh carMesh, leadNight, tailNight; bool built, nightShown; int lastYear = -1; Scenario lastSc = (Scenario)(-1);
         static readonly int GhostId = Shader.PropertyToID("_Ghost"), BuildId = Shader.PropertyToID("_Build");
 
         const float DeckW = 9.6f, DeckT = 1.9f, Above = 8.5f;
@@ -54,7 +54,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             MakeStations();
             for (int ri = 0; ri < Routes.Count; ri++) BuildRoute(Routes[ri]);
             BuildStations();
-            carMesh = BuildCar();
+            carMesh = BuildCar(0); leadNight = BuildCar(1); tailNight = BuildCar(2);
             built = true; lastYear = -1;
             Debug.Log("[Alatau] LRT: " + Routes.Count + " routes, " + Stations.Count + " stations");
         }
@@ -231,7 +231,9 @@ namespace AlatauCity.DigitalTwin.Landmarks
             parts.Add(new Part { Go = go, R = r, Phase = phase, Kind = kind });
         }
 
-        Mesh BuildCar()
+        /// <summary>variant 0: by day. At night (FilmLook.Lamps) 1: the leading car, lit windows and white head lamps at its front
+        /// (local −x, the direction of travel); 2: the last car, lit windows and red tail lamps at its back (local +x).</summary>
+        Mesh BuildCar(int variant)
         {
             // one car of a low-floor LRV: 28 m, white with a dark window band and the qTwin red stripe; the nose is raked
             var k = new LandmarkKit(); Color32 white = LM.C("#f2f1ee"), red = LM.C("#e0261b"), dark = LM.C("#1a222b"), bog = LM.C("#3a3d42");
@@ -241,10 +243,24 @@ namespace AlatauCity.DigitalTwin.Landmarks
             var nose = LandmarkKit.Chamfer(0, 0, L - 1.6f, W - 0.2f, 0.6f);
             k.Prism(body, 0.9f, 1.25f, red, LM.Solid, 1f, red, -1);
             k.Prism(body, 1.25f, 2.15f, white, LM.Solid, 5f, white, -1);
-            k.Prism(body, 2.15f, 3.25f, dark, LM.Glass, 6f, white, -1);
+            if (variant == 0) k.Prism(body, 2.15f, 3.25f, dark, LM.Glass, 6f, white, -1);
+            else
+            {
+                // the window band lit from inside (warm), with the dark pillars between the windows
+                k.Prism(body, 2.15f, 3.25f, LM.C("#b09662"), LM.Light, 6f, white, -1);
+                for (float x = -L * 0.5f + 2.2f; x < L * 0.5f - 2f; x += 1.85f)
+                    foreach (float sg in new[] { -1f, 1f }) k.Box(new Vector3(x, 2.7f, sg * (W * 0.5f - 0.03f)), new Vector3(0.24f, 1.1f, 0.12f), 0, dark, LM.Solid, 1f, dark, LM.Solid);
+            }
             k.Loft(body, 3.25f, nose, 3.7f, white, LM.Solid, 5f); k.Cap(nose, 3.7f, true, LM.C("#d9dcdf"), LM.Roof);
             k.Box(new Vector3(0, 3.95f, 0), new Vector3(5f, 0.5f, 1.4f), 0, LM.C("#9aa0a6"), LM.Metal, 1f, LM.C("#9aa0a6"), LM.Metal);
-            foreach (float sg in new[] { -1f, 1f }) k.Box(new Vector3(sg * (L * 0.5f + 0.02f), 1.6f, 0), new Vector3(0.1f, 0.35f, 1.8f), 0, LM.C("#fff6dd"), LM.Light, 1f, LM.C("#fff6dd"), LM.Light);
+            if (variant == 0) foreach (float sg in new[] { -1f, 1f }) k.Box(new Vector3(sg * (L * 0.5f + 0.02f), 1.6f, 0), new Vector3(0.1f, 0.35f, 1.8f), 0, LM.C("#fff6dd"), LM.Light, 1f, LM.C("#fff6dd"), LM.Light);
+            else
+            {
+                // night: two head lamps at the front of the train, two red tail lamps at its back
+                float ex = variant == 1 ? -(L * 0.5f + 0.03f) : L * 0.5f + 0.03f; var lc = variant == 1 ? LM.C("#ffffff") : LM.C("#ff2a1a");
+                foreach (float sg in new[] { -1f, 1f }) k.Box(new Vector3(ex, 1.15f, sg * 0.85f), new Vector3(0.12f, 0.26f, 0.48f), 0, lc, LM.Light, 1f, lc, LM.Light);
+                if (variant == 1) k.Box(new Vector3(ex, 3.0f, 0), new Vector3(0.1f, 0.22f, 1.4f), 0, LM.C("#ffb347"), LM.Light, 1f, LM.C("#ffb347"), LM.Light);   // route display
+            }
             return k.ToMesh("LRT car");
         }
 
@@ -331,6 +347,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 {
                     var t = new Train { R = r, S = len * (i + 0.5f) / count, Dir = i % 2 == 0 ? 1 : -1 };
                     t.A = Car("LRT train " + r.Name + " " + i + " a"); t.B = Car("LRT train " + r.Name + " " + i + " b");
+                    if (nightShown) { SetMesh(t.A, leadNight); SetMesh(t.B, tailNight); }
                     t.NextStop = NextStop(r, t.S, t.Dir);
                     trains.Add(t);
                 }
@@ -342,6 +359,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             go.AddComponent<MeshFilter>().sharedMesh = carMesh; var mr = go.AddComponent<MeshRenderer>(); mr.sharedMaterial = mat;
             return go.transform;
         }
+        static void SetMesh(Transform t, Mesh m) { if (t == null) return; var mf = t.GetComponent<MeshFilter>(); if (mf != null && m != null) mf.sharedMesh = m; }
         static int NextStop(Route r, float s, float dir)
         {
             if (dir > 0) { for (int i = 0; i < r.Stops.Count; i++) if (r.Stops[i] > s + 1f) return i; return -1; }
@@ -351,6 +369,13 @@ namespace AlatauCity.DigitalTwin.Landmarks
         void MoveTrains(float dt)
         {
             bool show = TrainsOn;
+            // lit windows and lamps from dusk on
+            bool night = FilmLook.Active && FilmLook.Lamps > 0.35f;
+            if (night != nightShown)
+            {
+                nightShown = night;
+                foreach (var t in trains) { SetMesh(t.A, night ? leadNight : carMesh); SetMesh(t.B, night ? tailNight : carMesh); }
+            }
             foreach (var t in trains)
             {
                 t.A.gameObject.SetActive(show); t.B.gameObject.SetActive(show); if (!show) continue;
@@ -378,7 +403,8 @@ namespace AlatauCity.DigitalTwin.Landmarks
         {
             float sc = Mathf.Clamp(s + back * dir, 0f, r.S[Mathf.Max(r.OpenIdx, 1)]);
             var p = At(r, sc, out var fwd);
-            tr.SetPositionAndRotation(p + Vector3.up * 0.25f + Vector3.Cross(fwd, Vector3.up).normalized * (dir > 0 ? -2.15f : 2.15f), Quaternion.LookRotation(fwd * dir, Vector3.up) * Quaternion.Euler(0, 90f, 0));
+            // the bogies (0.2 m above the car origin) stand on the rails (0.2 m above the deck)
+            tr.SetPositionAndRotation(p + Vector3.up * 0.02f + Vector3.Cross(fwd, Vector3.up).normalized * (dir > 0 ? -2.15f : 2.15f), Quaternion.LookRotation(fwd * dir, Vector3.up) * Quaternion.Euler(0, 90f, 0));
         }
         public static Vector3 At(Route r, float s, out Vector3 fwd)
         {
