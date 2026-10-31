@@ -648,7 +648,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             if (defMore != null) { Vis(defMore, total > 5); defMore.text = defAll ? "Свернуть" : string.Format("Ещё {0} ›", total - shown); if (!defAll && total - shown <= 0) Vis(defMore, false); }
             if (defRows.Count == 0) Txt(defList, defMode == 1 ? "Открытых дефектов нет." : "Устранённых дефектов пока нет.", "mon-para");
         }
-        /// <summary>A defect shown from outside (ShotRig, the AI assistant): the defects page, defect k selected, the camera at it.</summary>
+        /// <summary>A defect shown from outside (ShotRig): the defects page, defect k selected, the camera at it.</summary>
         public void ShowDefect(int k) { if (open) { if (tab != TDef) { defSel = Mathf.Clamp(k, 0, defects.Count - 1); SetTab(TDef); } else SelectDef(k, true); } }
         /// <summary>Selects defect k: the row and its pin are marked, the card shows it; fly — the 3D view flies to it (a short pull-back
         /// and a flight in, so the click is seen even when the camera already looks at it) and a pulsing ring marks the place.</summary>

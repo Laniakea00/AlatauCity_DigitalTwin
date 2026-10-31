@@ -12,7 +12,7 @@ namespace AlatauCity.DigitalTwin
 {
     /// <summary>Presentation, mode 3 — two 3-minute pitches that run without a presenter: «Питч инвестору» and «Питч госоргану».
     /// Each is a short list of tour scenes (the tour's own steps and effects, or a scene of its own) with a Russian voice-over
-    /// (Gemini TTS, one clip per subtitle line in Resources/Pitch, made by tools/pitch/pitch_tts.py) and one subtitle line at the bottom
+    /// (one synthesized clip per subtitle line in Resources/Pitch, made by tools/pitch/pitch_tts.py) and one subtitle line at the bottom
     /// that follows the voice. A scene lasts as long as its lines (plus a short tail) and ends with one figure and its source or model
     /// chip. Start: the presentation button / F5 opens the choice «Полный тур · Питч инвестору · Питч госоргану» (keys 1, 2, 3);
     /// Shift+F5 starts the investor pitch at once, Ctrl+F5 the government one. Space — pause, ← → — scenes, Esc — exit, as in the tour.</summary>
@@ -107,7 +107,6 @@ namespace AlatauCity.DigitalTwin
                "Ситуационный центр: паводок", 19f, () => ("30 ч", "до пика паводка — прогноз модели", TwinModels.Flood)),
             Sc(Pick(all, s => s.Module == "smartcity", 15), "Smart City и iKomek 109", 23f, () => (Loc.N0(SmartCity.CameraCount(TwinState.Year)), "камер в сети города", TwinModels.SmartCity)),
             Sc(Pick(all, s => s.Seg == 6 && s.Module == "construction", 13), "Контроль стройки", 0f, () => (Loc.N0(ConstructionLayer.SitesBehind), "строек отстают от графика", TwinModels.Build), "w26-nocallout"),
-            Sc(Pick(all, s => s.Module == "ai", 17), "Вопрос ИИ-помощнику", 19f, () => (Loc.N0(AiModule.PlanSchool(TwinState.Year).Homes), "домов проверено за секунды", TwinModels.Ai)),
             Sc(all[all.Count - 1], "Один двойник для всего города", 0f, () => ("26", "инфраструктурных проектов города", Sources.GovSummary)),
         };
 

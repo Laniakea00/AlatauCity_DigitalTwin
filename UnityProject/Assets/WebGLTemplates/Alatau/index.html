@@ -113,28 +113,15 @@
   <div id="toast"></div>
   <script>
     // ================= diagnostics: errors, GPU info, context loss =================
-    // Everything is kept in window.__alatau (the build check reads it). Sending to the server is OFF until the
-    // Cloudflare worker has its /log route: then set REPORT_ERRORS = true.
-    var REPORT_ERRORS = false;
-    var LOG_URL = "https://alatau-ai.alatau-city.workers.dev/log";
+    // Everything is kept in window.__alatau for the build check (?check=1 and tools/webgl_check); the live site sends no reports.
     var T0 = Date.now();
     var A = window.__alatau = { state: "loading", progress: 0, errors: [], fatal: null, gpu: null, started: 0, build: "" };
     var CHECK = /[?&]check=1/.test(location.search);
     var $ = function (id) { return document.getElementById(id); };
-    var sent = 0, seen = {};
 
-    function send(kind, msg) {
-      if (!REPORT_ERRORS || sent >= 15) return;
-      var key = kind + msg.slice(0, 120); if (seen[key]) return; seen[key] = 1; sent++;
-      var body = JSON.stringify({ v: 1, kind: kind, msg: msg.slice(0, 4000), state: A.state, t: Date.now() - T0, url: location.href.split("#")[0],
-        build: A.build, gpu: A.gpu, ua: navigator.userAgent, lang: navigator.language, mem: navigator.deviceMemory || 0,
-        cores: navigator.hardwareConcurrency || 0, screen: screen.width + "x" + screen.height + "@" + (window.devicePixelRatio || 1) });
-      try { fetch(LOG_URL, { method: "POST", body: body, keepalive: body.length < 60000, headers: { "content-type": "text/plain" } }).catch(function () {}); } catch (e) {}
-    }
     function record(kind, msg) {
       msg = String(msg || "").slice(0, 4000);
       if (A.errors.length < 200) A.errors.push({ t: Date.now() - T0, kind: kind, msg: msg });
-      send(kind, msg);
     }
 
     // GPU and WebGL 2 probe (the probe context is released at once)

@@ -9,7 +9,7 @@ namespace AlatauCity.DigitalTwin.Modules
 {
     /// <summary>M0 — city overview, laid out like the qTwin platform.
     /// Left: readiness meter + 4 KPI, districts as status rows. Right: journal of the year (what was built, opened, what went wrong),
-    /// AI analytics (3 conclusions from the data) and the growth chart. District mode on row click.</summary>
+    /// analytics (3 conclusions from the data) and the growth chart. District mode on row click.</summary>
     public class OverviewModule : TwinModuleBase
     {
         public override string Id => "overview";
@@ -51,16 +51,14 @@ namespace AlatauCity.DigitalTwin.Modules
             for (int c = 0; c < CityStats.Cats; c++) legend.Add(Widgets.LegendItem(CityStats.CatColors[c], Loc.T(CityStats.CatKeys[c])));
             g.Add(SourceTags.Line(Sources.ModelCity));
 
-            // ---------------- right: journal of the year + AI analytics
+            // ---------------- right: journal of the year + analytics
             Right();
             var j = Widgets.Block(panel, Loc.T("o_journal"), "");
             journalTitle = j.Q<Label>(className: "block-title");
             journal = new VisualElement(); j.Add(journal);
             j.Add(SourceTags.Line(TwinModels.Loads, TwinModels.Build));
-            var a = Widgets.Block(panel, Loc.T("o_ai"), "");
+            var a = Widgets.Block(panel, Loc.T("o_insights"), "");
             insights = new VisualElement(); a.Add(insights);
-            var rec = new VisualElement(); rec.AddToClassList("wide-btn"); rec.Add(new Label(Loc.T("o_recs")) { pickingMode = PickingMode.Ignore }); rec.Add(TwinUI.Icon("sparkles", 16));
-            rec.AddManipulator(new Clickable(() => TwinState.SetModule("ai"))); a.Add(rec);
             // why and how: folded (the long model note used to be a block of its own)
             var why = Widgets.Details(a, "Как считается");
             var wn = new Label("Выводы — из балансов «спрос / мощность», обеспеченности школами и модели трафика двойника. Вероятная причина дефицита электроэнергии — сдвиг очереди подстанции; адаптивные светофоры снижают задержку на ~18 %.") { pickingMode = PickingMode.Ignore }; wn.AddToClassList("note"); why.Add(wn);

@@ -332,7 +332,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             anPaperScroll.scrollOffset = Vector2.zero;
             if (target != null) GoTo(target, true);
         }
-        /// <summary>For ShotRig and the AI assistant: opens the first document place that finding i («Требует внимания») follows from.</summary>
+        /// <summary>For ShotRig: opens the first document place that finding i («Требует внимания») follows from.</summary>
         public void ShowFindingDoc(int i) { if (open && i >= 0 && i < finds.Count && finds[i].Src.Count > 0) { var sr = finds[i].Src[0]; OpenDoc(sr.Doc, sr.At, finds[i]); } }
         void CloseDoc() { if (anViewer != null) anViewer.style.display = DisplayStyle.None; anDoc = -1; }
         /// <summary>The next / previous place the analytics cites in the open document.</summary>

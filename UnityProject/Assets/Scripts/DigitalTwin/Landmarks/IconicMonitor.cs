@@ -305,8 +305,6 @@ namespace AlatauCity.DigitalTwin.Landmarks
             var ii = IconicInterior.Instance; var ls = LandmarkSystem.Instance; if (ii == null || ls == null || !ls.Ready || open) return;
             if (TowerProfile.For(id) == null) return;
             RegisterSources();
-            // the summary of the other object is computed now, while the window is closed (the AI assistant may ask for it)
-            foreach (var oid in new[] { "iconic", "kaist" }) if (oid != id && !sumCache.ContainsKey(oid)) Dry(oid);
             L = ls.Get(id); if (L == null || L.Parts == null || L.Main < 0) return; H = L.Height;
             // the survey shown first is the one in the middle of the works (MakeSurveys snaps it to a survey date); the list runs to the handover
             Report = L.Begin + 0.5f * (L.Finish - L.Begin); int stage = Mathf.FloorToInt(Report); T0 = Mathf.Floor(L.Begin); T1 = Mathf.Max(Mathf.Ceil(L.Finish + 0.05f), L.EndYear + 1f);

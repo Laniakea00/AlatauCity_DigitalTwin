@@ -7,8 +7,8 @@ using DSrcI = AlatauCity.DigitalTwin.Data.Sources;
 
 namespace AlatauCity.DigitalTwin.Landmarks
 {
-    /// <summary>The state of the construction monitoring of one object in plain numbers and words, for other parts of the twin (the AI
-    /// assistant): the same model and the same date (the last survey) as the «Контроль» page. Ok = false when it could not be computed.</summary>
+    /// <summary>The state of the construction monitoring of one object in plain numbers and words, for other parts of the twin:
+    /// the same model and the same date (the last survey) as the «Контроль» page. Ok = false when it could not be computed.</summary>
     public struct MonitorSummary
     {
         public bool Ok;

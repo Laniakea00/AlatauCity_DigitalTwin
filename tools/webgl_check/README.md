@@ -53,11 +53,6 @@ A build made with an older loading page is checked on a copy that gets the curre
 
 Do not run it while someone else is presenting from the same Chrome profile. It uses its own profile, but it does open a Chrome window.
 
-## Error reports from the live site
+## Errors on the live site
 
-The template keeps every error in `window.__alatau.errors`, together with the GPU name. It can also POST each error to the Cloudflare worker at `/log`. That is OFF for now: `REPORT_ERRORS = false` in `WebGLTemplates/Alatau/index.html`.
-
-To turn it on:
-1. Deploy the worker route.
-2. Set the flag to `true`.
-3. Run `python tools/render_web_template.py`.
+The template keeps every error in `window.__alatau.errors`, together with the GPU name. The live site sends them nowhere; this check reads them from the page.

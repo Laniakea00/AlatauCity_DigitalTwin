@@ -49,7 +49,7 @@ namespace AlatauCity.DigitalTwin
         public static void Toggle() { if (Instance == null) return; if (Instance.running) Instance.Stop(); else Instance.PitchMenu(); }   // w26: the choice tour / pitches (TwinPitch.cs)
 
         // ------------------------------------------------------------------ video mode (F6)
-        // The investor video in English (3:18): 15 scenes cut to the ElevenLabs voice-over in Resources/Video. Each scene is a tour step
+        // The investor video in English (3:18): 14 scenes cut to the ElevenLabs voice-over in Resources/Video. Each scene is a tour step
         // (or a scene of its own: Iconic rising to 2028, then inside the tower and its construction monitoring) and lasts exactly as long
         // as its paragraphs of the voice-over; the step plays faster (Time.timeScale) so its content fits, the camera keeps its own pace.
         // The interface switches to English for the video and back after it. Record with Alatau City → Record investor video
@@ -63,12 +63,12 @@ namespace AlatauCity.DigitalTwin
         // (tour step or a special scene, step seconds the scene needs to show its point) — in the order of the voice-over
         static readonly (int step, float need)[] Cut = {
             (0, 16.6f), (1, 24f), (RiseScene, 24f), (InsideScene, 0f), (5, 18f), (7, 22f), (11, 22f), (12, 10f),
-            (13, 20f), (15, 24f), (14, 21f), (16, 26.5f), (17, 14f), (18, 25f), (19, 12f) };
+            (13, 20f), (15, 24f), (14, 21f), (16, 26.5f), (17, 25f), (18, 12f) };
         // the voice-over of 15.10.2026 (196.6 s): the cuts sit in the pauses between its paragraphs (Iconic inside + monitoring + cameras
-        // is one scene of three paragraphs; the energy and AI paragraph is cut at its inner sentence), found from the text against the pauses
+        // is one scene of three paragraphs; the energy scene holds its whole paragraph), found from the text against the pauses
         const float VoiceLen = 196.60f;
-        static readonly float[] CutBreaks = { 16.64f, 28.01f, 40.26f, 82.34f, 99.02f, 116.03f, 126.33f, 131.83f, 140.53f, 150.95f, 165.38f, 170.68f, 176.62f, 185.42f };
-        static readonly float[] CutFallback = { 16.6f, 11.4f, 12.3f, 42.1f, 16.7f, 17f, 10.3f, 5.5f, 8.7f, 10.4f, 14.4f, 5.3f, 5.9f, 8.8f, 12.7f };
+        static readonly float[] CutBreaks = { 16.64f, 28.01f, 40.26f, 82.34f, 99.02f, 116.03f, 126.33f, 131.83f, 140.53f, 150.95f, 165.38f, 176.62f, 185.42f };
+        static readonly float[] CutFallback = { 16.6f, 11.4f, 12.3f, 42.1f, 16.7f, 17f, 10.3f, 5.5f, 8.7f, 10.4f, 14.4f, 11.2f, 8.8f, 12.7f };
         /// <summary>The video is in English: the interface switches before the first frame (the recorder calls it a few seconds ahead).</summary>
         public static void VideoLanguage() { var me = Instance; if (me == null) return; if (me.langBefore == null) me.langBefore = Loc.Language; UiTranslator.Persist = false; if (Loc.Language != "en") TwinState.SetLanguage("en"); }
         public static void ToggleVideo() { if (Instance == null) return; if (Instance.running) Instance.Stop(); else Instance.BeginVideo(); }
@@ -297,7 +297,6 @@ namespace AlatauCity.DigitalTwin
                     At(15.5f, () => { SmartCityModule.TourCam(SmartCity.CamType.Construction, -1); TourNotice("Стройка · видео", "hard_hat", "warn", "Рабочий без каски", "уведомлён прораб · подрядчику — замечание", "нарушение"); }),
                     At(21.5f, () => TourNotice("iKomek 109", "bell", "ok", "Освещение во дворе восстановлено", "житель получил ответ в приложении · 38 мин от обращения", "решено")) } });
             steps.Add(new Step { Seg = 6, Zone = 1, Module = "overview", Year = TourEnergy.Y0, Dur = 33, Enter = () => { LS?.Select(null, false); TourFx.Instance?.ShowEnergy(); }, Title = () => "Прогноз: энергия 2034" });
-            steps.Add(new Step { Seg = 6, Zone = -1, Module = "ai", Year = 2038, Dur = 28, Enter = () => { LS?.Select(null, false); TwinState.SetDistrict(-1); TourFx.Instance?.ShowAi(); }, Title = () => "ИИ-ассистент" });
 
             // ================= the economy of the city (segment 7): the year runs 2026 → 2050, GRP, construction, budget, the plants
             steps.Add(new Step { Seg = 7, Zone = -1, Module = "economy", Year = 2026, AnimFrom = 2026, AnimTo = 2050, Dur = 28, Enter = Overview, Title = () => "Экономика города: ВРП, стройка, бюджет",
@@ -321,7 +320,7 @@ namespace AlatauCity.DigitalTwin
                     s.K(Kk(Res(2050)), "жителей", CRes).K(Kk(CityStats.Jobs(-1, 2050)), "рабочих мест", CJobs).K(Loc.N0(CityStats.Count(-1, 2050)), "зданий", CInfo);
                     var e = CityEconomy.Of(2050);
                     s.R("ВРП 2050", CityEconomy.Usd(e.GrpTotal) + " · $" + Loc.N0(e.GrpPerCapitaUsd) + " на жителя", COk);
-                    s.R("Стройка: план против факта", "", COk).R("Сети и дефициты — за годы до проблемы", "", COk).R("Smart City, ситуационный центр и ИИ-ассистент", "", COk);
+                    s.R("Стройка: план против факта", "", COk).R("Сети и дефициты — за годы до проблемы", "", COk).R("Smart City и ситуационный центр", "", COk);
                     return s;
                 } });
         }
@@ -358,7 +357,7 @@ namespace AlatauCity.DigitalTwin
             if (TwinState.Scenario != s.Sc) TwinState.Scenario = s.Sc;
             TwinState.SetModule(s.Module);
             TwinState.Year = s.AnimTo > 0 ? s.AnimFrom : s.Year;
-            if (s.Zone < 0 && TwinState.District >= 0 && s.Module != "ai") TwinState.SetDistrict(-1);
+            if (s.Zone < 0 && TwinState.District >= 0) TwinState.SetDistrict(-1);
             if (s.Zone >= 0) TwinState.SetDistrict(s.Zone);              // the step's district is lit on the ground and named in the header
             TwinUI.Instance?.Middle?.EnableInClassList("tour-gfa", s.Gfa);
             TwinUI.Instance?.Middle?.EnableInClassList("tour-nocard", s.NoCard);

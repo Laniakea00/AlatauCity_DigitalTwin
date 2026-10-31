@@ -326,12 +326,6 @@ namespace AlatauCity.DigitalTwin
             MapPins.Instance?.Set(pins);
         }
 
-        UI.AiShow ai;
-        public void ShowAi()
-        {
-            var ui = UI.TwinUI.Instance; if (ui == null || ui.Scene == null) return;
-            ai?.RemoveFromHierarchy(); ai = new UI.AiShow(TwinState.Year, 0); ui.Scene.Insert(0, ai); Clean(true);   // Gate, the flagship district; under the tour card
-        }
         TourSeaside seaside;
         public void Seaside() { seaside?.Stop(); seaside = new TourSeaside(); }
         TourEnergy energy;
@@ -484,7 +478,6 @@ namespace AlatauCity.DigitalTwin
             if (seaside != null) { seaside.Stop(); seaside = null; }
             if (cw) { cw = false; MapPins.Instance?.Clear(); }
             if (cwLegend != null) { cwLegend.RemoveFromHierarchy(); cwLegend = null; }
-            if (ai != null) { ai.RemoveFromHierarchy(); ai = null; TintLayer.Disable(); MapPins.Instance?.Clear(); }
             Clean(false);
         }
     }

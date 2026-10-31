@@ -1,13 +1,13 @@
 namespace AlatauCity.DigitalTwin.Data
 {
-    /// <summary>The QTwin models behind the numbers of the Overview, Construction, Prediction, Situation, Smart City and AI tabs,
+    /// <summary>The QTwin models behind the numbers of the Overview, Construction, Prediction, Situation and Smart City tabs,
     /// each with its assumptions in plain words. They are listed in the panel «Источники и допущения» (TwinUI) and tagged on the
     /// panels with SourceTags. Init() runs from TwinUI.Awake, so the list is complete before the first panel is built.</summary>
     public static class TwinModels
     {
         public const string Loads = "model_loads", Social = "model_social", Traffic = "model_traffic", Quake = "model_quake",
             Flood = "model_flood", Build = "model_build", Money = "model_money", Bim = "model_bim", Ops = "model_ops",
-            SmartCity = "model_smartcity", Ai = "model_ai";
+            SmartCity = "model_smartcity";
 
         static bool done;
         public static void Init()
@@ -44,10 +44,6 @@ namespace AlatauCity.DigitalTwin.Data
             Sources.RegisterModel(SmartCity, "Smart City: камеры и обращения",
                 "Число камер, их назначение, доступность, обращения в iKomek 109 и сроки решения — правдоподобная синтетика, растёт с населением города. " +
                 "Видео с камер — иллюстрация, не реальная трансляция.");
-            Sources.RegisterModel(Ai, "Ответы ИИ-ассистента",
-                "Когда подключён сервер-посредник, отвечает языковая модель Gemini: она вызывает инструменты двойника и берёт числа только из их результатов. " +
-                "Без него ответы сценарные: ассистент выбирает ответ по ключевым словам, а все числа считает из моделей двойника " +
-                "(сценарий застройки, нагрузки, трафик, риски).");
         }
     }
 }
