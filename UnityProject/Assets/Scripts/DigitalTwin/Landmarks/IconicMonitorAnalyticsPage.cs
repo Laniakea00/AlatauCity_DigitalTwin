@@ -14,7 +14,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
     public partial class IconicMonitor
     {
         const int TAn = 5;
-        VisualElement anPage, anSumV, anCostV, anDocsV, anViewer, anPaper, anCostRows, anDetail, anCtx;
+        VisualElement anPage, anCostV, anViewer, anPaper, anCostRows, anDetail, anCtx;
         ScrollView anPaperScroll;
         Label anVTitle, anVNo, anVKind, anVCtx, anVNav;
         readonly List<Button> anTabs = new List<Button>(), anPartBtns = new List<Button>();
@@ -40,146 +40,58 @@ namespace AlatauCity.DigitalTwin.Landmarks
         static ScrollView Scroll(VisualElement parent, string cls)
         {
             var s = new ScrollView(ScrollViewMode.Vertical) { horizontalScrollerVisibility = ScrollerVisibility.Hidden, mouseWheelScrollSize = 60f };
+            if (cls.Contains("ctl-vscroll")) s.verticalScrollerVisibility = ScrollerVisibility.Hidden;       // a whole page scrolls by the wheel, no bar
             s.AddToClassList("an-scroll"); foreach (var c in cls.Split(' ')) if (c.Length > 0) s.AddToClassList(c);
             parent.Add(s); return s;
         }
         static void Spacer(VisualElement parent) { var s = new VisualElement { pickingMode = PickingMode.Ignore }; s.style.flexGrow = 1; parent.Add(s); }
 
         // ================================================================== the page
+        /// <summary>«Смета», the money page: four numbers (budget, spent, still needed, forecast), the cost items with their forecast,
+        /// the prices of the resources, how the forecast of the selected item is made. The summary and the documents live on «Контроль».</summary>
         void BuildAnalytics()
         {
             anTabs.Clear(); anPartBtns.Clear(); anRefEls.Clear(); anDoc = -1;
             anPage = Box(body, "an-page");
             var head = Box(anPage, "an-head");
-            head.Add(TwinUI.Icon("gauge", 20));
+            head.Add(TwinUI.Icon("receipt", 20));
             var tb = Box(head, "an-titles", false);
-            Txt(tb, "Аналитика строительства · " + L.Short, "an-h1");
-            Txt(tb, $"на {Day(Report)} — по последней съёмке, актам и ценам на эту дату · сценарий цифрового двойника", "mon-src");
-            var seg = Box(head, "mon-seg"); seg.style.marginLeft = 22;
-            foreach (var (txt, k) in new[] { ("Сводка", 0), ("Смета", 1), ($"Документы · {docs.Count}", 2) })
-            { int kk = k; var b = Widgets.Btn(txt, () => AnView(kk), "small"); b.AddToClassList("an-tab"); seg.Add(b); anTabs.Add(b); }
+            Txt(tb, "Смета · " + L.Short, "an-h1");
+            Txt(tb, $"цены на {Day(Report)}", "w17-sub");
             Spacer(head);
             var sl = SourceTags.Line(DSrcA.OlxPrices, DSrcA.NbrkRate, SrcMon); sl.style.marginLeft = 12; sl.style.flexShrink = 0; head.Add(sl);
 
-            // the main thing, in one sentence
-            int worstSev = finds.Count > 0 ? finds[0].Sev : -1;
-            var vb = Box(anPage, "an-verdict " + SevCls[Mathf.Clamp(worstSev + 1, 0, 3)]);
-            Txt(vb, $"Главное на {Day(Report)}", "an-verdict-k");
-            Txt(vb, Verdict(), "an-verdict-t");
-
-            anSumV = Box(anPage, "an-view"); BuildAnSummary(anSumV);
-            anCostV = Box(anPage, "an-view"); BuildAnCost(anCostV);
-            anDocsV = Box(anPage, "an-view"); BuildAnDocs(anDocsV);
-            BuildViewer();
-            AnView(0);
-        }
-        /// <summary>The main thing: the money, the dates, the people — what a customer asks first.</summary>
-        string Verdict()
-        {
-            var s = new List<string>();
             float over = anTot.Over;
-            s.Add(NetOver > 0f ? $"прогноз стоимости {Mln(anTot.Eac)} — выше бюджета на {Mln(over)} ({SPc(over / anTot.B)}), резерва не хватает"
-                : over > 0f ? $"прогноз стоимости {Mln(anTot.Eac)} — выше бюджета на {Mln(over)}, пока покрывается резервом"
-                : $"прогноз стоимости {Mln(anTot.Eac)} — в бюджете");
-            if (anWorst >= 0) { var o = Obj(anWorst, Report); s.Add(o.EndDays > 3 ? $"{Pt(anWorst).Name} отстаёт на {o.Days} дн., ввод сдвигается на {o.EndDays} дн." : $"{Pt(anWorst).Name} отстаёт на {o.Days} дн., к вводу отставание закрывается"); }
-            else s.Add("все объекты в графике");
-            if (anCrew >= 0) { Sum(trades[anCrew], out int need, out int have); s.Add($"на площадке не хватает {Loc.N0(need - have)} человек"); }
-            var t = string.Join("; ", s); if (!t.EndsWith(".")) t += ".";
-            return char.ToUpper(t[0]) + t.Substring(1);
+            var kr = Box(anPage, "w17-kpis", false);
+            HeroK(kr, "Бюджет", Mln(anTot.B), string.Format("и резерв {0}", Mln(anRes)), "", () => { anItem = -1; FillCost(); });
+            HeroK(kr, "Потрачено", Mln(anTot.Ac), string.Format("{0} бюджета", Pct(anTot.Ac / anTot.B)), "", () => OpenDoc(DK, "rTot", null));
+            HeroK(kr, "Нужно ещё", Mln(anTot.Etc + anTot.Extra), string.Format("на {0} оставшихся работ", Pct(1f - anTot.Q)), "", () => OpenDoc(DP, "r0", null));
+            HeroK(kr, "Прогноз стоимости", Mln(anTot.Eac), over > 0f ? (NetOver > 0f ? string.Format("{0} · резерва не хватает", SPc(over / anTot.B)) : string.Format("{0} · в пределах резерва", SPc(over / anTot.B))) : "в бюджете", CostCls, () => { anItem = TopOver(); FillCost(); });
+
+            anCostV = Box(anPage, "an-view"); BuildAnCost(anCostV);
+            AnView(1, false);
         }
-        void AnView(int v)
+        /// <summary>Opens «Смета» (the only view of the page now; 0 and 2 are kept for the old callers and show it too).</summary>
+        void AnView(int v, bool go = true)
         {
-            anView = v;
-            for (int i = 0; i < anTabs.Count; i++) anTabs[i].EnableInClassList("active", i == v);
-            Vis(anSumV, v == 0); Vis(anCostV, v == 1); Vis(anDocsV, v == 2);
-            if (v == 1) { if (anItem < 0) anItem = TopOver() >= 0 ? TopOver() : 1; FillCost(); }
+            if (go && tab != TAn && overlay != null) SetTab(TAn);
+            anView = 1;
+            if (anItem < 0) anItem = TopOver() >= 0 ? TopOver() : 1;
+            FillCost();
             CloseDoc();
         }
 
-        // ------------------------------------------------------------------ Сводка
-        void BuildAnSummary(VisualElement v)
-        {
-            // five numbers: the budget, spent, still needed, the forecast, the completion
-            var kr = Box(v, "an-kpis");
-            var last = 0; for (int i = 1; i < L.Parts.Count; i++) if (Obj(i, Report).FactEnd > Obj(last, Report).FactEnd) last = i;
-            int ld = Mathf.RoundToInt((Obj(last, Report).FactEnd - L.Finish) * 365f);
-            float over = anTot.Over;
-            AnK(kr, "Бюджет", Mln(anTot.B), $"+ резерв 4 % · {Mln(anRes)}", "", () => { anItem = -1; AnView(1); });
-            var spent = AnK(kr, "Потрачено", Mln(anTot.Ac), $"{Pct(anTot.Ac / anTot.B)} бюджета · работ на {Mln(anTot.Ev)} в ценах сметы", "", () => OpenDoc(DK, "rTot", null));
-            var bar = Box(spent, "mon-bar", false); bar.style.marginTop = 6; var fl = Box(bar, "mon-fill", false); fl.style.width = Length.Percent(Mathf.Clamp01(anTot.Ac / anTot.B) * 100f);
-            AnK(kr, "Нужно ещё", Mln(anTot.Etc + anTot.Extra), $"на оставшиеся {Pct(1f - anTot.Q)} работ — по ценам на {Day(Report)}", "", () => OpenDoc(DP, "r0", null));
-            AnK(kr, "Прогноз итоговой стоимости", Mln(anTot.Eac), over > 0f ? $"{SMln(over)} к бюджету ({SPc(over / anTot.B)}) · " + (NetOver > 0f ? $"сверх резерва {Mln(NetOver)}" : $"резерв покрывает") : $"экономия {Mln(-over)}", CostCls, () => { anItem = TopOver(); AnView(1); });
-            AnK(kr, "Завершение комплекса", IconicFloors.MonthYear(Obj(last, Report).FactEnd), ld > 3 ? $"позже плана на {ld} дн. · {Pt(last).Short}" : $"в срок · план {IconicFloors.MonthYear(L.Finish)}", ld > 21 ? "bad" : ld > 3 ? "warn" : "ok", () => SetTab(TInv));
-
-            var row = Box(v, "an-row");
-            // left: what needs attention, the most serious first
-            var lc = Box(row, "an-colL");
-            var lh = Box(lc, "an-sec", false); lh.Add(TwinUI.Icon("triangle_alert", 16));
-            int nb = 0, nw = 0; foreach (var f in finds) { if (f.Sev >= 2) nb++; else if (f.Sev == 1) nw++; }
-            Txt(lh, "Требует внимания", "mon-title"); Spacer(lh);
-            if (nb > 0) Txt(lh, $"{nb} критично", "an-count s-bad");
-            if (nw > 0) Txt(lh, $"{nw} важно", "an-count s-warn");
-            Txt(lc, "У каждого вывода — ссылки на места в документах, откуда он следует, и где это видно на площадке.", "mon-src an-hint");
-            var fs = Scroll(lc, "an-flist");
-            foreach (var f in finds) FindCard(fs, f);
-
-            // right: where the money goes, the key documents
-            var rc = Box(row, "an-colR");
-            var mc = Box(rc, "mon-card an-card");
-            Head(mc, "wallet", "Где меняется стоимость");
-            Txt(mc, "прогноз к бюджету по статьям сметы", "mon-src");
-            var ord = new List<int>(); for (int k = 0; k < Items.Length; k++) if (ItemCost(k, -1).B > 0f) ord.Add(k);
-            ord.Sort((a, b) => Mathf.Abs(ItemCost(b, -1).Over).CompareTo(Mathf.Abs(ItemCost(a, -1).Over)));
-            for (int j = 0; j < ord.Count && j < 6; j++) ItemBar(mc, ord[j]);
-            var all = Widgets.Btn("Вся смета", () => { anItem = -1; AnView(1); }, "small"); all.style.marginTop = 8; all.style.alignSelf = Align.FlexStart; mc.Add(all);
-
-            var dc = Box(rc, "mon-card an-card");
-            Head(dc, "files", "Ключевые документы");
-            Txt(dc, "по важности: вес документа и выводы, которые на него ссылаются", "mon-src");
-            var ds = new List<Doc>(docs); ds.Sort((a, b) => b.Score.CompareTo(a.Score));
-            for (int j = 0; j < ds.Count && j < 5; j++) DocRow(dc, ds[j], true);
-            var ad = Widgets.Btn($"Все документы · {docs.Count}", () => AnView(2), "small"); ad.style.marginTop = 8; ad.style.alignSelf = Align.FlexStart; dc.Add(ad);
-        }
         VisualElement AnK(VisualElement parent, string cap, string val, string sub, string cls, Action click)
         {
             var b = new Button(click) { focusable = false }; b.AddToClassList("an-k"); if (cls.Length > 0) b.AddToClassList("k-" + cls); parent.Add(b);
             Txt(b, cap, "mon-inv-cap"); var v = Txt(b, val, "an-k-v"); if (cls.Length > 0) v.AddToClassList(cls); Txt(b, sub, "mon-inv-sub");
             return b;
         }
-        /// <summary>A finding: what, why, the places in the documents, where to see it.</summary>
-        void FindCard(VisualElement parent, Finding f)
-        {
-            var c = Box(parent, "an-f " + SevCls[Mathf.Clamp(f.Sev + 1, 0, 3)]);
-            var top = Box(c, "an-f-top", false);
-            var ic = TwinUI.Icon(f.Icon, 16); ic.style.unityBackgroundImageTintColor = SevColor(f.Sev); ic.style.flexShrink = 0; top.Add(ic);
-            Txt(top, f.Title, "an-f-t");
-            Txt(top, SevName[Mathf.Clamp(f.Sev + 1, 0, 3)], "an-tag " + SevCls[Mathf.Clamp(f.Sev + 1, 0, 3)]);
-            if (!string.IsNullOrEmpty(f.Text)) Txt(c, f.Text, "an-f-x");
-            var sr = Box(c, "an-f-src");
-            Txt(sr, "Почему так:", "an-why");
-            foreach (var s in f.Src) sr.Add(DocChip(s, f));
-            if (f.Show != null)
-            {
-                Spacer(sr);
-                var g = new Button(f.Show) { focusable = false }; g.AddToClassList("an-go");
-                g.Add(new Label(f.ShowText) { pickingMode = PickingMode.Ignore }); g.Add(TwinUI.Icon("arrow_right", 12)); sr.Add(g);
-            }
-        }
         Button DocChip(Src s, Finding f)
         {
             var b = new Button(() => OpenDoc(s.Doc, s.At, f)) { focusable = false }; b.AddToClassList("an-chip");
             b.Add(TwinUI.Icon(docs[s.Doc].Icon, 12)); b.Add(new Label(s.Label) { pickingMode = PickingMode.Ignore });
             return b;
-        }
-        /// <summary>An item of the estimate as a bar: spent (blue) and the rest (grey) of its forecast against the budget (the white mark).</summary>
-        void ItemBar(VisualElement parent, int k)
-        {
-            var ic = ItemCost(k, -1);
-            var r = new Button(() => { anItem = k; AnView(1); }) { focusable = false }; r.AddToClassList("an-ib"); parent.Add(r);
-            var t = Box(r, "an-ib-top", false);
-            Txt(t, Items[k].Name, "an-ib-n");
-            var dl = Txt(t, SMln(ic.Over), "an-ib-d"); dl.AddToClassList(ic.Over > ic.B * 0.02f ? "bad" : ic.Over > 0f ? "warn" : "ok");
-            BudgetBar(r, ic);
         }
         static void BudgetBar(VisualElement parent, Cost ic)
         {
@@ -211,6 +123,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
         // ------------------------------------------------------------------ Смета
         void BuildAnCost(VisualElement v)
         {
+            v = Scroll(v, "ctl-vscroll");                    // the whole page scrolls: the totals row and the inspector are never cut
             var tb = Box(v, "an-tools");
             var seg = Box(tb, "mon-seg");
             for (int i = -1; i < L.Parts.Count; i++)
@@ -224,14 +137,14 @@ namespace AlatauCity.DigitalTwin.Landmarks
             var tab = Box(lc, "an-ctab");
             var th = Box(tab, "an-ctr an-cth", false);
             foreach (var (c, cls) in new[] { ("Статья затрат", "n"), ("Бюджет", "m"), ("Потрачено", "m"), ("Прогноз", "m"), ("Отклонение", "w"), ("", "bar") }) Txt(th, c, "an-ctd " + cls);
-            anCostRows = Scroll(tab, "an-crows");
+            anCostRows = Box(tab, "w17-crows");
             // the prices of the resources
             var pc = Box(lc, "mon-card an-card an-prices");
             var ph = Box(pc, "an-sec", false); ph.Add(TwinUI.Icon("coins", 16)); Txt(ph, $"Цены на основные ресурсы · {Day(Report)}", "mon-title"); Spacer(ph);
             ph.Add(DocChip(At(DP, "r0", "ведомость"), null));
             var pt = Box(pc, "an-ptab", false);
             var phr = Box(pt, "an-ptr an-cth", false);
-            foreach (var (c, cls) in new[] { ("Ресурс", "n"), ("В смете", "m"), ("Сейчас", "m"), ("Изменение", "s"), ("Цена в смете", "w7-src") }) Txt(phr, c, "an-ctd " + cls);
+            foreach (var (c, cls) in new[] { ("Ресурс", "n"), ("В смете", "m"), ("Сейчас", "m"), ("Изменение", "s") }) Txt(phr, c, "an-ctd " + cls);
             for (int r = 0; r < Rsc.Length; r++)
             {
                 float now = PriceAt(r, Report), dp = now / Rsc[r].Base - 1f;
@@ -239,11 +152,14 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 Txt(pr, Rsc[r].Name + (Rsc[r].Unit == "индекс" ? "" : ", " + Rsc[r].Unit), "an-ctd n");
                 Txt(pr, PriceText(r, Rsc[r].Base), "an-ctd m"); Txt(pr, PriceText(r, now), "an-ctd m");
                 var dd = Txt(pr, SPc(dp), "an-ctd s"); dd.AddToClassList(dp > 0.15f ? "bad" : dp > 0.05f ? "warn" : "ok");
-                var sc = Box(pr, "an-ctd w7-src", false); sc.Add(SourceTags.Tag(Rsc[r].Open ?? SrcPrices));
             }
-            Txt(pc, "Цена в смете: синие метки — открытые данные (объявления olx.kz, курс НБ РК), жёлтые — допущение модели. Рост цен до даты съёмки — всегда допущение модели.", "mon-src w7-pnote");
+            // where each price of the estimate comes from: open data or the model — one click away, one source line under the block
+            var src = Widgets.Details(pc, "Откуда цены");
+            for (int r = 0; r < Rsc.Length; r++) { var sr = Box(src, "an-ptr", false); Txt(sr, Rsc[r].Name, "an-ctd n"); var sc = Box(sr, "an-ctd w7-src", false); sc.Add(SourceTags.Tag(Rsc[r].Open ?? SrcPrices)); }
+            Txt(src, "Синие метки — открытые данные (объявления olx.kz, курс НБ РК), жёлтые — допущение модели. Рост цен до даты съёмки — всегда допущение модели.", "w17-note");
+            pc.Add(SourceTags.Line(DSrcA.OlxPrices, DSrcA.NbrkRate, SrcPrices));
             // right: how the forecast of the item is made
-            anDetail = Scroll(row, "an-colR an-detail");
+            anDetail = Box(row, "an-colR an-detail");
         }
         void FillCost()
         {
@@ -270,7 +186,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
         void CostCells(VisualElement r, string name, Cost ic)
         {
             Txt(r, name, "an-ctd n"); Txt(r, Mln(ic.B), "an-ctd m"); Txt(r, Mln(ic.Ac), "an-ctd m"); Txt(r, Mln(ic.Eac), "an-ctd m");
-            var d = Txt(r, SMln(ic.Over) + "  " + SPc(ic.Over / Mathf.Max(ic.B, 0.01f)), "an-ctd w"); d.AddToClassList(ic.Over > ic.B * 0.02f ? "bad" : ic.Over > 0f ? "warn" : "ok");
+            var d = Txt(r, SMln(ic.Over) + "  " + SPc(ic.Over / Mathf.Max(ic.B, 0.01f)), "an-ctd w"); d.AddToClassList(ic.Over > ic.B * 0.10f ? "bad" : ic.Over > 0f ? "warn" : "ok");     // red: more than 10 % over
             var bc = Box(r, "an-ctd bar", false); BudgetBar(bc, ic);
         }
         /// <summary>How the forecast of the selected item is made: the budget, done, spent, the rest at today's prices, the delays; its prices.</summary>
@@ -288,11 +204,13 @@ namespace AlatauCity.DigitalTwin.Landmarks
             var bv = Txt(big, SMln(ic.Over), "an-big-v"); bv.AddToClassList(ic.Over > ic.B * 0.02f ? "bad" : ic.Over > 0f ? "warn" : "ok");
             Txt(big, $"{SPc(ic.Over / ic.B)} к бюджету · прогноз {Mln(ic.Eac)} при бюджете {Mln(ic.B)}", "mon-inv-sub");
             BudgetBar(c, ic);
+            var how = new List<string>();
             void Step(string n, string k2, string val, string sub, string cls = "")
             {
                 var r = Box(c, "an-step", false);
                 Txt(r, n, "an-step-n");
-                var t = Box(r, "an-step-tx", false); Txt(t, k2, "an-step-k"); if (sub.Length > 0) Txt(t, sub, "mon-src");
+                var t = Box(r, "an-step-tx", false); Txt(t, k2, "an-step-k");
+                if (sub.Length > 0) how.Add(string.Format("{0}. {1}: {2}", n, k2, sub));
                 var v = Txt(r, val, "an-step-v"); if (cls.Length > 0) v.AddToClassList(cls);
             }
             float pf = PriceF(k, Report), pfA = ic.Ev > 0f ? ic.Ac / ic.Ev : 1f;
@@ -300,11 +218,13 @@ namespace AlatauCity.DigitalTwin.Landmarks
             Step("2", $"Выполнено {Pct(ic.Q)} объёма — потрачено", Mln(ic.Ac), ic.Ev > 0f ? $"по ценам сметы {Mln(ic.Ev)}, рост цен за время работ {SPc(pfA - 1f)}" : "работы ещё не начаты");
             Step("3", $"Остаток {Pct(1f - ic.Q)} по ценам на {Day(Report)}", Mln(ic.Etc), $"{Mln(ic.B * (1f - ic.Q))} × индекс цен {pf.ToString("N3", Loc.Ru)}");
             if (ic.Extra > 0.05f) Step("4", "Сроки дольше графика", "+" + Mln(ic.Extra), it.Time ? "техника, площадка и управление оплачиваются дольше" : "сверхурочные второй смены", "warn");
-            Step("=", "Прогноз итоговой стоимости", Mln(ic.Eac), "", ic.Over > ic.B * 0.02f ? "bad" : ic.Over > 0f ? "warn" : "ok");
+            Step("=", "Прогноз итоговой стоимости", Mln(ic.Eac), "", ic.Over > ic.B * 0.10f ? "bad" : ic.Over > 0f ? "warn" : "ok");
+            var hw = Widgets.Details(c, "Как считается"); foreach (var h in how) Txt(hw, h, "w17-note");
 
-            var pc = Box(anDetail, "mon-card an-card");
-            var ph = Box(pc, "an-sec", false); ph.Add(TwinUI.Icon("coins", 16)); Txt(ph, "Цены ресурсов статьи", "mon-title");
-            Txt(pc, $"по фиксированной цене закуплено {Mathf.RoundToInt(FixedOf(k) * 100f)} % объёма — эта доля не дорожает", "mon-src");
+            var pcc = Box(anDetail, "mon-card an-card");
+            var ph = Box(pcc, "an-sec", false); ph.Add(TwinUI.Icon("coins", 16)); Txt(ph, "Цены ресурсов статьи", "mon-title");
+            var pc = Widgets.Details(pcc, "Показать цены");
+            Txt(pc, $"по фиксированной цене закуплено {Mathf.RoundToInt(FixedOf(k) * 100f)} % объёма — эта доля не дорожает", "w17-note");
             for (int j = 0; j < it.R.Length; j++)
             {
                 int r = it.R[j]; float now = PriceAt(r, Report), dp = now / Rsc[r].Base - 1f;
@@ -329,7 +249,8 @@ namespace AlatauCity.DigitalTwin.Landmarks
         {
             var c = Box(parent, "mon-card an-card w7-assume");
             var h = Box(c, "an-sec", false); h.Add(TwinUI.Icon("sparkles", 16)); Txt(h, "Допущения модели", "mon-title"); Spacer(h); h.Add(SourceTags.ModelTag(SrcPrices));
-            Txt(c, "чего нет в открытых данных — принято моделью и заменяется данными заказчика", "mon-src");
+            var cw = c; c = Widgets.Details(cw, "Показать допущения");
+            Txt(c, "Чего нет в открытых данных — принято моделью и заменяется данными заказчика.", "w17-note");
             bool kaist = L != null && L.Id == "kaist";
             foreach (var (k, t) in new[]
             {
@@ -346,25 +267,10 @@ namespace AlatauCity.DigitalTwin.Landmarks
             }
         }
 
-        // ------------------------------------------------------------------ Документы
-        void BuildAnDocs(VisualElement v)
-        {
-            var row = Box(v, "an-row");
-            var lc = Box(row, "an-colW");
-            Txt(lc, "Все документы объекта, связанные с аналитикой, — по важности. Важность — вес документа и выводы, которые на него ссылаются. Нажмите, чтобы открыть.", "mon-src an-hint");
-            var sv = Scroll(lc, "an-dlist");
-            var ds = new List<Doc>(docs); ds.Sort((a, b) => b.Score.CompareTo(a.Score));
-            foreach (var (name, lo, hi) in new[] { ("Ключевые", 85, 9999), ("Важные", 55, 84), ("Справочные", 0, 54) })
-            {
-                bool any = false;
-                foreach (var d in ds) if (d.Score >= lo && d.Score <= hi) { if (!any) { var gh = Box(sv, "an-dgroup", false); Txt(gh, name, "an-dgroup-t"); any = true; } DocRow(sv, d, false); }
-            }
-        }
-
         // ------------------------------------------------------------------ the document
         void BuildViewer()
         {
-            anViewer = Box(anPage, "an-viewer");
+            anViewer = Box(body, "an-viewer");
             anViewer.style.display = DisplayStyle.None;
             var dim = Box(anViewer, "an-vdim"); dim.RegisterCallback<ClickEvent>(_ => CloseDoc());
             var sheet = Box(anViewer, "an-vsheet");
@@ -426,6 +332,8 @@ namespace AlatauCity.DigitalTwin.Landmarks
             anPaperScroll.scrollOffset = Vector2.zero;
             if (target != null) GoTo(target, true);
         }
+        /// <summary>For ShotRig and the AI assistant: opens the first document place that finding i («Требует внимания») follows from.</summary>
+        public void ShowFindingDoc(int i) { if (open && i >= 0 && i < finds.Count && finds[i].Src.Count > 0) { var sr = finds[i].Src[0]; OpenDoc(sr.Doc, sr.At, finds[i]); } }
         void CloseDoc() { if (anViewer != null) anViewer.style.display = DisplayStyle.None; anDoc = -1; }
         /// <summary>The next / previous place the analytics cites in the open document.</summary>
         void StepRef(int dir)

@@ -280,27 +280,45 @@ Shader "AlatauCity/Ground"
                     gw += D4 * 0.18 * cos(dot(D4, pw2) * 4.70 + t * 3.20);
                 }
                 float hx = gw.x * 0.22, hz = gw.y * 0.22;
-                float rip = 0.55 * saturate(1.4 - px * 0.25);                                  // ripples flatten with distance (no shimmer)
+                float rip = 0.55 * saturate(1.2 - px * 0.35);                                  // ripples flatten with distance (no shimmer)
                 float3 nW = normalize(float3(-hx * rip, 1.0, -hz * rip));
                 float3 view = normalize(_WorldSpaceCameraPos - wp);
                 float fres = 0.02 + 0.98 * pow(1.0 - saturate(dot(nW, view)), 5.0);
                 float3 refl = AlatauSky(reflect(-view, nW));
+                // depth: deep water is dark blue, the shallows along the banks lighter and greener, so the shore reads from any height
                 float depth = saturate(wdeep * 1.4 - 0.2) * water;
-                fixed3 body = lerp(fixed3(0.11, 0.22, 0.23), fixed3(0.04, 0.10, 0.15), depth);
-                float glint = pow(saturate(dot(reflect(-_AlatauSunDir.xyz, nW), view)), 220.0) * (1.0 - _AlatauNight);
+                float shallow = saturate((0.97 - wsum) * 4.0) * water;                         // the first ~20 m from the bank
+                fixed3 body = lerp(fixed3(0.13, 0.24, 0.25), fixed3(0.04, 0.10, 0.15), depth);
+                body = lerp(body, fixed3(0.17, 0.27, 0.25), shallow * 0.6);
+                // sun glint: a sharp sparkle up close; from afar the ripples are below a pixel, so the same light spreads into a broad
+                // soft sheen (a rougher surface) instead of vanishing: the river reads as water from the map height too
+                float farW = saturate(px / 8.0);
+                float gExp = lerp(220.0, 26.0, farW);
+                float glint = pow(saturate(dot(reflect(-_AlatauSunDir.xyz, nW), view)), gExp) * lerp(2.0, 0.55, farW) * (1.0 - _AlatauNight);
                 float foam = saturate(1.0 - abs(wsum - 0.40) / 0.05) * (0.5 + 0.5 * ANoise(wp.xz * 0.4 + t * 0.3)) * saturate(1.3 - px * 0.3);
                 f = lerp(f, body * 0.55, water);
                 f = lerp(f, fixed3(0.85, 0.87, 0.86), foam * 0.35 * water);
-                c = f; em = c * _Ambient + (refl * lerp(0.22, 0.95, fres) * 0.7 + _AlatauSunColor.rgb * glint * 2.0) * water;
-                // at night the lit city on the banks trembles on the water: warm and white streaks drawn out towards the viewer,
-                // near the banks of a built quarter, broken by the ripples
+                // night: never pitch black: a deep blue-grey surface that mirrors the night sky
+                float3 nightW = fixed3(0.040, 0.060, 0.085) * (1.0 - 0.35 * depth) * _AlatauNight;
+                // wind slicks: calm and rippled patches a few hundred metres across mirror the sky more or less, so open water is never one flat tone
+                float slick = 0.80 + 0.40 * ANoise(wp.xz * 0.0045 + t * 0.004);
+                c = f; em = c * _Ambient + (refl * lerp(lerp(0.32, 0.50, farW), 0.95, fres) * 0.75 * slick + _AlatauSunColor.rgb * glint + nightW) * water;
+                // at night the lit banks of a built quarter show on the water: a few soft, short columns of light next to the bank,
+                // drawn towards the viewer and broken by the ripples; from afar (columns below a few pixels) only a faint warm rim
                 {
                     float2 fwd = normalize(view.xz + float2(1e-4, 0)), side = float2(-fwd.y, fwd.x);
-                    float2 sp = float2(dot(wp.xz, side) * 0.09, dot(wp.xz, fwd) * 0.012 + hx * 0.8);
-                    float st = smoothstep(0.62, 0.92, ANoise(sp + float2(0.0, t * 0.05))) * (0.6 + 0.4 * ANoise(wp.xz * 0.5 + t * 0.7));
-                    float nearBank = 1.0 - saturate((wdeep - 0.35) * 2.0);
-                    float3 cityC = lerp(float3(1.0, 0.72, 0.40), float3(0.95, 0.92, 0.85), ANoise(sp * 3.0));
-                    em += cityC * st * nearBank * done * water * _AlatauNight * 0.55;
+                    float sx = dot(wp.xz, side) / 5.0, sy = dot(wp.xz, fwd);
+                    float col = fmod(floor(sx), 997.0), cx = frac(sx) - 0.5;          // (small hash arguments: precise on every GPU)
+                    float pickL = step(0.80, AHash1(col * 1.37 + fmod(floor(sy / 40.0), 97.0) * 7.1));                // one column in five, each its own lamp
+                    float lampK = AHash1(col * 3.11 + 0.5);
+                    float wide = 0.18 + 0.12 * lampK;
+                    float colm = saturate(1.0 - abs(cx + hx * 0.6) / wide);                             // soft column, wobbling with the ripples
+                    float brk = saturate(0.35 + 0.65 * cos(frac(sy / 7.0) * 6.2831853 + hz * 4.0 + t * 1.3));             // broken into dashes by the ripples
+                    float bank = saturate((0.97 - wsum) * 4.5);                                          // only next to the bank
+                    float sharpL = saturate(2.0 - px * 0.5);                                             // fade the columns once below ~2 px
+                    float st = lerp(0.05, colm * colm * brk * pickL, sharpL);
+                    float3 cityC = lerp(float3(1.0, 0.74, 0.44), float3(0.95, 0.92, 0.85), lampK);
+                    em += cityC * st * bank * done * water * _AlatauNight * 0.45;
                 }
                 // spotlight wave of the presentation: a ring of light runs over the ground in the colour of the category
                 float dR = distance(wp.xz, _AlatauHiWave.xy);
@@ -310,7 +328,7 @@ Shader "AlatauCity/Ground"
             {
                 // seen from afar the film look keeps more of the plan's colour inside the city, so the districts read at a glance
                 float farK = saturate((_AlatauCamDist - 14000.0) / 26000.0) * step(0.5, _AlatauFilm) * step(_AlatauMode, 1.5);
-                c = lerp(c, lerp(c, cYear, 0.55), farK * inside);
+                c = lerp(c, lerp(c, cYear, 0.55), farK * inside * (1.0 - waterG));          // water stays water
                 // outside: the same land, desaturated and darker the farther it is from the city; water keeps a cool hint
                 float lumO = dot(c, fixed3(0.299, 0.587, 0.114));
                 float wat = saturate((nat.b - nat.r) * 5.0 - 0.6) * saturate((nat.g - nat.r) * 8.0 + 0.3);

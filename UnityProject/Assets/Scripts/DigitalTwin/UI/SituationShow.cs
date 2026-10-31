@@ -68,7 +68,7 @@ namespace AlatauCity.DigitalTwin.UI
             info = new VisualElement { pickingMode = PickingMode.Ignore }; brief.Add(info);
             Row(info, "Что видят датчики", i.FeedText);
             Row(info, "Прогноз без решения", Loc.N0(i.No.AffectedMax) + " чел. в заторе · ущерб " + SituationModule.MoneyText(i.No.Peak));
-            Row(info, "Предложение двойника", i.Yes.Title);
+            Row(info, "Что делать", i.Todo ?? i.Yes.Title);
             status = new Label("ожидает решения") { pickingMode = PickingMode.Ignore }; status.AddToClassList("sit-status"); brief.Add(status);
 
             solve = new Button(Solve) { text = "РЕШИТЬ", focusable = false }; solve.AddToClassList("sit-solve"); solve.style.opacity = 0; solve.style.display = DisplayStyle.None; brief.Add(solve);
@@ -132,7 +132,7 @@ namespace AlatauCity.DigitalTwin.UI
         void BuildMoney()
         {
             money.style.display = DisplayStyle.Flex; money.Clear();
-            var h = new Label("Цена вопроса") { pickingMode = PickingMode.Ignore }; h.AddToClassList("sit-k"); money.Add(h);
+            var h = new Label("Цена бездействия") { pickingMode = PickingMode.Ignore }; h.AddToClassList("sit-k"); money.Add(h);
             float no = inc.No.Peak, yes = inc.Yes.Peak, mx = Mathf.Max(no, 1f);
             Bar("без системы", no / mx, SituationModule.MoneyText(no), new Color(1f, 0.32f, 0.26f));
             Bar("с qTwin", yes / mx, SituationModule.MoneyText(yes), new Color(0.30f, 0.82f, 0.45f));

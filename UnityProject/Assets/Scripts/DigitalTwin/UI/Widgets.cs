@@ -115,6 +115,69 @@ namespace AlatauCity.DigitalTwin.UI
             var b = new Button(onClick) { text = text, focusable = false }; b.AddToClassList("btn"); foreach (var c in classes) b.AddToClassList(c); return b;
         }
         public static Label Status(string text, string cls) { var l = new Label(text); l.AddToClassList("status"); l.AddToClassList(cls); return l; }
+
+        /// <summary>The answer of a block (design rules: one focal point): a big number with a small muted unit and a short caption
+        /// under it. Returns the container; its labels are "hero-v", "hero-u" and "hero-c" (change them with SetHero).</summary>
+        public static VisualElement Hero(VisualElement parent, string value, string unit = null, string caption = null, string cls = null)
+        {
+            var h = new VisualElement(); h.AddToClassList("hero"); if (!string.IsNullOrEmpty(cls)) h.AddToClassList(cls);
+            var r = new VisualElement { pickingMode = PickingMode.Ignore }; r.AddToClassList("hero-row"); h.Add(r);
+            var v = new Label(value ?? "—") { pickingMode = PickingMode.Ignore }; v.AddToClassList("hero-v"); r.Add(v);
+            var u = new Label(unit ?? "") { pickingMode = PickingMode.Ignore }; u.AddToClassList("hero-u"); u.style.display = string.IsNullOrEmpty(unit) ? DisplayStyle.None : DisplayStyle.Flex; r.Add(u);
+            var c = new Label(caption ?? "") { pickingMode = PickingMode.Ignore }; c.AddToClassList("hero-c"); c.style.display = string.IsNullOrEmpty(caption) ? DisplayStyle.None : DisplayStyle.Flex; h.Add(c);
+            parent.Add(h); return h;
+        }
+        public static void SetHero(VisualElement hero, string value, string unit = null, string caption = null, string cls = null)
+        {
+            if (hero == null) return;
+            var v = hero.Q<Label>(className: "hero-v"); if (v != null) v.text = value ?? "—";
+            var u = hero.Q<Label>(className: "hero-u"); if (u != null) { u.text = unit ?? ""; u.style.display = string.IsNullOrEmpty(unit) ? DisplayStyle.None : DisplayStyle.Flex; }
+            var c = hero.Q<Label>(className: "hero-c"); if (c != null) { c.text = caption ?? ""; c.style.display = string.IsNullOrEmpty(caption) ? DisplayStyle.None : DisplayStyle.Flex; }
+            foreach (var k in new[] { "ok", "warn", "bad" }) hero.EnableInClassList(k, k == cls);
+        }
+
+        /// <summary>A thin one-colour progress bar (status colour by class ok / warn / bad; none — neutral). A calm alternative to Meter.</summary>
+        public static VisualElement Progress(VisualElement parent, float value, string cls = null)
+        {
+            var b = new VisualElement { pickingMode = PickingMode.Ignore }; b.AddToClassList("pbar");
+            var f = new VisualElement { pickingMode = PickingMode.Ignore }; f.AddToClassList("pbar-fill"); b.Add(f);
+            parent.Add(b); SetProgress(b, value, cls); return b;
+        }
+        public static void SetProgress(VisualElement bar, float value, string cls = null)
+        {
+            if (bar == null || bar.childCount == 0) return;
+            var f = bar[0]; f.style.width = Length.Percent(Mathf.Clamp01(value) * 100f);
+            foreach (var k in new[] { "ok", "warn", "bad" }) bar.EnableInClassList(k, k == cls);
+        }
+
+        /// <summary>A KPI cell (classes kpi / l / v) with an optional small muted unit after the value. Returns the cell; the value label is "v".</summary>
+        public static VisualElement Kpi(VisualElement row, string label, string value, string unit = null)
+        {
+            var k = new VisualElement(); k.AddToClassList("kpi");
+            var l = new Label(label) { pickingMode = PickingMode.Ignore }; l.AddToClassList("l"); k.Add(l);
+            var vr = new VisualElement { pickingMode = PickingMode.Ignore }; vr.AddToClassList("kpi-vrow"); k.Add(vr);
+            var v = new Label(value) { pickingMode = PickingMode.Ignore }; v.AddToClassList("v"); vr.Add(v);
+            var u = new Label(unit ?? "") { pickingMode = PickingMode.Ignore }; u.AddToClassList("kpi-u"); u.style.display = string.IsNullOrEmpty(unit) ? DisplayStyle.None : DisplayStyle.Flex; vr.Add(u);
+            row.Add(k); return k;
+        }
+
+        /// <summary>A folded explanation: one quiet line «title ›» under the answer; a click unfolds the content. "Why", "how it is
+        /// counted" and long notes go here, so a card shows only the answer at first sight. Returns the content container.</summary>
+        public static VisualElement Details(VisualElement parent, string title = "Подробнее")
+        {
+            var d = new VisualElement(); d.AddToClassList("details");
+            var h = new VisualElement(); h.AddToClassList("details-head");
+            var t = new Label(title) { pickingMode = PickingMode.Ignore }; t.AddToClassList("details-title"); h.Add(t);
+            var ch = new Chevron(); ch.AddToClassList("details-chev"); ch.style.rotate = new Rotate(new Angle(-90f)); h.Add(ch);
+            var body = new VisualElement(); body.AddToClassList("details-body"); body.style.display = DisplayStyle.None;
+            h.AddManipulator(new Clickable(() =>
+            {
+                bool open = body.style.display == DisplayStyle.None;
+                body.style.display = open ? DisplayStyle.Flex : DisplayStyle.None; d.EnableInClassList("open", open);
+                ch.style.rotate = new Rotate(new Angle(open ? 0f : -90f));
+            }));
+            d.Add(h); d.Add(body); parent.Add(d); return body;
+        }
     }
 
     /// <summary>Small "v" chevron drawn with Painter2D (the brand font has no arrow-head glyphs).</summary>

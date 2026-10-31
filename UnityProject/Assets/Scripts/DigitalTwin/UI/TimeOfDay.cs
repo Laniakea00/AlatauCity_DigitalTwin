@@ -23,7 +23,7 @@ namespace AlatauCity.DigitalTwin.UI
             var head = new VisualElement(); head.AddToClassList("time-head"); p.Add(head);
             var title = new Label("Время суток в двойнике"); title.AddToClassList("time-title"); head.Add(title);
             var big = new Label(HourText(FilmLook.Hour)); big.AddToClassList("time-big"); head.Add(big);
-            var sub = new Label("Солнце, тени, небо, окна и уличные фонари следуют за часом. Это вид, а не расчёт освещённости.");
+            var sub = new Label("Свет, тени и фонари следуют за часом — это вид, не расчёт");
             sub.AddToClassList("time-sub"); p.Add(sub);
 
             var slider = new TwinSlider(new[] { 360, 720, 1080 }, m => string.Format("{0}:00", m / 60), 300, 1320);

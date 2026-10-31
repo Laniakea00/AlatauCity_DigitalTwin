@@ -86,9 +86,14 @@ namespace AlatauCity.DigitalTwin
         static int FineCap => Application.platform == RuntimePlatform.WebGLPlayer ? 160 : 480;
         class Scratch { public Matrix4x4[] m = new Matrix4x4[1023]; public float[] y = new float[1023]; public Vector4[] t = new Vector4[1023]; public MaterialPropertyBlock p = new MaterialPropertyBlock(); }
         readonly List<Scratch> pool = new List<Scratch>(); int poolUsed, fineUsed, poolFrame = -1;
+        // The fine crowns go to the trees nearest the camera and in front of it: the batches come in no particular order, so with a
+        // fixed radius a dense park filled the cap with trees behind the camera or at the far edge while the tree next to the lens
+        // kept its light crown. The radius shrinks while the cap is reached and grows back when there is room; trees behind the
+        // camera never take a fine crown.
+        float nearDyn = -1f; bool capHit; Vector3 camFwd = Vector3.forward;
         Scratch Take()
         {
-            if (poolUsed >= 40) return null;
+            if (poolUsed >= 64) return null;
             if (poolUsed == pool.Count) pool.Add(new Scratch());
             return pool[poolUsed++];
         }
@@ -96,8 +101,14 @@ namespace AlatauCity.DigitalTwin
         /// <summary>Draws a batch, the trees near the camera with the fine mesh and the others with the light one.</summary>
         void DrawSplit(int s, Matrix4x4[] m, int count, float[] yr, Vector4[] tn, MaterialPropertyBlock props, UnityEngine.Rendering.ShadowCastingMode sh, Vector3 cp)
         {
-            if (Time.frameCount != poolFrame) { poolFrame = Time.frameCount; poolUsed = 0; fineUsed = 0; }
-            float far = NearR + Band, far2 = far * far; bool any = false;
+            if (Time.frameCount != poolFrame)
+            {
+                if (nearDyn < 0f) nearDyn = NearR;
+                nearDyn = capHit ? Mathf.Max(28f, nearDyn * 0.85f) : Mathf.Min(NearR, nearDyn * 1.04f + 0.5f);
+                poolFrame = Time.frameCount; poolUsed = 0; fineUsed = 0; capHit = false;
+                var cm = Camera.main; if (cm != null) camFwd = cm.transform.forward;
+            }
+            float far = nearDyn + Band, far2 = far * far; bool any = false;
             for (int i = 0; i < count; i++)
             {
                 float dx = m[i].m03 - cp.x, dy = m[i].m13 - cp.y, dz = m[i].m23 - cp.z;
@@ -110,7 +121,9 @@ namespace AlatauCity.DigitalTwin
             {
                 float dx = m[i].m03 - cp.x, dy = m[i].m13 - cp.y, dz = m[i].m23 - cp.z, d2 = dx * dx + dy * dy + dz * dz;
                 var t = tn[i];
-                if (d2 < far2 && fineUsed < FineCap)
+                bool ahead = dx * camFwd.x + dy * camFwd.y + dz * camFwd.z > -9f;              // (a crown is about 7 m wide)
+                if (d2 < far2 && ahead && fineUsed >= FineCap) capHit = true;
+                if (d2 < far2 && ahead && fineUsed < FineCap)
                 {
                     float fade = Mathf.Clamp((far - Mathf.Sqrt(d2)) / Band, 0.002f, 1f);
                     F.m[nf] = m[i]; F.y[nf] = yr[i]; t.w = fade; F.t[nf] = t; nf++; fineUsed++;

@@ -34,15 +34,44 @@ namespace AlatauCity.DigitalTwin.Modules
             new Metric { Id = "flood", Name = "m_flood", Unit = "", Kind = Kind.Flood, Why = "why_flood" },
         };
         static int cur;                 // selected metric
+        static bool forecast;           // «Прогноз 2026–2050» view: scenario sliders and A/B side by side (PredictionSliders)
+        readonly PredictionSliders fc = new PredictionSliders();
+        static PredictionModule inst;
+        public PredictionModule() { inst = this; ForecastModel.Init(); }
+
+        /// <summary>Tour / ShotRig hook: "off", or "on" followed by any of h130 m110 i20 n120 (sliders, %), a0 b4 (scenario slots 0..4), c0..c4 (chart).</summary>
+        public static void Forecast(string spec)
+        {
+            if (inst == null) return; spec = spec ?? "";
+            if (spec.Trim() == "off") { inst.SetForecast(false); return; }
+            ForecastModel.Reset();   // each spec is absolute: no slider values left from an earlier call
+            foreach (var tok in spec.Split(new[] { ' ', ',', ';' }, System.StringSplitOptions.RemoveEmptyEntries))
+            {
+                if (tok.Length < 2 || !int.TryParse(tok.Substring(1), out int v)) continue;
+                switch (tok[0])
+                {
+                    case 'h': ForecastModel.Housing = Mathf.Clamp(v, 60, 150); break;
+                    case 'm': ForecastModel.Migration = Mathf.Clamp(v, 60, 130); break;
+                    case 'i': ForecastModel.Industry = Mathf.Clamp(v, 5, 40); break;
+                    case 'n': ForecastModel.Nets = Mathf.Clamp(v, 60, 150); break;
+                    case 'a': PredictionSliders.Pick(v, -1, -1); break;
+                    case 'b': PredictionSliders.Pick(-1, v, -1); break;
+                    case 'c': PredictionSliders.Pick(-1, -1, v); break;
+                }
+            }
+            ForecastModel.Compute(ForecastModel.Custom);
+            if (!forecast) inst.SetForecast(true); else inst.Refresh();
+        }
         static bool why, floodExt;
         static int[][] floodCm;         // [scenario 0 = 1 %, 1 = extreme][bid]
 
         static readonly Color OK = new Color(0.20f, 0.78f, 0.35f), WARN = new Color(0.96f, 0.65f, 0.14f), BAD = new Color(1f, 0.23f, 0.18f);
 
         Label eyebrow, summary, whyLabel, chartTitle, chartNote, rowsTitle, rowsSub; readonly Label[] kv = new Label[4], kl = new Label[4]; readonly VisualElement[] kb = new VisualElement[4];
-        TwinChart chart; VisualElement legend, rows, srcTop, srcChart, srcRows; int srcFor = -1; Button whyBtn; readonly List<Button> chips = new List<Button>();
+        TwinChart chart; VisualElement legend, rows, srcTop, srcRows; int srcFor = -1; readonly List<Button> chips = new List<Button>();
+        Glance.Hero hero; int heroIdx = -1;
 
-        public override (Color, string)[] Legend => Metrics[cur].Kind == Kind.Flood
+        public override (Color, string)[] Legend => forecast ? null : Metrics[cur].Kind == Kind.Flood
             ? new[] { (new Color(0.55f, 0.75f, 1f), Loc.T("p_lg_flood1")), (new Color(0.15f, 0.40f, 0.95f), Loc.T("p_lg_flood2")), (new Color(0.62f, 0.62f, 0.62f), Loc.T("p_lg_dry")) }
             : Metrics[cur].Kind == Kind.Quake
             ? new[] { (BAD, Loc.T("p_lg_q3")), (WARN, Loc.T("p_lg_q2")), (OK, Loc.T("p_lg_q1")) }
@@ -52,11 +81,31 @@ namespace AlatauCity.DigitalTwin.Modules
         public void TourMetric(string id)
         {
             int i = System.Array.FindIndex(Metrics, m => m.Id == id); if (i < 0) return;
-            cur = i; why = false; TwinUI.Instance?.FillLegend(Legend); LayerFor(); Refresh();
+            cur = i; why = false;
+            if (forecast && leftCol != null) { forecast = false; Rebuild(); }
+            TwinUI.Instance?.FillLegend(Legend); LayerFor(); Refresh();
         }
         public string Summary => summary != null ? summary.text : "";
 
-        public override void OnEnter() { TintLayer.Enable(); LayerFor(); }
+        /// <summary>Switches between the metric view and the forecast view (sliders, A and B side by side).</summary>
+        void SetForecast(bool on)
+        {
+            if (forecast == on) return; forecast = on;
+            if (on) { TintLayer.Apply(b => new Color(0, 0, 0, 0)); LineLayers.Instance?.HideAll(); } else LayerFor();
+            TwinUI.Instance?.FillLegend(Legend);
+            Rebuild(); Refresh();
+        }
+        void ModeSwitch(VisualElement parent)
+        {
+            var row = new VisualElement(); row.AddToClassList("w27-mode"); parent.Add(row);
+            foreach (var (txt, on) in new[] { ("Сети и риски", false), ("Прогноз 2026–2050", true) })
+            {
+                var o = on; var bt = new Button(() => SetForecast(o)) { text = txt };
+                bt.AddToClassList("w27-mode-b"); bt.EnableInClassList("active", forecast == on); row.Add(bt);
+            }
+        }
+
+        public override void OnEnter() { TintLayer.Enable(); if (forecast) TintLayer.Apply(b => new Color(0, 0, 0, 0)); else LayerFor(); }
         public override void OnExit() { TintLayer.Disable(); LineLayers.Instance?.HideAll(); }
 
         void LayerFor()
@@ -68,7 +117,14 @@ namespace AlatauCity.DigitalTwin.Modules
         // ------------------------------------------------------------------ panel
         protected override void Build()
         {
+            if (forecast)
+            {
+                summary = null; hero = null;
+                var mb = Widgets.Block(panel); ModeSwitch(mb);
+                fc.BuildLeft(panel); Right(); fc.BuildRight(panel); return;
+            }
             var top = Widgets.Block(panel);
+            ModeSwitch(top);
             eyebrow = Widgets.Eyebrow(top, "");
             var groups = new[] { ("p_g_nets", new[] { 0, 1, 2, 3, 4 }), ("p_g_social", new[] { 5, 6, 7 }), ("p_g_city", new[] { 8, 9, 10 }) };
             chips.Clear();
@@ -82,7 +138,8 @@ namespace AlatauCity.DigitalTwin.Modules
                     b.AddToClassList("chip"); row.Add(b); chips.Add(b);
                 }
             }
-            summary = new Label(); summary.AddToClassList("summary"); summary.style.marginTop = 6; summary.style.marginBottom = 12; top.Add(summary);
+            // answer first: one big number for the chosen metric; the full sentence, the reason and the method fold into «Почему так»
+            hero = Glance.MakeHero(top); hero.Root.style.marginTop = 10;
             var grid = new VisualElement(); grid.AddToClassList("kpi-grid"); top.Add(grid); VisualElement r0 = null;
             for (int i = 0; i < 4; i++)
             {
@@ -91,8 +148,8 @@ namespace AlatauCity.DigitalTwin.Modules
                 kl[i] = new Label(); kl[i].AddToClassList("l"); k.Add(kl[i]); kv[i] = new Label("—"); kv[i].AddToClassList("v"); k.Add(kv[i]);
                 kb[i] = k; r0.Add(k);
             }
-            whyBtn = Widgets.Btn(Loc.T("p_why"), () => { why = !why; Refresh(); }, "small", "ghost"); whyBtn.style.alignSelf = Align.FlexStart; whyBtn.style.marginTop = 8; whyBtn.style.marginLeft = -8; top.Add(whyBtn);
-            whyLabel = new Label(); whyLabel.AddToClassList("note"); whyLabel.style.color = new Color(0.76f, 0.76f, 0.76f); top.Add(whyLabel);
+            var whyBody = Widgets.Details(top, "Почему так");
+            summary = Glance.Prose(whyBody); whyLabel = Glance.Prose(whyBody); Glance.Prose(whyBody, Loc.T("p_note"));
             srcTop = new VisualElement(); top.Add(srcTop); srcFor = -1;
 
             Right();
@@ -100,27 +157,25 @@ namespace AlatauCity.DigitalTwin.Modules
             chartTitle = cb.Q<Label>(className: "block-title");
             chart = new TwinChart(); cb.Add(chart);
             legend = new VisualElement(); legend.AddToClassList("legend"); cb.Add(legend);
-            chartNote = new Label(); chartNote.AddToClassList("note"); chartNote.style.marginTop = 6; cb.Add(chartNote);
-            srcChart = new VisualElement(); cb.Add(srcChart);
+            chartNote = Glance.Prose(Widgets.Details(cb, "Как читать"));
 
             var rb = Widgets.Block(panel, Loc.T("p_districts"), Loc.T("p_districts_sub"));
             rowsTitle = rb.Q<Label>(className: "block-title"); rowsSub = rb.Q<Label>(className: "block-sub");
             rows = new VisualElement(); rb.Add(rows); srcRows = new VisualElement(); rb.Add(srcRows);
-
-            var n = Widgets.Block(panel); var note = new Label(Loc.T("p_note")); note.AddToClassList("note"); n.Add(note);
         }
 
         public override void Refresh()
         {
+            if (forecast) { fc.Update(); return; }
             if (panel == null || summary == null || !TwinData.Ready || !CityStats.Ready) return;
             for (int i = 0; i < chips.Count; i++) chips[i].EnableInClassList("active", i == cur);
             var m = Metrics[cur]; int s = (int)TwinState.Scenario, y = TwinState.Year;
             eyebrow.text = (Loc.T("tab_prediction") + " · " + y + " · " + TwinScenario.Name(TwinState.Scenario)).ToUpperInvariant();
-            whyBtn.text = Loc.T(why ? "p_why_hide" : "p_why"); whyLabel.text = why ? Loc.T(m.Why) : ""; whyLabel.style.display = why ? DisplayStyle.Flex : DisplayStyle.None;
+            whyLabel.text = Loc.T(m.Why); heroIdx = -1;
             rows.Clear(); legend.Clear();
             var rk = m.Kind == Kind.Transport ? "p_rows_tr" : m.Kind == Kind.Quake ? "p_rows_q" : m.Kind == Kind.Flood ? "p_rows_f" : "p_districts";
             rowsTitle.text = Loc.T(rk); rowsSub.text = rk == "p_districts" ? Loc.T("p_districts_sub") : "";
-            if (srcFor != cur) { srcFor = cur; var ids = SourceIds(m.Kind); srcTop.Clear(); srcTop.Add(SourceTags.Line(ids)); srcChart.Clear(); srcChart.Add(SourceTags.Line(ids)); srcRows.Clear(); srcRows.Add(SourceTags.Line(ids)); }
+            if (srcFor != cur) { srcFor = cur; var ids = SourceIds(m.Kind); srcTop.Clear(); srcTop.Add(SourceTags.Line(ids)); srcRows.Clear(); srcRows.Add(SourceTags.Line(ids)); }
             switch (m.Kind)
             {
                 case Kind.Net: RefreshNet(m, s, y); break;
@@ -129,6 +184,8 @@ namespace AlatauCity.DigitalTwin.Modules
                 case Kind.Quake: RefreshQuake(s, y); break;
                 case Kind.Flood: RefreshFlood(s, y); break;
             }
+            // the KPI shown as the hero is not repeated in the grid
+            for (int i = 0; i < 4; i++) kb[i].style.display = i == heroIdx ? DisplayStyle.None : DisplayStyle.Flex;
         }
 
         /// <summary>Where the numbers of a metric come from: the QTwin model with its assumptions, on the build-out scenario and the genplan.</summary>
@@ -168,6 +225,9 @@ namespace AlatauCity.DigitalTwin.Modules
             string cause = Cause(m.Res, fd, s);
             if (fy < 0) summary.text = string.Format(Loc.T("p_sum_net_ok"), Loc.T(m.Name).ToLower(), TwinScenario.Name(TwinState.Scenario));
             else summary.text = string.Format(Loc.T("p_sum_net"), fy, where, F(fv * k), m.Unit, cause);
+            if (fy < 0) hero.Set("Хватает", "", string.Format("Дефицита нет до {0} года", TwinState.MaxYear), "ok");
+            else hero.Set(fy.ToString(), "", "Первый год дефицита", "bad", string.Format("{0}: не хватает {1}\u00A0{2}", where, F(fv * k), m.Unit));
+            heroIdx = 3;
             Set(0, F(dem * k), string.Format(Loc.T("p_k_dem"), y, m.Unit), "");
             Set(1, F(cap * k), string.Format(Loc.T("p_k_cap"), m.Unit), "");
             Set(2, cap > 0 ? Mathf.RoundToInt(100 * dem / cap) + " %" : "—", Loc.T("p_k_util"), def > 0.5f ? "bad" : dem > cap * 0.85f ? "warn" : "ok");
@@ -224,6 +284,9 @@ namespace AlatauCity.DigitalTwin.Modules
             float covC = needC > 0 ? capC / needC : 1;
             summary.text = worst < 0 ? string.Format(Loc.T("p_sum_soc_ok"), y, Loc.T(m.Name).ToLower())
                 : string.Format(Loc.T("p_sum_soc"), y, CityStats.DistrictIds[worst], Loc.N0(wv), m.Unit, Loc.T(m.Name).ToLower(), Mathf.RoundToInt(cov[worst] * 100));
+            hero.Set(Mathf.RoundToInt(covC * 100) + "\u00A0%", "", "Мест хватает на", covC < 0.9f ? "bad" : covC < 1f ? "warn" : "ok",
+                worst < 0 ? "Во всех районах мест достаточно" : string.Format("{0}: не хватает {1}\u00A0{2}", CityStats.DistrictIds[worst], Loc.N0(wv), m.Unit));
+            heroIdx = 2;
             Set(0, Loc.N0(needC), string.Format(Loc.T("p_k_need"), m.Unit), "");
             Set(1, Loc.N0(capC), string.Format(Loc.T("p_k_have"), m.Unit), "");
             Set(2, Mathf.RoundToInt(covC * 100) + " %", Loc.T("p_k_cov"), covC < 0.9f ? "bad" : covC < 1f ? "warn" : "ok");
@@ -253,6 +316,9 @@ namespace AlatauCity.DigitalTwin.Modules
             int ph = -1; for (int i = 0; i < 3; i++) if (TwinData.LrtPhaseYear[s][i] <= y) ph = i;
             summary.text = string.Format(Loc.T("p_sum_tr"), ys[ti], Loc.N0(ck), Mathf.RoundToInt(dl),
                 ph < 0 ? string.Format(Loc.T("p_lrt_none"), TwinData.LrtPhaseYear[s][0]) : string.Format(Loc.T("p_lrt_on"), ph + 1, Loc.N1(lrt / 1000f)));
+            hero.Set(Loc.N0(ck), "км", "Пробки в утренний час пик", ck > 150 ? "bad" : ck > 60 ? "warn" : "ok",
+                ph < 0 ? string.Format("ЛРТ ещё нет · первая очередь в {0}", TwinData.LrtPhaseYear[s][0]) : string.Format("Работает {0}-я очередь ЛРТ", ph + 1));
+            heroIdx = 0;
             Set(0, Loc.N0(ck), Loc.T("p_k_cong"), ck > 150 ? "bad" : ck > 60 ? "warn" : "ok");
             Set(1, "+" + Mathf.RoundToInt(dl) + " %", Loc.T("p_k_delay"), dl > 35 ? "bad" : dl > 15 ? "warn" : "ok");
             Set(2, Loc.N1(car / 1000f), Loc.T("p_k_cars"), "");
@@ -305,6 +371,8 @@ namespace AlatauCity.DigitalTwin.Modules
                 float p = QuakeP(b); var c = p >= 0.2f ? BAD : p >= 0.06f ? WARN : OK; c.a = p >= 0.2f ? 0.9f : p >= 0.06f ? 0.7f : 0.4f; return c;
             });
             summary.text = string.Format(Loc.T("p_sum_quake"), y, Loc.N0(heavy), Loc.N0(high), Loc.N0(peopleRisk / 1000f * 1000f));
+            hero.Set(Loc.N0(high), "", "Зданий высокого риска при 9 баллах", high > 0 ? "bad" : "ok", "в основном старый фонд, не рассчитанный на 9 баллов");
+            heroIdx = 0;
             Set(0, Loc.N0(high), Loc.T("p_k_q_high"), high > 0 ? "bad" : "ok");
             Set(1, Loc.N0(heavy), Loc.T("p_k_q_heavy"), "warn");
             Set(2, Loc.N0(peopleRisk), Loc.T("p_k_q_people"), "");
@@ -346,6 +414,8 @@ namespace AlatauCity.DigitalTwin.Modules
                 return cm > 100 ? new Color(0.15f, 0.40f, 0.95f, 0.95f) : new Color(0.55f, 0.75f, 1f, 0.85f);
             });
             summary.text = n == 0 ? Loc.T("p_sum_flood_0") : string.Format(Loc.T("p_sum_flood"), Loc.T(floodExt ? "p_f_ext" : "p_f_1"), y, Loc.N0(n), Loc.N0(people), Loc.N0(damage));
+            hero.Set(Loc.N0(n), "", "Зданий в зоне затопления", n > 0 ? "warn" : "ok", deep > 0 ? string.Format("из них глубже 1\u00A0м — {0}", Loc.N0(deep)) : null);
+            heroIdx = 0;
             Set(0, Loc.N0(n), Loc.T("p_k_f_n"), n > 0 ? "warn" : "ok");
             Set(1, Loc.N0(deep), Loc.T("p_k_f_deep"), deep > 0 ? "bad" : "ok");
             Set(2, Loc.N0(people), Loc.T("p_k_f_people"), "");

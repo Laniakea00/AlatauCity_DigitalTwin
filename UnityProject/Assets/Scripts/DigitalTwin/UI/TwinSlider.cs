@@ -9,6 +9,10 @@ namespace AlatauCity.DigitalTwin.UI
     {
         public int Min = TwinState.MinYear, Max = TwinState.MaxYear;
         public Action<int> OnChange;
+        /// <summary>The pointer let go of the slider after a press or a drag (the year bar uses it to show the final year at once).</summary>
+        public Action OnRelease;
+        /// <summary>True while the pointer holds the handle: the value may change again in the next frame.</summary>
+        public bool Dragging => drag;
         readonly VisualElement track, fill, handle; int value = 2050; bool drag;
         const float Half = 8f;
         public TwinSlider(int[] ticks, Func<int, string> format = null, int min = TwinState.MinYear, int max = TwinState.MaxYear)
@@ -25,8 +29,8 @@ namespace AlatauCity.DigitalTwin.UI
             handle = new VisualElement { pickingMode = PickingMode.Ignore }; handle.AddToClassList("handle"); Add(handle);
             RegisterCallback<PointerDownEvent>(e => { drag = true; this.CapturePointer(e.pointerId); Set(e.localPosition.x); e.StopPropagation(); });
             RegisterCallback<PointerMoveEvent>(e => { if (drag) Set(e.localPosition.x); });
-            RegisterCallback<PointerUpEvent>(e => { drag = false; this.ReleasePointer(e.pointerId); });
-            RegisterCallback<PointerCaptureOutEvent>(_ => drag = false);
+            RegisterCallback<PointerUpEvent>(e => { bool was = drag; drag = false; this.ReleasePointer(e.pointerId); if (was) OnRelease?.Invoke(); });
+            RegisterCallback<PointerCaptureOutEvent>(_ => { bool was = drag; drag = false; if (was) OnRelease?.Invoke(); });
             RegisterCallback<GeometryChangedEvent>(_ => Place());
         }
         public int Value { get => this.value; set { this.value = Mathf.Clamp(value, Min, Max); Place(); } }

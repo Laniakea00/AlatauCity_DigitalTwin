@@ -83,8 +83,10 @@ namespace AlatauCity.DigitalTwin.Data
                 "Оценка QTwin, не налоговая консультация. Ставки общего режима в модели: КПН 20 %, НДС на ввоз оборудования 16 %, налог на имущество 1,5 % в год, соцналог 9,5 % с фонда оплаты труда. " +
                 "Выручка и рентабельность — средние по отрасли (допущение). Выход на мощность: 1-й год — 0, 2-й — 30 %, 3-й — 70 %, дальше 100 %. Зарплата — 600 тыс. ₸ в месяц, курс 447,94 ₸/$. " +
                 "Льгота считается полной (100 %); размер реальной льготы администрация устанавливает каждому резиденту. Потолок 10 % стоимости проекта — по закону.");
-            Sources.RegisterModel(NetModel, "Когда сети придут на участок",
-                "По балансу «спрос / мощность» двойника (сценарий застройки QTwin): первый год, начиная с выбранного, после которого мощности района хватает на всех потребителей до 2050 года. Вода и газ — общегородские системы.");
+            Sources.RegisterModel(NetModel, "Хватит ли сетей на участке",
+                "Баланс «спрос / мощность» двойника по району, году и сценарию застройки QTwin (networks.json, loads.json). Год — по шкале времени. " +
+                "Электричество — худший из двух уровней: питающая ПС 220/110 кВ района и сеть ПС 110/10 кВ. Вода и газ — общегородские системы. " +
+                "Дефицит — спрос выше мощности: новых потребителей в этот год подключить нельзя. Те же числа показывают вкладка «Инфраструктура», шаг презентации «Прогноз: энергия 2034» и карточки объектов.");
         }
 
         // ------------------------------------------------------------------ projects
@@ -223,13 +225,19 @@ namespace AlatauCity.DigitalTwin.Data
             return s;
         }
 
-        // ------------------------------------------------------------------ when the networks reach a plot (twin balance)
+        // ------------------------------------------------------------------ networks for a plot: the twin balance in a given year (one source
+        // of truth for the Infrastructure panel, the investor calculator and the cards; the same numbers as the 2034 presentation step)
         public static readonly (string key, string name, string unit)[] NetRes =
         {
-            ("power", "Электричество", "МВт"), ("heat", "Тепло", "Гкал/ч"), ("gas", "Газ", "тыс. м³/ч"), ("water", "Вода", "тыс. м³/сут"), ("sewer", "Канализация", "тыс. м³/сут")
+            ("power", "Электричество", "МВт"), ("heat", "Тепло", "Гкал/ч"), ("gas", "Газ", "тыс.\u00A0м³/ч"), ("water", "Вода", "тыс.\u00A0м³/сут"), ("sewer", "Канализация", "тыс.\u00A0м³/сут")
         };
+        /// <summary>Units shown: m³ in thousands for gas, water and sewer.</summary>
+        public static float Shown(string key, float v) => key == "gas" || key == "water" || key == "sewer" ? v / 1000f : v;
+        public static string Fmt(string key, float v) { v = Shown(key, v); return v >= 10f || v == Mathf.Round(v) ? Loc.N0(v) : Loc.N1(v); }
 
-        public struct NetAnswer { public int Year; public bool Pooled; public float Spare; public int DefFrom, DefTo, DefYears; public string DefRanges; }
+        public enum NetSt { Ok, Tight, Short, None }
+        /// <summary>One resource of a district in one year. Free = capacity − demand (≥ 0), Deficit = unserved demand. Level: which part limits.</summary>
+        public struct NetYear { public NetSt St; public float Demand, Cap, Deficit, Free, Util; public bool Pooled; public string Level; }
 
         static TwinData.Balance Bal(int s, string key, int d, out bool pooled)
         {
@@ -238,37 +246,64 @@ namespace AlatauCity.DigitalTwin.Data
             if (b == null) { b = TwinData.BalanceOf(s, key, -1); pooled = d >= 0; }
             return b;
         }
-        static bool Short(TwinData.Balance b, int yi) => b != null && (b.Cap[yi] <= 0f || b.Deficit[yi] > 0.5f);
-
-        /// <summary>The first year from <paramref name="fromYear"/> after which the district's capacity covers the demand every year to 2050
-        /// (power = both the 220/110 kV feed and the 10 kV network). Year = −1: not covered by 2050. DefFrom/DefTo: the shortage years on the way.</summary>
-        public static NetAnswer When(int s, string key, int d, int fromYear)
+        static NetYear One(TwinData.Balance b, int y)
         {
-            var a = new NetAnswer { Year = -1, DefFrom = -1, DefTo = -1 };
-            if (!TwinData.Ready) return a;
-            var b = Bal(s, key, d, out a.Pooled);
-            var hv = key == "power" ? Bal(s, "power_hv", d, out _) : null;
-            if (b == null) return a;
-            int y0 = Mathf.Clamp(fromYear, 2026, TwinState.MaxYear);
-            int lastShort = -1, runA = -1; var sb = new System.Text.StringBuilder();
-            void Close(int to) { if (runA < 0) return; if (sb.Length > 0) sb.Append(", "); sb.Append(to > runA ? string.Format("{0}–{1}", runA, to) : runA.ToString()); runA = -1; }
-            for (int y = y0; y <= TwinState.MaxYear; y++)
+            var r = new NetYear { St = NetSt.Ok };
+            if (b == null) { r.St = NetSt.None; return r; }
+            int yi = TwinData.YI(y); r.Demand = b.Demand[yi]; r.Cap = b.Cap[yi]; r.Deficit = b.Deficit[yi];
+            r.Free = Mathf.Max(0f, r.Cap - r.Demand); r.Util = r.Cap > 0f ? r.Demand / r.Cap : r.Demand > 0f ? 9f : 0f;
+            if (r.Cap <= 0f && r.Demand <= 0.01f) r.St = NetSt.None;
+            else if (r.Deficit > 0.5f || r.Cap <= 0f) { r.St = NetSt.Short; r.Deficit = Mathf.Max(r.Deficit, r.Demand - r.Cap); }
+            else if (r.Util > 0.9f) r.St = NetSt.Tight;
+            return r;
+        }
+        static int Rank(NetYear a) => a.St == NetSt.Short ? 3 : a.St == NetSt.None ? 2 : a.St == NetSt.Tight ? 1 : 0;
+
+        /// <summary>The state of a resource in district d (−1 = city) in year y, scenario s. Power = the worse of the 220/110 kV feed and the 110/10 kV network.</summary>
+        public static NetYear At(int s, string key, int d, int y)
+        {
+            if (!TwinData.Ready) return new NetYear { St = NetSt.None };
+            var a = One(Bal(s, key, d, out bool pooled), y); a.Pooled = pooled;
+            if (key != "power") return a;
+            a.Level = "сеть 110/10\u00A0кВ";
+            var h = One(Bal(s, "power_hv", d, out _), y); h.Level = "ПС 220/110\u00A0кВ"; h.Pooled = pooled;
+            int ra = Rank(a), rh = Rank(h);
+            if (rh > ra) return h;
+            if (ra > rh) return a;
+            if (a.St == NetSt.Short) return h.Deficit > a.Deficit ? h : a;
+            return h.Cap > 0f && (a.Cap <= 0f || h.Util > a.Util) ? h : a;
+        }
+        /// <summary>The state in every year from 2026 to 2050 (index = year − 2026).</summary>
+        public static NetYear[] Years(int s, string key, int d)
+        {
+            var r = new NetYear[TwinState.MaxYear - FirstYear + 1];
+            for (int i = 0; i < r.Length; i++) r[i] = At(s, key, d, FirstYear + i);
+            return r;
+        }
+        public const int FirstYear = 2026;
+        /// <summary>Shortage years as ranges ("2034–2035, 2040").</summary>
+        public static string Ranges(NetYear[] ys, int from = FirstYear)
+        {
+            var sb = new System.Text.StringBuilder(); int runA = -1;
+            for (int i = 0; i <= ys.Length; i++)
             {
-                int yi = TwinData.YI(y);
-                if (Short(b, yi) || Short(hv, yi)) { lastShort = y; a.DefYears++; if (a.DefFrom < 0) a.DefFrom = y; a.DefTo = y; if (runA < 0) runA = y; }
-                else Close(y - 1);
+                int y = FirstYear + i; bool sh = i < ys.Length && y >= from && ys[i].St == NetSt.Short;
+                if (sh && runA < 0) runA = y;
+                if (!sh && runA >= 0) { if (sb.Length > 0) sb.Append(", "); sb.Append(y - 1 > runA ? string.Format("{0}–{1}", runA, y - 1) : runA.ToString()); runA = -1; }
             }
-            Close(TwinState.MaxYear);
-            a.DefRanges = sb.ToString();
-            a.Year = lastShort < 0 ? y0 : lastShort + 1 > TwinState.MaxYear ? -1 : lastShort + 1;
-            if (a.Year > 0)
-            {
-                int yi = TwinData.YI(a.Year);
-                float sp = b.Cap[yi] > 0 ? 1f - b.Demand[yi] / b.Cap[yi] : 0f;
-                if (hv != null && hv.Cap[yi] > 0) sp = Mathf.Min(sp, 1f - hv.Demand[yi] / hv.Cap[yi]);
-                a.Spare = Mathf.Clamp01(sp);
-            }
-            return a;
+            return sb.ToString();
+        }
+        /// <summary>First shortage year at or after 'from' (−1 none); and the first year after it with no shortage (−1 = not by 2050).</summary>
+        public static int NextShort(NetYear[] ys, int from, out int endsAt)
+        {
+            endsAt = -1;
+            for (int y = Mathf.Max(from, FirstYear); y < FirstYear + ys.Length; y++)
+                if (ys[y - FirstYear].St == NetSt.Short)
+                {
+                    for (int e = y + 1; e < FirstYear + ys.Length; e++) if (ys[e - FirstYear].St != NetSt.Short) { endsAt = e; break; }
+                    return y;
+                }
+            return -1;
         }
     }
 }

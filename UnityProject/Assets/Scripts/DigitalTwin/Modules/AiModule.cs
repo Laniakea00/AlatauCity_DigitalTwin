@@ -67,12 +67,15 @@ namespace AlatauCity.DigitalTwin.Modules
             /// <summary>Data: the analysis as numbers and names (what the analyze function returns to the language model, built from the same
             /// variables as Text and Facts); Src: the source/model ids of the analysis; OpenTab/OpenTabTitle: a tab the model offered (a button, not a switch).</summary>
             public Dictionary<string, object> Data; public string[] Src; public string OpenTab, OpenTabTitle;
+            /// <summary>Variants the viewer can flip through (school site): their count, one line each, and what the map shows for each.</summary>
+            public int Variants; public Func<int, string> VariantLine; public Action<int> ShowVariant;
         }
 
         // ------------------------------------------------------------------ the twin's computed analyses (scripted intents and the analyze tool)
         /// <summary>The topics of the analyze function (Tools/ai_proxy/core.js declares the same list).</summary>
         public static readonly string[] Topics = { "school_deficit", "school_site", "construction_risk", "power_shortage", "flood", "lrt_delay", "traffic", "population" };
         static AiModule inst;
+        public static AiModule Instance => inst;
 
         /// <summary>One computed analysis of the twin: the same computation for a scripted answer and for the language model's analyze call.
         /// year ≤ 0 = the default year of the scripted answer; phase = LRT phase 1–3 (lrt_delay). Null when the topic is unknown or the data are not loaded.</summary>
@@ -124,8 +127,10 @@ namespace AlatauCity.DigitalTwin.Modules
         {
             var top = Widgets.Block(panel); top.AddToClassList("ai-card");
             eyebrow = Widgets.Eyebrow(top, "");
-            var s = new Label(Loc.T("ai_sum")); s.AddToClassList("summary"); s.style.fontSize = 15; s.style.marginBottom = 10; top.Add(s);
-            var chips = new VisualElement(); chips.AddToClassList("chips"); chips.style.marginBottom = 0; top.Add(chips); viewChips.Clear();
+            // one short answer line; the full description folds into «Как это работает»
+            var s = new Label("ИИ замечает проблему раньше, решение — за человеком"); s.AddToClassList("w19-hero-c"); s.style.marginBottom = 4; top.Add(s);
+            Glance.Prose(Widgets.Details(top, "Как это работает"), Loc.T("ai_sum"));
+            var chips = new VisualElement(); chips.AddToClassList("chips"); chips.style.marginBottom = 0; chips.style.marginTop = 8; top.Add(chips); viewChips.Clear();
             string[] vk = { "ai_v_chat", "ai_v_auto", "ai_v_cmp", "ai_v_stories" };
             for (int i = 0; i < 4; i++) { int k = i; var b = new Button(() => { view = k; ClearMap(); Refresh(); }) { text = Loc.T(vk[i]) }; b.AddToClassList("chip"); chips.Add(b); viewChips.Add(b); }
             leftBody = new VisualElement(); panel.Add(leftBody);
@@ -169,7 +174,12 @@ namespace AlatauCity.DigitalTwin.Modules
             input.RegisterCallback<KeyDownEvent>(e => { if (e.keyCode == KeyCode.Return || e.keyCode == KeyCode.KeypadEnter) { e.StopPropagation(); Ask(input.value); } }, TrickleDown.TrickleDown);
             var go = Widgets.Btn(Loc.T("ai_go"), () => Ask(input.value), "primary", "small"); go.style.marginLeft = 6; row.Add(go);
             var sg = new VisualElement(); sg.AddToClassList("chips"); sg.style.marginTop = 10; sg.style.marginBottom = 0; b.Add(sg);
-            foreach (var q in Suggest) { var qq = q; var c = new Button(() => Ask(qq)) { text = q }; c.AddToClassList("chip"); c.AddToClassList("ai-chip"); sg.Add(c); }
+            // while «С чего начать» shows four of the questions on the right, the chips here offer only the other ones (no repetition)
+            foreach (var q in Suggest)
+            {
+                if (chat.Count == 0 && (q == Suggest[0] || q == Suggest[2] || q == Suggest[3] || q == Suggest[4])) continue;
+                var qq = q; var c = new Button(() => Ask(qq)) { text = q }; c.AddToClassList("chip"); c.AddToClassList("ai-chip"); sg.Add(c);
+            }
 
             foreach (var a in Enumerable.Reverse(chat).Take(3)) Card(a, a == chat.LastOrDefault());
             if (chat.Count == 0)
@@ -191,9 +201,8 @@ namespace AlatauCity.DigitalTwin.Modules
                     st.Add(c);
                 }
             }
-            var n = Widgets.Block(leftBody);
             var note = new Label(AiConfig.Online ? "Как устроено: вопрос уходит к модели Gemini через наш сервер-посредник (ключ доступа хранится только на нём). Модель сама вызывает инструменты двойника — готовые расчёты (школы, стройка, электроэнергия, паводок, ЛРТ), полёт камеры, статистика города, реестр проектов, мониторинг стройки, источники — и отвечает только по их результатам. Под ответом — источники и список вызовов." : Loc.T("ai_arch"));
-            note.AddToClassList("note"); n.Add(note);
+            note.AddToClassList("w19-prose"); Widgets.Details(b, "Как устроено").Add(note);
         }
 
         /// <summary>Presentation tour hooks.</summary>
@@ -264,19 +273,22 @@ namespace AlatauCity.DigitalTwin.Modules
             }
             var t = new Label(a.Text); t.AddToClassList("ai-text"); if (a.Llm) t.AddToClassList("no-tr"); c.Add(t);
             if (a.Note != null) { var on = new Label(a.Note); on.AddToClassList("ai-offline"); c.Add(on); }
-            if (a.Facts.Count > 0) { var fb = new VisualElement(); fb.style.marginTop = 8; c.Add(fb); foreach (var (k, v) in a.Facts) fb.Add(Widgets.Fact(k, v)); }
+            if (a.Variants > 1 && latest) VariantRow(c, a);
+            else if (a.Facts.Count > 0) { var fb = new VisualElement(); fb.style.marginTop = 8; c.Add(fb); foreach (var (k, v) in a.Facts) fb.Add(Widgets.Fact(k, v)); Glance.More(fb, 4); }
             if (a.Series != null)
             {
                 if (a.ChartTitle != null) { var ct = new Label(a.ChartTitle); ct.AddToClassList("note"); ct.style.marginTop = 10; c.Add(ct); }
                 var ch = new TwinChart(); ch.Series = a.Series; ch.Colors = a.Colors; ch.Stacked = false; ch.LineWidths = a.Series.Select((_, i) => i == 0 ? 2.5f : 1.6f).ToArray(); ch.XText = a.XText; ch.YMin = a.YMin; ch.MarkYear = a.XText == null ? Y : -1; ch.Refresh(); c.Add(ch);
                 if (a.SeriesNames != null) { var lg = new VisualElement(); lg.AddToClassList("legend"); c.Add(lg); for (int i = 0; i < a.SeriesNames.Length; i++) lg.Add(Widgets.LegendItem(a.Colors[i], a.SeriesNames[i])); }
             }
-            if (a.Tools.Count > 0)
+            if (a.Tools.Count > 0 || !string.IsNullOrEmpty(a.Sources))
             {
-                var tl = new Label(Loc.T("ai_tools").ToUpperInvariant()); tl.AddToClassList("note"); tl.style.marginTop = 10; tl.style.marginBottom = 3; tl.style.letterSpacing = 1; c.Add(tl);
-                foreach (var x in a.Tools) { var l = new Label("→ " + x); l.AddToClassList("ai-tool"); if (a.Llm) l.AddToClassList("no-tr"); c.Add(l); }
+                // how the answer was obtained (tool calls, data used): one click away, not on the first screen
+                var how = Widgets.Details(c, "Как получен ответ");
+                if (a.Tools.Count > 0) { var tl = new Label(Loc.T("ai_tools")); tl.AddToClassList("w19-subh"); how.Add(tl); }
+                foreach (var x in a.Tools) { var l = new Label("→ " + x); l.AddToClassList("ai-tool"); if (a.Llm) l.AddToClassList("no-tr"); how.Add(l); }
+                if (!string.IsNullOrEmpty(a.Sources)) { var src = new Label(Loc.T("ai_src") + " " + a.Sources); src.AddToClassList("w19-prose"); src.style.marginTop = 6; how.Add(src); }
             }
-            if (!string.IsNullOrEmpty(a.Sources)) { var src = new Label(Loc.T("ai_src") + " " + a.Sources); src.AddToClassList("note"); src.style.marginTop = 6; c.Add(src); }
             if (a.Llm) { var ids = new List<string>(a.SrcIds ?? new List<string>()); ids.Add(Data.TwinModels.Ai); c.Add(SourceTags.Line(ids.ToArray())); }
             else { var ids = new List<string> { Data.TwinModels.Ai }; ids.AddRange(a.Src ?? new[] { Data.Sources.ModelCity }); c.Add(SourceTags.Line(ids.ToArray())); }
             if (a.OpenTab != null)
@@ -520,12 +532,25 @@ namespace AlatauCity.DigitalTwin.Modules
         }
 
         /// <summary>Where to put a new school: the district with the largest seat gap, homes farther than 10 min (800 m) from any school,
-        /// 400 m candidate cells scored by school-age children within 800 m, three variants at least 1.5 km apart.</summary>
-        public class SchoolPlan { public int D, Cells, Seats, Homes, Far; public float Gap; public List<(Vector2 p, float kids)> Pick = new List<(Vector2, float)>(); public HashSet<int> Near = new HashSet<int>(), Unc = new HashSet<int>(); }
-        public static SchoolPlan PlanSchool(int y)
+        /// 400 m candidate cells scored by school-age children within 800 m, three variants at least 1.5 km apart (best first).</summary>
+        public class SchoolSite { public Vector2 P; public float Kids, Nearest; public int Seats, Homes; public HashSet<int> Near = new HashSet<int>(); }
+        public class SchoolPlan
+        {
+            public int D, Year, Cells, Seats, Homes, Far; public float Gap;
+            public List<(Vector2 p, float kids)> Pick = new List<(Vector2, float)>();
+            /// <summary>The variants, best first: centre, children within 10 min, distance to the nearest school today (m), school size, homes within 10 min (their bids in Near).</summary>
+            public List<SchoolSite> Sites = new List<SchoolSite>();
+            /// <summary>Near = homes within 10 min of the best variant; Unc = homes now farther than 10 min from any school.</summary>
+            public HashSet<int> Near = new HashSet<int>(), Unc = new HashSet<int>();
+            /// <summary>Schools standing that year within 5 km of a variant (drawn as small markers).</summary>
+            public List<Vector2> Schools = new List<Vector2>();
+        }
+        /// <summary>district ≥ 0: the sites are searched in that district (the presentation asks about Gate); −1: in the district with the largest seat gap.</summary>
+        public static SchoolPlan PlanSchool(int y, int district = -1)
         {
             int s = S, yi = TwinData.YI(y), d = 0; float g = -1;
             for (int k = 0; k < 4; k++) { float gap = TwinData.SocialNeed[s][k][0][yi] - TwinData.SocialCap[s][k][0][yi]; if (gap > g) { g = gap; d = k; } }
+            if (district >= 0 && district < 4) { d = district; g = TwinData.SocialNeed[s][d][0][yi] - TwinData.SocialCap[s][d][0][yi]; }
             var db = CityDatabase.Instance;
             var schools = db.Buildings.Where(b => b != null && b.Kind == "education" && SituationData.Stands(b, y)).Select(b => new Vector2(b.X, b.Z)).ToList();
             var homes = db.Buildings.Where(b => b != null && b.District == Dn[d] && b.Use == "housing" && SituationData.Stands(b, y)).ToList();
@@ -534,26 +559,58 @@ namespace AlatauCity.DigitalTwin.Modules
             // candidate = 400 m grid cell centres; score = school-age children in 800 m (10 min walk) not covered today
             var cells = unc.GroupBy(b => (Mathf.FloorToInt(b.X / 400f), Mathf.FloorToInt(b.Z / 400f))).Select(gr => new Vector2(gr.Average(b => b.X), gr.Average(b => b.Z))).ToList();
             var scored = cells.Select(p => (p, kids: unc.Where(b => (new Vector2(b.X, b.Z) - p).sqrMagnitude < 800f * 800f).Sum(b => SituationData.ResidentsOf(b)) * 0.12f)).OrderByDescending(x => x.kids).ToList();
-            var r = new SchoolPlan { D = d, Gap = Mathf.Max(0, g), Cells = cells.Count, Homes = homes.Count, Far = unc.Count };
+            var r = new SchoolPlan { D = d, Year = y, Gap = Mathf.Max(0, g), Cells = cells.Count, Homes = homes.Count, Far = unc.Count };
             foreach (var x in scored) { if (r.Pick.All(o => (o.p - x.p).magnitude > 1500f)) r.Pick.Add(x); if (r.Pick.Count == 3) break; }
             if (r.Pick.Count == 0) return r;
-            r.Seats = Mathf.Clamp(Mathf.RoundToInt(r.Pick[0].kids / 100f) * 100, 600, 1500);
-            var best = r.Pick[0].p;
-            foreach (var b in unc) { r.Unc.Add(b.Bid); if ((new Vector2(b.X, b.Z) - best).sqrMagnitude < 800f * 800f) r.Near.Add(b.Bid); }
+            foreach (var b in unc) r.Unc.Add(b.Bid);
+            foreach (var (p, kids) in r.Pick)
+            {
+                var site = new SchoolSite { P = p, Kids = kids, Seats = Mathf.Clamp(Mathf.RoundToInt(kids / 100f) * 100, 600, 1500) };
+                foreach (var b in unc) if ((new Vector2(b.X, b.Z) - p).sqrMagnitude < 800f * 800f) site.Near.Add(b.Bid);
+                site.Nearest = float.MaxValue; foreach (var sc in schools) site.Nearest = Mathf.Min(site.Nearest, (sc - p).magnitude);
+                site.Homes = site.Near.Count; r.Sites.Add(site);
+            }
+            r.Seats = r.Sites[0].Seats; r.Near = r.Sites[0].Near;
+            foreach (var sc in schools) if (r.Sites.Any(o => (o.P - sc).sqrMagnitude < 5000f * 5000f)) r.Schools.Add(sc);
             return r;
+        }
+        /// <summary>One short line: why this variant ranks where it does (shown under the answer, in the tour and in the assistant).</summary>
+        public static string SchoolWhy(SchoolPlan P, int i)
+        {
+            if (i <= 0) return "Больше всего детей без школы рядом";
+            float diff = Mathf.Round(P.Sites[0].Kids) - Mathf.Round(P.Sites[i].Kids); float km = (P.Sites[i].P - P.Sites[0].P).magnitude / 1000f;
+            if (diff < P.Sites[0].Kids * 0.05f) return string.Format("Почти как №1 · в {0} км от него", Loc.N1(km));
+            return string.Format("На {0} детей меньше, чем у №1", Loc.N0(diff));
+        }
+        /// <summary>Shows variant i on the map: homes within 10 min of it green, the other homes far from a school amber, the three variants
+        /// as numbered pins (i selected; a click on a pin calls onPick), and flies the camera to it (dist ≤ 0: no flight).</summary>
+        public static void ShowSchoolSite(SchoolPlan P, int i, float dist, Action<int> onPick = null)
+        {
+            if (P == null || P.Sites.Count == 0) return; i = Mathf.Clamp(i, 0, P.Sites.Count - 1);
+            var near = P.Sites[i].Near; var unc = P.Unc;
+            TintLayer.Enable(); TintLayer.Apply(b => near.Contains(b.Bid) ? A(OK, 0.95f) : unc.Contains(b.Bid) ? A(WARN, 0.6f) : default);
+            var pins = new List<MapPins.Pin>();
+            for (int k = 0; k < P.Sites.Count; k++)
+            {
+                var x = P.Sites[k]; int kk = k;
+                pins.Add(new MapPins.Pin { Id = "v" + k, Label = string.Format("№{0} · {1} детей", k + 1, Loc.N0(x.Kids)), World = new Vector3(x.P.x, CityGround.HeightAt(x.P.x, x.P.y) + 40f, x.P.y),
+                    Fill = k == i ? AI : new Color(0.80f, 0.78f, 0.88f), ShowLabel = true, Size = k == i ? 18f : 12f, OnClick = onPick == null ? (Action)null : () => onPick(kk) });
+            }
+            MapPins.Instance?.Set(pins); MapPins.Instance?.Select("v" + i);
+            if (dist > 0) Fly(P.Sites[i].P, dist, 50f);
         }
 
         // generative planning: where to put a new school (also story 7)
         Answer Placement(int y)
         {
             var P = PlanSchool(y); int d = P.D; float g = P.Gap; var pick = P.Pick; int seats = P.Seats;
-            var a = new Answer { Conf = 79, Sources = "социальная инфраструктура (нормы), здания школ генплана, жильё по годам; радиус 800 м = 10 мин пешком" };
+            var a = new Answer { Conf = 79, Sources = "социальная инфраструктура (нормы), здания школ генплана, жильё по годам; радиус 800 м = 10 мин пешком" };
             a.Src = new[] { TwinModels.Social, Sources.ModelCity };
             if (pick.Count == 0) { a.Text = $"В {y} году в {Dn[d]} все дома в 10 минутах от школы."; a.Data = Pack(a, "school_site", "nothing", "year", y, "district", Dn[d], "all_homes_within_10_min_of_a_school", true); return a; }
-            a.Text = $"Больше всего мест не хватает в {Dn[d]} ({Loc.N0(Mathf.Max(0, g))} мест в {y}). Я сравнил участки, откуда до школы дальше 10 минут пешком, и предлагаю 3 варианта. Лучший — A: рядом {Loc.N0(pick[0].kids)} детей школьного возраста, школа на {Loc.N0(seats)} мест закроет {Mathf.RoundToInt(100f * Mathf.Min(seats, g) / Mathf.Max(g, 1))} % дефицита района." + (g > seats * 1.5f ? $" Всего району нужно ещё ~{Mathf.CeilToInt(g / 1000f)} школ по 1 000 мест — B и C следующие по очереди." : "");
+            a.Text = $"Больше всего мест не хватает в {Dn[d]} ({Loc.N0(Mathf.Max(0, g))} мест в {y}). Я сравнил участки, откуда до школы дальше 10 минут пешком, и предлагаю 3 варианта. Лучший — №1: рядом {Loc.N0(pick[0].kids)} детей школьного возраста, школа на {Loc.N0(seats)} мест закроет {Mathf.RoundToInt(100f * Mathf.Min(seats, g) / Mathf.Max(g, 1))} % дефицита района." + (g > seats * 1.5f ? $" Всего району нужно ещё ~{Mathf.CeilToInt(g / 1000f)} школ по 1 000 мест — №2 и №3 следующие по очереди." : "");
+            for (int i = 0; i < pick.Count; i++) a.Facts.Add(($"вариант №{i + 1}", $"{Loc.N0(pick[i].kids)} детей в 10 мин"));
+            a.Tools.Add($"query(\"social.school.gap\", year={y})"); a.Tools.Add("isochrones(walk=10 мин, from=школы)"); a.Tools.Add("optimize(site, maximize=дети без школы рядом)"); a.Tools.Add("show_variants(3)");
             string[] L = { "A", "B", "C" };
-            for (int i = 0; i < pick.Count; i++) a.Facts.Add(($"вариант {L[i]}", $"{Loc.N0(pick[i].kids)} детей в 10 мин"));
-            a.Tools.Add($"query(\"social.school.gap\", year={y})"); a.Tools.Add("isochrones(walk=10 мин, from=школы)"); a.Tools.Add("optimize(site, maximize=дети без школы рядом)"); a.Tools.Add("show_variants(3)");
             a.Data = Pack(a, "school_site", "homes within 10 min of variant A in green, homes now farther than 10 min from any school in amber, variants A–C as pins; camera on A",
                 "year", y, "district", Dn[d], "shortfall_places", R(g),
                 "variants", pick.Select((x, i) => (object)AiJson.O("variant", L[i], "school_age_children_within_10_min_walk", R(x.kids))).ToList(),
@@ -561,16 +618,38 @@ namespace AlatauCity.DigitalTwin.Modules
                 "more_schools_of_1000_places_needed", g > seats * 1.5f ? (object)Mathf.CeilToInt(g / 1000f) : null,
                 "homes_checked", P.Homes, "homes_farther_than_10_min", P.Far, "candidate_sites_compared", P.Cells,
                 "method", "10 min walk = 800 m; candidate sites = 400 m grid cells; school-age children = 12 % of residents; variants at least 1.5 km apart");
-            var best = pick[0].p; var near = P.Near; var uncSet = P.Unc;
+            // on screen the answer comes first, in one line (the full reasoning above stays in the model's summary)
+            a.Text = string.Format("Лучшее место в {0} — №1: {1} детей получат школу в 10 минутах.", Dn[d], Loc.N0(pick[0].kids));
+            // the viewer flips through the variants: each lights its own 10-minute homes and flies the camera there
+            a.Variants = P.Sites.Count; a.VariantLine = i => string.Format("{0} детей в 10 мин · школа на {1} мест · {2}", Loc.N0(P.Sites[i].Kids), Loc.N0(P.Sites[i].Seats), SchoolWhy(P, i));
+            SchoolVariant = 0;
+            Action<int> pick1 = null; pick1 = k => { SchoolVariant = k; ShowSchoolSite(P, k, 3600f, pick1); };
+            a.ShowVariant = pick1;
             a.Apply = () =>
             {
                 TwinState.Year = y;
-                Tint(b => near.Contains(b.Bid) ? A(OK, 0.9f) : uncSet.Contains(b.Bid) ? A(WARN, 0.75f) : default);
-                MapPins.Instance?.Set(pick.Select((x, i) => new MapPins.Pin { Id = "v" + i, Label = $"Вариант {L[i]} · {Loc.N0(x.kids)} детей", World = new Vector3(x.p.x, CityGround.HeightAt(x.p.x, x.p.y) + 40f, x.p.y), Fill = i == 0 ? AI : new Color(0.75f, 0.75f, 0.75f), ShowLabel = true, Size = i == 0 ? 18f : 13f }).ToList());
-                MapPins.Instance?.Select("v0"); Fly(best, 3600f);
-                SetLegend(new[] { (OK, "в 10 мин от новой школы"), (WARN, "сейчас дальше 10 мин от школы"), (AI, "варианты ИИ") });
+                ShowSchoolSite(P, SchoolVariant, 3600f, pick1);
+                SetLegend(new[] { (OK, "в 10 мин от новой школы"), (WARN, "сейчас дальше 10 мин от школы"), (AI, "варианты ИИ") });
             };
             return a;
+        }
+        /// <summary>The school variant shown on the map (assistant card and story 7).</summary>
+        static int SchoolVariant;
+        /// <summary>A row «№1 №2 №3» under a school answer and one line about the chosen variant; a click re-lights the map.</summary>
+        static void VariantRow(VisualElement c, Answer a)
+        {
+            if (a.Variants < 2 || a.ShowVariant == null) return;
+            var row = new VisualElement(); row.AddToClassList("chips"); row.AddToClassList("w23-vrow"); c.Add(row);
+            int cur = Mathf.Clamp(SchoolVariant, 0, a.Variants - 1);
+            var line = new Label(a.VariantLine?.Invoke(cur) ?? ""); line.AddToClassList("w23-vline");
+            var btns = new List<Button>();
+            for (int i = 0; i < a.Variants; i++)
+            {
+                int k = i; var b = new Button { text = string.Format("Вариант {0}", k + 1) }; b.AddToClassList("chip"); b.EnableInClassList("active", k == cur);
+                b.clicked += () => { a.ShowVariant(k); for (int j = 0; j < btns.Count; j++) btns[j].EnableInClassList("active", j == k); line.text = a.VariantLine?.Invoke(k) ?? ""; };
+                btns.Add(b); row.Add(b);
+            }
+            c.Add(line);
         }
 
         // ================================================================== 2. autopilot
@@ -612,8 +691,8 @@ namespace AlatauCity.DigitalTwin.Modules
                 var m = new Label($"{Loc.N0(o.people)} чел. · {Money(o.dmg)} · восстановление {o.restore}") { }; m.AddToClassList("note"); m.style.marginTop = 4; box.Add(m);
                 var reg = new Label(o.regOk ? Loc.T("ai_reg_ok") : Loc.T("ai_reg_human")); reg.AddToClassList("note"); reg.style.color = o.regOk ? OK : WARN; reg.style.marginTop = 2; box.Add(reg);
             }
-            var why = new Label(Loc.T("ai_why").ToUpperInvariant()); why.AddToClassList("note"); why.style.marginTop = 10; why.style.marginBottom = 3; why.style.letterSpacing = 1; ob.Add(why);
-            foreach (var w in Why(inc, opts)) { var l = new Label("· " + w); l.AddToClassList("ai-text"); l.style.fontSize = 12; l.style.marginBottom = 3; ob.Add(l); }
+            var why = Widgets.Details(ob, Loc.T("ai_why"));
+            foreach (var w in Why(inc, opts)) Glance.Prose(why, "· " + w);
             var best = opts[0];
             if (applied.Contains(inc.Id))
             {
@@ -632,7 +711,9 @@ namespace AlatauCity.DigitalTwin.Modules
 
             var lb = Widgets.Block(body, Loc.T("ai_log"), "");
             if (log.Count == 0) { var l = new Label(Loc.T("ai_log_empty")); l.AddToClassList("note"); lb.Add(l); }
-            foreach (var x in Enumerable.Reverse(log).Take(8)) { var l = new Label(x); l.AddToClassList("ai-tool"); l.style.marginBottom = 3; lb.Add(l); }
+            var logList = new VisualElement(); lb.Add(logList);
+            foreach (var x in Enumerable.Reverse(log).Take(8)) { var l = new Label(x); l.AddToClassList("ai-tool"); l.style.marginBottom = 3; logList.Add(l); }
+            Glance.More(logList, 3);
         }
         static int clockStamp = 6 * 60 + 24;
         static void Log(string s) { clockStamp += 3; log.Add($"{clockStamp / 60 % 24:00}:{clockStamp % 60:00}  {s}"); if (log.Count > 40) log.RemoveAt(0); }
@@ -668,7 +749,7 @@ namespace AlatauCity.DigitalTwin.Modules
             yield return i.Id switch
             {
                 "leak" => "Резервная нитка загружена на 78 % — запас есть; задвижки З-14, З-17 управляются дистанционно.",
-                "ps" => "У ПС «Gate» сейчас запас 31 МВт; договоры управления спросом есть у 12 крупных потребителей.",
+                "ps" => string.Format("В районе Gate в {0} году свободно {1}\u00A0МВт мощности; договоры управления спросом есть у 12 крупных потребителей.", TwinState.Year, Loc.N0(InvestRegistry.At((int)TwinState.Scenario, "power", 0, TwinState.Year).Free)),
                 "dtp" => "Параллельная магистраль Gate загружена на 61 %; 7 светофоров на объезде управляются из центра.",
                 _ => "Расчёт по модели двойника."
             };
@@ -711,6 +792,7 @@ namespace AlatauCity.DigitalTwin.Modules
                 "По двум соседним датчикам он находит участок, считает, сколько домов останутся без воды при каждом варианте, и предлагает лучший.",
                 "Диспетчер видит всё это на карте и подтверждает одной кнопкой."
             }) { var l = new Label("· " + t); l.AddToClassList("ai-text"); l.style.fontSize = 12; l.style.marginBottom = 4; how.Add(l); }
+            Widgets.SetCollapsed(how, true);
             ShowIncident(i, true);
             var set = new HashSet<int>(i.No.Bids); var near = new HashSet<int>(i.Yes.Bids);
             Tint(bb => near.Contains(bb.Bid) ? A(AI, 0.9f) : set.Contains(bb.Bid) ? A(BAD, 0.8f) : default);
@@ -785,7 +867,8 @@ namespace AlatauCity.DigitalTwin.Modules
             }
             a.Q = StoryTitles[k];
             var tx = new Label(a.Text); tx.AddToClassList("ai-text"); tx.style.marginTop = 8; b.Add(tx);
-            if (a.Facts.Count > 0)
+            if (a.Variants > 1) VariantRow(b, a);
+            else if (a.Facts.Count > 0)
             {
                 var g = new VisualElement(); g.style.marginTop = 8; b.Add(g);
                 foreach (var (kk, v) in a.Facts) g.Add(Widgets.Fact(kk, v));

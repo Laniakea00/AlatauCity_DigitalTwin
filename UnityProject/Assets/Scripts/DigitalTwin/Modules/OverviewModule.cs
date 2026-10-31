@@ -15,7 +15,7 @@ namespace AlatauCity.DigitalTwin.Modules
         public override string Id => "overview";
         public override string TabKey => "tab_overview";
 
-        Label summary, meterLabel, eyebrow; VisualElement meter; readonly Label[] kpiV = new Label[4]; readonly Label[] kpiL = new Label[4];
+        Label eyebrow; VisualElement hero, bar; readonly Label[] kpiV = new Label[4];
         TwinChart chart; VisualElement distRows, journal, insights; Label journalTitle;
         int builtFor = -2;
 
@@ -27,24 +27,23 @@ namespace AlatauCity.DigitalTwin.Modules
             // ---------------- left: the city now
             var top = Widgets.Block(panel);
             if (TwinState.District >= 0) BuildDistrictHead(top, TwinState.District);
+            // the answer first: how ready the city is in the shown year (one big number, a calm bar), then four figures
             eyebrow = Widgets.Eyebrow(top, "");
-            summary = new Label(); summary.AddToClassList("summary"); summary.style.marginBottom = 10; top.Add(summary);
-            meterLabel = new Label(); meterLabel.AddToClassList("meter-title"); top.Add(meterLabel);
-            meter = Widgets.Meter(top, 0f);
-            var grid = new VisualElement(); grid.AddToClassList("kpi-grid"); grid.style.marginTop = 10; top.Add(grid);
+            hero = Widgets.Hero(top, "—", "%", "");
+            bar = Widgets.Progress(top, 0f, "ok");
+            var grid = new VisualElement(); grid.AddToClassList("kpi-grid"); grid.AddToClassList("kpi-quiet"); top.Add(grid);
+            string[] kl = { "Жители", "Рабочие места", "Введено площадей", "Зданий стоит" }, ku = { "тыс.", "тыс.", "млн м²", "" };
             VisualElement kRow = null;
             for (int i = 0; i < 4; i++)
             {
-                var k = new VisualElement(); k.AddToClassList("kpi");
-                kpiL[i] = new Label(); kpiL[i].AddToClassList("l"); k.Add(kpiL[i]);
-                kpiV[i] = new Label("—"); kpiV[i].AddToClassList("v"); k.Add(kpiV[i]);
-                if (i % 2 == 0) { kRow = new VisualElement(); kRow.AddToClassList("kpi-row"); grid.Add(kRow); } kRow.Add(k);
+                if (i % 2 == 0) { kRow = new VisualElement(); kRow.AddToClassList("kpi-row"); grid.Add(kRow); }
+                kpiV[i] = Widgets.Kpi(kRow, kl[i], "—", ku[i]).Q<Label>(className: "v");
             }
             top.Add(SourceTags.Line(Sources.ModelCity, Sources.GenPlan));
             if (TwinState.District < 0)
             {
-                var t = Widgets.Block(panel, Loc.T("districts"), Loc.T("o_dist_sub"));
-                distRows = new VisualElement(); t.Add(distRows); t.Add(SourceTags.Line(Sources.ModelCity, Sources.GenPlan));
+                var t = Widgets.Block(panel, Loc.T("districts"), "жители к цели 2050");
+                distRows = new VisualElement(); t.Add(distRows);
             }
             var g = Widgets.Block(panel, Loc.T("chart_gfa"), Loc.T("mln_m2")); g.AddToClassList("gfa-block");
             chart = new TwinChart { Colors = CityStats.CatColors, Stacked = true }; g.Add(chart);
@@ -61,8 +60,12 @@ namespace AlatauCity.DigitalTwin.Modules
             var a = Widgets.Block(panel, Loc.T("o_ai"), "");
             insights = new VisualElement(); a.Add(insights);
             var rec = new VisualElement(); rec.AddToClassList("wide-btn"); rec.Add(new Label(Loc.T("o_recs")) { pickingMode = PickingMode.Ignore }); rec.Add(TwinUI.Icon("sparkles", 16));
-            rec.AddManipulator(new Clickable(() => TwinState.SetModule("ai"))); a.Add(SourceTags.Line(TwinModels.Loads, TwinModels.Social, TwinModels.Traffic)); a.Add(rec);
-            var n = Widgets.Block(panel); var note = new Label(Loc.T("model_note")); note.AddToClassList("note"); n.Add(note);
+            rec.AddManipulator(new Clickable(() => TwinState.SetModule("ai"))); a.Add(rec);
+            // why and how: folded (the long model note used to be a block of its own)
+            var why = Widgets.Details(a, "Как считается");
+            var wn = new Label("Выводы — из балансов «спрос / мощность», обеспеченности школами и модели трафика двойника. Вероятная причина дефицита электроэнергии — сдвиг очереди подстанции; адаптивные светофоры снижают задержку на ~18 %.") { pickingMode = PickingMode.Ignore }; wn.AddToClassList("note"); why.Add(wn);
+            var note = new Label(Loc.T("model_note")) { pickingMode = PickingMode.Ignore }; note.AddToClassList("note"); note.style.marginTop = 6; why.Add(note);
+            a.Add(SourceTags.Line(TwinModels.Loads, TwinModels.Social, TwinModels.Traffic));
         }
 
         void BuildDistrictHead(VisualElement top, int d)
@@ -85,14 +88,11 @@ namespace AlatauCity.DigitalTwin.Modules
             int y = TwinState.Year, d = TwinState.District, s = (int)TwinState.Scenario;
             float res = CityStats.Residents(d, y), gfa = CityStats.GfaAll(d, y), jobs = CityStats.Jobs(d, y), ready = CityStats.Readiness(d, y);
             eyebrow.text = ((d < 0 ? Loc.T("eyebrow_city") : CityStats.DistrictIds[d] + " District") + " · " + y + " · " + TwinScenario.Name(TwinState.Scenario)).ToUpperInvariant();
-            if (d < 0) summary.text = gfa < 1 ? string.Format(Loc.T("summary_city_0"), y) : string.Format(Loc.T("summary_city"), y, Loc.K(res), Mathf.RoundToInt(ready * 100));
-            else summary.text = string.Format(Loc.T("summary_district"), y, CityStats.DistrictIds[d], Loc.K(res), Mathf.RoundToInt(100f * res / 1000f / CityStats.DistrictTarget2050k[d]));
-            meterLabel.text = string.Format(Loc.T(d < 0 ? "o_meter" : "o_meter_d"), Mathf.RoundToInt(ready * 100));
-            Widgets.SetMeter(meter, ready);
-            Set(0, Loc.K(res), Loc.T("kpi_res_t"));
-            Set(1, Loc.Mln(gfa), Loc.T("kpi_gfa_t"));
-            Set(2, Loc.K(jobs), Loc.T("kpi_jobs_t"));
-            Set(3, Loc.N0(CityStats.Count(d, y)), Loc.T("o_k_bld"));
+            int rp = Mathf.RoundToInt(ready * 100);
+            string rcls = ready >= 0.95f ? "ok" : ready >= 0.5f ? null : "warn";
+            Widgets.SetHero(hero, rp.ToString(), "%", d < 0 ? string.Format("город готов в {0} году", y) : string.Format("район готов в {0} году", y));
+            Widgets.SetProgress(bar, ready, rcls);
+            kpiV[0].text = Loc.K(res); kpiV[1].text = Loc.K(jobs); kpiV[2].text = Loc.Mln(gfa); kpiV[3].text = Loc.N0(CityStats.Count(d, y));
 
             var series = new float[CityStats.Cats][];
             for (int c = 0; c < CityStats.Cats; c++) { series[c] = new float[CityStats.Years]; for (int i = 0; i < CityStats.Years; i++) series[c][i] = CityStats.Gfa(d, c, TwinState.MinYear + i) / 1e6f; }
@@ -104,11 +104,12 @@ namespace AlatauCity.DigitalTwin.Modules
                 for (int i = 0; i < CityStats.Districts; i++)
                 {
                     int di = i; float r = CityStats.Residents(i, y) / 1000f, tgt = CityStats.DistrictTarget2050k[i], share = tgt > 0 ? r / tgt : 0;
-                    var row = new VisualElement(); row.AddToClassList("status-row");
+                    var row = new VisualElement(); row.AddToClassList("status-row"); row.AddToClassList("dist-row");
                     row.Add(Widgets.Dot(CityStats.DistrictColors[i], true));
                     var nm = new Label(CityStats.DistrictIds[i]) { pickingMode = PickingMode.Ignore }; nm.AddToClassList("n"); row.Add(nm);
-                    var st = new Label($"{Loc.N0(r)} / {Loc.N0(tgt)} · {Mathf.RoundToInt(share * 100)} %") { pickingMode = PickingMode.Ignore }; st.AddToClassList("s");
-                    st.AddToClassList(share >= 0.95f ? "ok" : share >= 0.3f ? "ok" : "warn"); row.Add(st);
+                    var st = new Label(string.Format("{0} из {1} тыс.", Loc.N0(r), Loc.N0(tgt))) { pickingMode = PickingMode.Ignore }; st.AddToClassList("s"); row.Add(st);
+                    var pc = new Label(string.Format("{0}\u00A0%", Mathf.RoundToInt(share * 100))) { pickingMode = PickingMode.Ignore }; pc.AddToClassList("dist-pc");
+                    pc.EnableInClassList("warn", share < 0.3f); row.Add(pc);
                     row.AddManipulator(new Clickable(() => TwinUI.Instance.GoToDistrict(di)));
                     distRows.Add(row);
                 }
@@ -135,8 +136,8 @@ namespace AlatauCity.DigitalTwin.Modules
             if (db != null) foreach (var bl in db.Buildings)
                 {
                     if (bl == null || bl.Source == "existing_osm" || (d >= 0 && bl.District != CityStats.DistrictIds[d])) continue;
-                    ConstructionLayer.Timing(bl, out int st, out int plan, out int fact); if (y < st || y >= fact || plan > 2050) continue;
-                    sites++; if (ConstructionLayer.Delay(bl.Bid) > 0 && y >= plan - 1) behind++;
+                    ConstructionLayer.Timing(bl, out int st, out int plan, out int fact); if (y < st || y > fact || plan > 2050) continue;   // a site handed over this year still counts (as in ConstructionLayer)
+                    sites++; if (y < fact && ConstructionLayer.Delay(bl.Bid) > 0 && y >= plan - 1) behind++;
                 }
             if (sites > 0) items.Add((1, Widgets.JournalCard("hard_hat", Loc.T("o_src_build"), behind > sites * 0.1f ? "warn" : "info", behind > 0 ? Loc.T("o_mid") : "",
                 string.Format(Loc.T("o_build"), Loc.N0(sites), Loc.N0(behind)), y.ToString(), Loc.T("o_open"), () => TwinState.SetModule("construction"))));
@@ -155,7 +156,10 @@ namespace AlatauCity.DigitalTwin.Modules
             int nb = CityStats.NewThisYear(d, y); float dg = (CityStats.GfaAll(d, y) - CityStats.GfaAll(d, y - 1)) / 1000f;
             if (nb > 0) items.Add((4, Widgets.JournalCard("box", Loc.T("o_src_new"), "info", "", string.Format(Loc.T("o_new"), Loc.N0(nb), Loc.N0(dg)), y.ToString())));
             if (items.Count == 0) { var l = new Label(Loc.T("o_quiet")); l.AddToClassList("note"); journal.Add(l); return; }
-            foreach (var it in items.OrderBy(x => x.prio).Take(5)) journal.Add(it.el);
+            // the three most important first, the rest one click away
+            var sorted = items.OrderBy(x => x.prio).Take(6).ToList();
+            for (int i = 0; i < sorted.Count && i < 3; i++) journal.Add(sorted[i].el);
+            if (sorted.Count > 3) { var more = Widgets.Details(journal, string.Format("Ещё {0}", sorted.Count - 3)); for (int i = 3; i < sorted.Count; i++) more.Add(sorted[i].el); }
         }
 
         void Insights(int y, int s)
@@ -165,17 +169,16 @@ namespace AlatauCity.DigitalTwin.Modules
             // first power deficit
             int fy = -1, fd = -1; float fv = 0;
             for (int i = 0; i < TwinData.NY && fy < 0; i++) for (int k = 0; k < 4; k++) { var b = TwinData.BalanceOf(s, "power_hv", k); if (b != null && b.Deficit[i] > 0.5f) { fy = TwinData.Y0 + i; fd = k; fv = b.Deficit[i]; break; } }
-            if (fy > 0) Add($"Электроэнергия — первый дефицит в {fy} году в {CityStats.DistrictIds[fd]} ({Loc.N1(fv)} МВт). Вероятная причина: сдвиг очереди подстанции; рекомендуется ускорить ввод.");
-            else Add("Электроэнергии хватает до 2050 года во всех районах при этом сценарии.");
+            if (fy > 0) Add(string.Format("Электроэнергия: дефицит с {0} года в {1} — {2}\u00A0МВт", fy, CityStats.DistrictIds[fd], Loc.N1(fv)));
+            else Add("Электроэнергии хватает до 2050 года");
             // schools
             int ys = Mathf.Max(y, 2030), yi = TwinData.YI(ys), w = -1; float wc = 2;
             for (int k = 0; k < 4; k++) { float nd = TwinData.SocialNeed[s][k][0][yi], cp = TwinData.SocialCap[s][k][0][yi]; if (nd > 500 && cp / nd < wc) { wc = cp / nd; w = k; } }
-            if (w >= 0 && wc < 1) Add($"Школы — в {ys} году в {CityStats.DistrictIds[w]} обеспеченность {Mathf.RoundToInt(wc * 100)} %: не хватает {Loc.N0(TwinData.SocialNeed[s][w][0][yi] - TwinData.SocialCap[s][w][0][yi])} мест.");
+            if (w >= 0 && wc < 1) Add(string.Format("Школы: в {0} не хватает {1} мест ({2} год)", CityStats.DistrictIds[w], Loc.N0(TwinData.SocialNeed[s][w][0][yi] - TwinData.SocialCap[s][w][0][yi]), ys));
             // traffic
             var ys2 = TwinData.TrafficYears; int ti = 0; while (ti < ys2.Length - 1 && ys2[ti] < Mathf.Max(y, 2030)) ti++;
             if (ys2.Length > 0 && TwinData.TrafficKpi[s][ti].TryGetValue("congested_km", out var ck))
-                Add($"Транспорт — в {ys2[ti]} году {Loc.N0(ck)} км дорог в заторе в утренний час пик; адаптивные светофоры снизят задержку на ~18 %.");
+                Add(string.Format("Транспорт: {0}\u00A0км в заторах в час пик ({1} год)", Loc.N0(ck), ys2[ti]));
         }
-        void Set(int i, string v, string l) { kpiV[i].text = v; kpiL[i].text = l; }
     }
 }

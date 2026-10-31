@@ -480,7 +480,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             float dt = TwinState.RealDelta; phase += dt;
             if (!MapCamera.Typing)
             {
-                if (Input.GetKeyDown(KeyCode.Escape)) { if (tab == TAn && AnDocOpen) CloseDoc(); else if (view == View.Cam) CamBack(); else { Close(); return; } }
+                if (Input.GetKeyDown(KeyCode.Escape)) { if (AnDocOpen) CloseDoc(); else if (view == View.Cam) CamBack(); else { Close(); return; } }
                 if (Input.GetKeyDown(KeyCode.Space)) TogglePlay();
                 if (Input.GetKeyDown(KeyCode.RightArrow)) { playing = false; SetDate(date + 1f / 12f); }
                 if (Input.GetKeyDown(KeyCode.LeftArrow)) { playing = false; SetDate(date - 1f / 12f); }
@@ -579,7 +579,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
                     if (mon.enabled != live) mon.enabled = live;
                     if (photo.image != monRT) photo.image = monRT;
                 }
-                Pin(); ObjPins(); DefPins();
+                Pin(); ObjPins(); DefPins(); DefMark(dt);
                 if (tab == TObj || tab == TVid || tab == TInv) Rigs(); else HideRigs();
                 Compare(); SurveyMarks();
             }
@@ -1210,11 +1210,11 @@ namespace AlatauCity.DigitalTwin.Landmarks
             var gh = new VisualElement(); gh.AddToClassList("mon-row"); gh.AddToClassList("mon-g-head"); g.Add(gh);
             gh.Add(TwinUI.Icon("presentation", 16)); var gt = new Label("Инвестору · " + L.Short); gt.AddToClassList("mon-title"); gh.Add(gt);
             var gs = new VisualElement(); gs.style.flexGrow = 1; gh.Add(gs);
-            invNote = new Label("бюджеты, коммерция и отклонения — сценарий цифрового двойника, не данные застройщика") { pickingMode = PickingMode.Ignore }; invNote.AddToClassList("note"); gh.Add(invNote); var mt = SourceTags.ModelTag(SrcMon); mt.style.marginLeft = 8; gh.Add(mt);
+            var mt = SourceTags.ModelTag(SrcMon); mt.style.marginLeft = 8; gh.Add(mt);
             var kr = new VisualElement(); kr.AddToClassList("mon-inv-kpis"); g.Add(kr);
-            for (int i = 0; i < 5; i++)
+            for (int i = 0; i < 4; i++)                    // the first tile is the answer: when the complex is finished
             {
-                var t = new VisualElement(); t.AddToClassList("mon-inv-k"); kr.Add(t);
+                var t = new VisualElement(); t.AddToClassList("mon-inv-k"); if (i == 0) t.AddToClassList("w21-inv-hero"); kr.Add(t);
                 kCap[i] = new Label { pickingMode = PickingMode.Ignore }; kCap[i].AddToClassList("mon-inv-cap"); t.Add(kCap[i]);
                 kVal[i] = new Label { pickingMode = PickingMode.Ignore }; kVal[i].AddToClassList("mon-inv-val"); t.Add(kVal[i]);
                 kSub[i] = new Label { pickingMode = PickingMode.Ignore }; kSub[i].AddToClassList("mon-inv-sub"); t.Add(kSub[i]);
@@ -1223,7 +1223,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             // the buildings
             invTable = new VisualElement(); invTable.AddToClassList("mon-inv-table"); row.Add(invTable);
             var th = new VisualElement(); th.AddToClassList("mon-inv-tr"); th.AddToClassList("mon-th"); invTable.Add(th);
-            foreach (var (c, cls) in new[] { ("Объект", "o"), ("Бюджет", "b"), ("Готовность · факт / план", "r"), ("Ввод · план → прогноз", "e"), (L.Id == "kaist" ? "Использование" : "Коммерция", "c") }) th.Add(Cell(c, cls));
+            foreach (var (c, cls) in new[] { ("Объект", "o"), ("Бюджет", "b"), ("Факт / план", "r"), ("Ввод: план → прогноз", "e"), (L.Id == "kaist" ? "Использование" : "Коммерция", "c") }) th.Add(Cell(c, cls));
             irows.Clear();
             for (int i = 0; i < L.Parts.Count; i++)
             {
@@ -1241,7 +1241,9 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 var c3 = new VisualElement(); c3.AddToClassList("mon-td"); c3.AddToClassList("e"); r.Add(c3);
                 ir.Due = new Label { pickingMode = PickingMode.Ignore }; ir.Due.AddToClassList("mon-inv-n"); c3.Add(ir.Due);
                 ir.Dev = new Label { pickingMode = PickingMode.Ignore }; ir.Dev.AddToClassList("mon-src"); c3.Add(ir.Dev);
-                var c4 = Cell(p.Deal, "c"); c4.style.whiteSpace = WhiteSpace.Normal; r.Add(c4);
+                // one line per row: the first clause of the deal; the whole text is folded under the table
+                string deal = p.Deal ?? ""; int cut = deal.IndexOfAny(new[] { ';', '·', ',' }); if (cut > 0) deal = deal.Substring(0, cut).Trim();
+                var c4 = Cell(deal, "c"); c4.AddToClassList("w21-deal"); r.Add(c4);
                 irows.Add(ir);
             }
             // the budget curve with the hand-overs on it
@@ -1255,13 +1257,21 @@ namespace AlatauCity.DigitalTwin.Landmarks
             var leg = new VisualElement(); leg.AddToClassList("mon-row"); leg.style.marginTop = 4;
             leg.Add(Widgets.LegendItem(new Color(1f, 1f, 1f, 0.5f), "план")); leg.Add(Widgets.LegendItem(Blue, "факт")); leg.Add(Widgets.LegendItem(BlueSoft, "прогноз"));
             leg.Add(Widgets.LegendItem(Green, "ввод в срок")); leg.Add(Widgets.LegendItem(Orange, "ввод позже плана")); cw.Add(leg);
+            var how = Widgets.Details(g, "Как считается");
+            var hw = new Label("Готовность комплекса взвешена по бюджетам объектов. Освоено — стоимость выполненных работ. Ввод — по графику и прогнозу по темпу работ после последней съёмки.") { pickingMode = PickingMode.Ignore };
+            hw.AddToClassList("w17-note"); how.Add(hw);
+            for (int i = 0; i < L.Parts.Count; i++)
+            {
+                if (string.IsNullOrEmpty(Pt(i).Deal)) continue;
+                var dl = new Label(string.Format("{0}: {1}", Pt(i).Name, Pt(i).Deal)) { pickingMode = PickingMode.Ignore }; dl.AddToClassList("w17-note"); how.Add(dl);
+            }
         }
-        void K(int i, string cap, string val, string sub, string cls) { kCap[i].text = cap; kVal[i].text = val; kSub[i].text = sub; kVal[i].EnableInClassList("warn", cls == "warn"); kVal[i].EnableInClassList("bad", cls == "bad"); }
+        void K(int i, string cap, string val, string sub, string cls) { if (kCap[i] == null) return; kCap[i].text = cap; kVal[i].text = val; kSub[i].text = sub; kVal[i].EnableInClassList("warn", cls == "warn"); kVal[i].EnableInClassList("bad", cls == "bad"); kVal[i].EnableInClassList("ok", cls == "ok"); kVal[i].parent.EnableInClassList("w21-s-warn", cls == "warn"); kVal[i].parent.EnableInClassList("w21-s-bad", cls == "bad"); }
         void RefreshInv()
         {
             if (inv == null) return;
             int n = L.Parts.Count; float cap = Capex();
-            float rp = Ready(date, false), rf = Ready(date, true), sp = Spent(date, true), spp = Spent(date, false);
+            float rp = Ready(date, false), rf = Ready(date, true), sp = Spent(date, true);
             int done = 0, next = -1, last = 0; var os = new OS[n];
             for (int i = 0; i < n; i++)
             {
@@ -1270,17 +1280,17 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 if (os[i].FactEnd > os[last].FactEnd) last = i;
             }
             int ld = Mathf.RoundToInt((os[last].FactEnd - L.Finish) * 365f);
-            K(0, "Готовность комплекса", Pct(rf), "по плану " + Pct(rp) + " · взвешено по бюджетам", rf < rp - 0.01f ? "warn" : "");
-            K(1, "Освоено", Usd(sp), "из " + Usd(cap) + " · по плану " + Usd(spp), "");
-            K(2, "Введено объектов", done + " из " + n, done < n && next >= 0 ? "следующий — " + Pt(next).Name : "комплекс введён", "");
-            K(3, "Ближайший ввод", next >= 0 ? IconicFloors.MonthYear(os[next].FactEnd) : "—", next >= 0 ? Pt(next).Name + " · " + EndDev(os[next].EndDays) : "все объекты введены", next >= 0 && os[next].EndDays > 3 ? "warn" : "");
-            K(4, "Завершение комплекса", IconicFloors.MonthYear(os[last].FactEnd), ld > 3 ? $"позже плана на {ld} дн. — {Pt(last).Name}" : "в срок по плану", ld > 21 ? "bad" : ld > 3 ? "warn" : "");
+            K(0, "Завершение комплекса", IconicFloors.MonthYear(os[last].FactEnd), ld > 3 ? string.Format("позже плана на {0}\u00A0дн.", ld) : "в срок по плану", ld > 21 ? "bad" : ld > 3 ? "warn" : "ok");
+            K(1, "Готовность", Pct(rf), string.Format("по плану {0}", Pct(rp)), rf < rp - 0.01f ? "warn" : "");
+            K(2, "Освоено", Usd(sp), string.Format("из {0}", Usd(cap)), "");
+            K(3, "Ближайший ввод", next >= 0 ? IconicFloors.MonthYear(os[next].FactEnd) : "—", next >= 0 ? Pt(next).Name : string.Format("введено {0} из {1}", done, n), next >= 0 && os[next].EndDays > 3 ? "warn" : "");
             foreach (var ir in irows)
             {
                 var o = os[ir.I];
                 ir.Done.text = Pct(o.Fact) + " / " + Pct(o.Plan);
                 ir.Bar.style.width = Length.Percent(o.Fact * 100f); ir.Mark.style.left = Length.Percent(o.Plan * 100f);
-                ir.Due.text = IconicFloors.MonthYear(o.PlanEnd) + " → " + IconicFloors.MonthYear(o.FactEnd);
+                string pe = IconicFloors.MonthYear(o.PlanEnd), fe = IconicFloors.MonthYear(o.FactEnd);
+                ir.Due.text = pe == fe ? pe : pe + " → " + fe;                  // one date when the forecast keeps the planned month
                 ir.Dev.text = o.Text;
                 foreach (var c in new[] { "ok", "warn", "bad" }) ir.Row.EnableInClassList(c, c == o.Cls);
                 ir.Row.EnableInClassList("sel", ir.I == obj);
@@ -1344,7 +1354,9 @@ namespace AlatauCity.DigitalTwin.Landmarks
         static void Ev(VisualElement card, string time, string cam, string text, Color c)
         {
             var r = new VisualElement(); r.AddToClassList("mon-row"); r.AddToClassList("mon-ai"); r.style.marginTop = 8; r.Add(Widgets.Dot(c, true));
-            var l = new Label(time + " · " + cam + " — " + text) { pickingMode = PickingMode.Ignore }; l.AddToClassList("note"); l.style.whiteSpace = WhiteSpace.Normal; l.style.flexShrink = 1; r.Add(l);
+            var tl = new Label(time) { pickingMode = PickingMode.Ignore }; tl.AddToClassList("w21-ev-t"); r.Add(tl);
+            var l = new Label(text) { pickingMode = PickingMode.Ignore }; l.AddToClassList("w21-ev-x"); l.style.whiteSpace = WhiteSpace.Normal; l.style.flexShrink = 1; r.Add(l);
+            var cl = new Label(cam) { pickingMode = PickingMode.Ignore }; cl.AddToClassList("w21-meta"); r.Add(cl);
             card.Add(r);
         }
     }

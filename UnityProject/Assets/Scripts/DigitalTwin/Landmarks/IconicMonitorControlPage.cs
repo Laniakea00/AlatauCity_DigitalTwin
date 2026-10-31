@@ -29,10 +29,10 @@ namespace AlatauCity.DigitalTwin.Landmarks
             var head = Box(ctlPage, "an-head");
             head.Add(TwinUI.Icon("trending_up", 20));
             var tb = Box(head, "an-titles", false);
-            Txt(tb, $"Контроль для инвестора · {L.Short}", "an-h1");
-            Txt(tb, $"на {Day(Report)} — по последней съёмке · все данные стройки — демо-сценарий цифрового двойника", "mon-src");
+            Txt(tb, $"Контроль · {L.Short}", "an-h1");
+            Txt(tb, $"по съёмке {Day(Report)}", "w17-sub");
             var seg = Box(head, "mon-seg"); seg.style.marginLeft = 22;
-            foreach (var (txt, k) in new[] { ("Сводка", 0), ("Что изменилось", 3), ("Недельный отчёт", 1), ("Документы", 4), ("Люди и погода", 2) })
+            foreach (var (txt, k) in new[] { ("Сводка", 0), ("Что изменилось", 3), ("Недельный отчёт", 1), ($"Документы · {docs.Count + permits.Count}", 4), ("Люди и погода", 2) })
             { int kk = k; var b = Widgets.Btn(txt, () => CtlView(kk), "small"); b.AddToClassList("an-tab"); b.userData = k; seg.Add(b); ctlTabs.Add(b); }
             Spacer(head);
             head.Add(SourceTags.Line(SrcMon, SrcEv));
@@ -47,7 +47,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
         void CtlView(int v, bool go = true)
         {
             if (go && tab != TCtl && overlay != null) SetTab(TCtl);
-            ctlView = v;
+            ctlView = v; CloseDoc();
             for (int i = 0; i < ctlTabs.Count; i++) ctlTabs[i].EnableInClassList("active", (int)ctlTabs[i].userData == v);
             Vis(ctlSumV, v == 0); Vis(ctlRepV, v == 1); Vis(ctlResV, v == 2); Vis(ctlChgV, v == 3); Vis(ctlDocsV, v == 4);
             if (v == 1) FillReport();
@@ -55,111 +55,196 @@ namespace AlatauCity.DigitalTwin.Landmarks
         }
 
         // ------------------------------------------------------------------ Сводка
+        /// <summary>The only summary of the monitoring, read in three seconds: four numbers (readiness, delay, hand-over, forecast cost),
+        /// then the time (readiness by work type, the hand-overs) on the left and what to do, what needs attention and the money on the
+        /// right. Every explanation is folded under «Почему так» / «Как считается».</summary>
         void BuildCtlSummary(VisualElement v)
         {
             v = Scroll(v, "ctl-vscroll");                    // the whole view scrolls: nothing is cut at the window's bottom
             float d = Report, rf = Ready(d, true), rp = Ready(d, false);
             int sd = SchedDelay(d), last = LastPart(d);
             float fe = FactDate(last, 1f); int ld = Mathf.RoundToInt((fe - L.Finish) * 365f);
-            string tt = TrendText(out string tcls);
+            TrendText(out string tcls);
             float over = evEac - evBac;
+            string pm = IconicFloors.MonthYear(L.Finish);
 
-            string pm = IconicFloors.MonthYear(L.Finish), fm = IconicFloors.MonthYear(fe);
-            string endTxt = ld > 3 ? (fm == pm ? $"{fm}, позже плана на {ld} дн." : $"{fm} вместо {pm} — позже на {ld} дн.")
-                : ld < -3 && fm != pm ? $"{fm} вместо {pm} — раньше плана" : $"{fm}, в срок";
-            var vb = Box(v, "an-verdict " + (sd > 21 || NetOver > 0f ? "s-bad" : sd > 3 || over > 0f ? "s-warn" : "s-ok"));
-            Txt(vb, $"Главное для инвестора на {Day(d)}", "an-verdict-k");
-            Txt(vb, $"Готовность {Pct(rf)} при плане {Pct(rp)}, отставание {sd} дн. ({tt}). Ввод комплекса — {endTxt}. Деньги: {CpiWords(evCpi)}, прогноз стоимости {Mln(evEac)} при бюджете {Mln(evBac)}.", "an-verdict-t");
-            if (sd > 3 && ld <= 3) Txt(vb, WhyOnTime(d, sd, last), "mon-src ctl-why");
+            // ---- the answer: four numbers
+            var kr = Box(v, "w17-kpis", false);
+            HeroK(kr, "Готовность", Pct(rf), string.Format("по плану {0}", Pct(rp)), rf < rp - 0.01f ? "warn" : "ok", () => SetTab(T4D));
+            HeroK(kr, "Отставание", sd > 3 ? $"{sd} дн." : "нет", TrendShort(), sd > 21 && ld > 3 ? "bad" : sd > 3 ? "warn" : "ok", () => SetTab(T4D));       // red only when the delay moves the hand-over
+            HeroK(kr, "Ввод комплекса", IconicFloors.MonthYear(fe), ld > 3 ? string.Format("позже плана на {0} дн.", ld) : "в срок по плану", ld > 21 ? "bad" : ld > 3 ? "warn" : "ok", () => SetTab(TInv));
+            HeroK(kr, "Прогноз стоимости", Mln(evEac), over > 0f ? string.Format("бюджет {0} · {1}", Mln(evBac), SPc(over / evBac)) : string.Format("бюджет {0}", Mln(evBac)), CostCls, () => AnView(1));
 
-            var kr = Box(v, "an-kpis");
-            AnK(kr, "Готовность комплекса", Pct(rf), $"по плану {Pct(rp)} · доли бюджета", rf < rp - 0.01f ? "warn" : "ok", () => SetTab(T4D));
-            AnK(kr, "Отставание сейчас", $"{sd} дн.", tt, sd > 21 ? "bad" : sd > 3 ? "warn" : "ok", () => SetTab(T4D));
-            AnK(kr, "Ввод комплекса · прогноз", IconicFloors.MonthYear(fe), ld > 3 ? $"по плану {pm} · позже на {ld} дн." : sd > 3 ? $"по плану {pm} · в срок: отставание закрывается к вводу" : $"по плану {pm} · в срок", ld > 21 ? "bad" : ld > 3 ? "warn" : "ok", () => SetTab(TInv));
-            AnK(kr, "SPI · темп работ", Ix(evSpi), SpiWords(evSpi), evSpi < 0.95f ? "bad" : evSpi < 0.99f ? "warn" : "ok", null);
-            AnK(kr, "CPI · цена работ", Ix(evCpi), CpiWords(evCpi), evCpi < 0.95f ? "bad" : evCpi < 0.99f ? "warn" : "ok", null);
-            AnK(kr, "EAC · прогноз стоимости", Mln(evEac), over > 0f ? $"бюджет {Mln(evBac)} · {SMln(over)} ({SPc(over / evBac)})" : $"бюджет {Mln(evBac)} · экономия {Mln(-over)}", CostCls, () => { SetTab(TAn); anItem = TopOver(); AnView(1); });
-
-            var row = Box(v, "an-row");
+            var row = Box(v, "an-row w17-row");
+            // ================= left: time
             var lc = Box(row, "an-colL ctl-col");
-            // readiness by work type
-            var wc = Box(lc, "mon-card an-card");
-            var wh = Box(wc, "an-sec", false); wh.Add(TwinUI.Icon("list_checks", 16)); Txt(wh, "Готовность по видам работ", "mon-title");
-            Txt(wc, "факт по съёмке против плана · белая риска — где должны быть по графику", "mon-src");
+            var wc = Box(lc, "w17-card");
+            CardHead(wc, "list_checks", "Готовность по видам работ");
             var ps = Box(wc, "mon-seg ctl-parts");
             for (int i = -1; i < L.Parts.Count; i++)
             { int k = i; var b = Widgets.Btn(i < 0 ? "Весь комплекс" : Pt(i).Short, () => { ctlPart = k; FillWt(); }, "small"); ps.Add(b); ctlPartBtns.Add(b); }
+            var wl = Box(wc, "w17-legend", false); wl.Add(Widgets.LegendItem(Blue, "сделано")); wl.Add(Widgets.LegendItem(Color.white, "где должны быть по графику"));
             ctlWtRows = Box(wc, "ctl-wt-list");
             ctlPart = obj; FillWt();
             wc.Add(SourceTags.Line(SrcMon));
-            // dates: planned and forecast hand-over, the delay and its trend
-            var dc = Box(lc, "mon-card an-card");
-            var dh = Box(dc, "an-sec", false); dh.Add(TwinUI.Icon("calendar", 16)); Txt(dh, "Сроки ввода", "mon-title");
-            Txt(dc, "плановый и прогнозный ввод по фактическому темпу · отставание — на сколько дней работы позади графика", "mon-src");
+
+            var dc = Box(lc, "w17-card");
+            CardHead(dc, "calendar", "Сроки ввода");
             var th = Box(dc, "ctl-tr ctl-th", false);
-            foreach (var (c, cls) in new[] { ("Объект", "n"), ("Ввод по плану", "m"), ("Прогноз", "m"), ("Сдвиг ввода", "m"), ("Отставание сейчас", "m") }) Txt(th, c, "ctl-td " + cls);
+            foreach (var (c, cls) in new[] { ("Объект", "n"), ("План", "m"), ("Прогноз", "m"), ("Отставание", "m") }) Txt(th, c, "ctl-td " + cls);
             for (int i = 0; i < L.Parts.Count; i++)
             {
                 var o = Obj(i, d); int k = i;
                 var r = new Button(() => { SetTab(T4D); SelectObj(k, true); }) { focusable = false }; r.AddToClassList("ctl-tr"); dc.Add(r);
                 Txt(r, Pt(i).Name, "ctl-td n");
                 Txt(r, IconicFloors.MonthYear(o.PlanEnd), "ctl-td m");
-                Txt(r, IconicFloors.MonthYear(o.FactEnd), "ctl-td m");
-                var s = Txt(r, o.EndDays > 3 ? $"+{o.EndDays} дн." : o.EndDays < -3 ? $"−{-o.EndDays} дн." : "в срок", "ctl-td m"); s.AddToClassList(o.EndDays > 21 ? "bad" : o.EndDays > 3 ? "warn" : "ok");
+                var fcl = Txt(r, IconicFloors.MonthYear(o.FactEnd), "ctl-td m"); if (o.EndDays > 3) fcl.AddToClassList(o.EndDays > 21 ? "bad" : "warn");
                 var dl = Txt(r, o.Fact >= 0.999f ? "введён" : o.Plan <= 0f && o.Fact <= 0f ? "не начат" : o.Days > 3 ? $"{o.Days} дн." : "в графике", "ctl-td m"); dl.AddToClassList(o.Cls == "muted" ? "muted" : o.Cls);
             }
-            var tr = Box(dc, "ctl-tr ctl-tot", false);
-            Txt(tr, "Комплекс целиком", "ctl-td n"); Txt(tr, IconicFloors.MonthYear(L.Finish), "ctl-td m"); Txt(tr, IconicFloors.MonthYear(fe), "ctl-td m");
-            var tl = Txt(tr, ld > 3 ? $"+{ld} дн." : "в срок", "ctl-td m"); tl.AddToClassList(ld > 21 ? "bad" : ld > 3 ? "warn" : "ok");
-            var ts = Txt(tr, $"{sd} дн.", "ctl-td m"); ts.AddToClassList(sd > 21 ? "bad" : sd > 3 ? "warn" : "ok");
-            // the trend: the delay of the complex at the last surveys
-            var trh = Box(dc, "an-sec ctl-sub", false); Txt(trh, "Отставание комплекса по съёмкам", "ctl-k"); Spacer(trh); var tw = Txt(trh, tt, "ctl-k2"); tw.AddToClassList(tcls);
-            var bars = Box(dc, "ctl-trend", false); int mx = 10; foreach (int x in trendD) mx = Mathf.Max(mx, x);
+            var why = Widgets.Details(dc, "Почему так");
+            if (sd > 3 && ld <= 3) Txt(why, WhyOnTime(d, sd, last), "w17-note");
+            Txt(why, "Отставание по съёмкам:", "w17-note");
+            var bars = Box(why, "ctl-trend", false); int mx = 10; foreach (int x in trendD) mx = Mathf.Max(mx, x);
             for (int k = 0; k < trendD.Count; k++)
             {
                 var col = Box(bars, "ctl-tcol", false);
                 Txt(col, $"{trendD[k]} дн.", "ctl-tv");
                 var well = Box(col, "ctl-twell", false);
                 var b = Box(well, "ctl-tbar", false); b.style.height = Length.Percent(Mathf.Clamp01(Mathf.Max(trendD[k], 0) / (float)mx) * 100f);
-                b.style.backgroundColor = trendD[k] > 21 ? new Color(1f, 0.35f, 0.31f, 0.85f) : trendD[k] > 3 ? new Color(0.96f, 0.65f, 0.14f, 0.85f) : new Color(0.20f, 0.78f, 0.35f, 0.85f);
+                b.style.backgroundColor = k == trendD.Count - 1 ? ClsColor(tcls == "bad" ? "warn" : tcls) : new Color(1f, 1f, 1f, 0.22f);
                 if (k == trendD.Count - 1) col.AddToClassList("cur");
                 Txt(col, Day(trendT[k]), "ctl-td-d");
             }
-            Txt(dc, "Отставание комплекса считается по объёму: на какую дату график планировал столько работ, сколько сделано сейчас. Крупные корпуса весят больше, чем газон.", "mon-src ctl-note");
+            Txt(why, "Отставание считается по объёму: на какую дату график планировал столько работ, сколько сделано сейчас. Крупные корпуса весят больше, чем газон. Сдвиг ввода — прогноз модели по фактическому темпу.", "w17-note");
+            dc.Add(SourceTags.Line(SrcMon));
 
+            // ================= right: what to do, what needs attention, the money
             var rc = Box(row, "an-colR ctl-col");
-            // the money: earned value
-            var ec = Box(rc, "mon-card an-card");
-            var eh = Box(ec, "an-sec", false); eh.Add(TwinUI.Icon("chart_line", 16)); Txt(eh, "Деньги: освоенный объём", "mon-title");
-            Txt(ec, "сколько работ должно быть сделано, сколько сделано и сколько это стоило · млн $", "mon-src");
-            var lg = Box(ec, "an-tools ctl-leg", false);
-            lg.Add(Widgets.LegendItem(new Color(1f, 1f, 1f, 0.6f), "план (PV)")); lg.Add(Widgets.LegendItem(Blue, "сделано (EV)")); lg.Add(Widgets.LegendItem(AcC, "затраты (AC)"));
-            lg.Add(Widgets.LegendItem(new Color(1f, 1f, 1f, 0.3f), "бюджет")); lg.Add(Widgets.LegendItem(Orange, "съёмка"));
-            ctlEvChart = Box(ec, "ctl-chart ctl-ev"); ctlEvChart.generateVisualContent += DrawEv;
+            var ac = Box(rc, "w17-card");
+            CardHead(ac, "sparkles", "Что делать сейчас");
+            var acts = Actions(d); int n = 1;
+            foreach (var a in acts) ActRow(ac, a, n++);
+            if (acts.Count > 0)
+            {
+                var aw = Widgets.Details(ac, "Почему эти действия");
+                n = 1; foreach (var a in acts) Txt(aw, string.Format("{0}. {1}", n++, a.Why), "w17-note");
+                Txt(aw, "Действия подбираются правилами по данным двойника: сначала — с наибольшим эффектом на срок ввода. Эффект — оценка модели.", "w17-note");
+            }
+            ac.Add(SourceTags.Line(SrcActs));
+
+            BuildAttention(rc);
+
+            var ec = Box(rc, "w17-card");
+            CardHead(ec, "chart_line", "Деньги");
+            var ea = Txt(ec, CpiWords(evCpi), "w17-answer"); ea.AddToClassList(evCpi < 0.9f ? "bad" : evCpi < 0.99f ? "warn" : "ok");
+            var lg = Box(ec, "w17-legend", false);
+            lg.Add(Widgets.LegendItem(new Color(1f, 1f, 1f, 0.6f), "план")); lg.Add(Widgets.LegendItem(Blue, "сделано")); lg.Add(Widgets.LegendItem(AcC, "затраты"));
+            lg.Add(Widgets.LegendItem(new Color(1f, 1f, 1f, 0.3f), "бюджет"));
+            ctlEvChart = Box(ec, "ctl-chart ctl-ev w17-ev"); ctlEvChart.generateVisualContent += DrawEv;
             for (int y = (int)T0; y <= (int)T1; y++)
             { var a = new Label(y.ToString()) { pickingMode = PickingMode.Ignore }; a.AddToClassList("mon-tick"); a.style.left = Length.Percent((y - T0) / (T1 - T0) * 100f); ctlEvChart.Add(a); }
             var ym = Txt(ctlEvChart, Mln(Mathf.Max(evEac, evBac + anRes) * 1.06f), "ctl-ymax"); ym.style.position = Position.Absolute;
+            var how = Widgets.Details(ec, "Как считается");
+            float pvR = Spent(d, false);
             void Line(string k, string val, string words, string cls)
             {
-                var r = Box(ec, "an-step", false);
-                Txt(r, k, "an-step-n ctl-ix");
-                var t = Box(r, "an-step-tx", false); Txt(t, words, "an-step-k");
-                var vv = Txt(r, val, "an-step-v"); if (cls.Length > 0) vv.AddToClassList(cls);
+                var r = Box(how, "w17-xrow", false);
+                var t = Box(r, "w17-xrow-tx", false); Txt(t, k, "w17-xrow-k"); Txt(t, words, "w17-note");
+                var vv = Txt(r, val, "w17-xrow-v"); if (cls.Length > 0) vv.AddToClassList(cls);
             }
-            float pvR = Spent(d, false);
-            Line("SPI", Ix(evSpi), $"{SpiWords(evSpi)}: сделано работ на {Mln(anTot.Ev)} в ценах сметы, по графику к этой дате — на {Mln(pvR)}. SPI = сделано ÷ план.", evSpi < 0.95f ? "bad" : evSpi < 0.99f ? "warn" : "ok");
-            Line("CPI", Ix(evCpi), $"{CpiWords(evCpi)}: за работы на {Mln(anTot.Ev)} по смете заплачено {Mln(evAcR)} — цены выросли с октября 2026. CPI = сделано ÷ затраты.", evCpi < 0.95f ? "bad" : evCpi < 0.99f ? "warn" : "ok");
-            Line("EAC", Mln(evEac), $"Прогноз итоговой стоимости: потрачено {Mln(evAcR)} + остаток работ по ценам на {Day(d)} + сроки дольше графика. Бюджет {Mln(evBac)}, резерв {Mln(anRes)} — " +
+            Line("Темп работ · SPI", Ix(evSpi), $"{SpiWords(evSpi)}: сделано работ на {Mln(anTot.Ev)} в ценах сметы, по графику к этой дате — на {Mln(pvR)}. SPI = сделано ÷ план.", evSpi < 0.95f ? "bad" : evSpi < 0.99f ? "warn" : "ok");
+            Line("Цена работ · CPI", Ix(evCpi), $"{CpiWords(evCpi)}: за работы на {Mln(anTot.Ev)} по смете заплачено {Mln(evAcR)} — цены выросли с октября 2026. CPI = сделано ÷ затраты.", evCpi < 0.95f ? "bad" : evCpi < 0.99f ? "warn" : "ok");
+            Line("Прогноз стоимости · EAC", Mln(evEac), $"Потрачено {Mln(evAcR)} + остаток работ по ценам на {Day(d)} + сроки дольше графика. Бюджет {Mln(evBac)}, резерв {Mln(anRes)} — " +
                 (NetOver > 0f ? $"не хватает {Mln(NetOver)}." : over > 0f ? "перерасход покрывается резервом." : "укладываемся в бюджет."), CostCls);
+            Txt(how, "На графике: пунктир после оранжевой линии съёмки — прогноз; ромб — прогноз ввода комплекса.", "w17-note");
+            var all = Widgets.Btn("Открыть смету", () => AnView(1), "small"); all.AddToClassList("w17-go"); ec.Add(all);
             ec.Add(SourceTags.Line(SrcEv, DSrc.OlxPrices, DSrc.NbrkRate));
-
-            // what to do now
-            var ac = Box(rc, "mon-card an-card");
-            var ah = Box(ac, "an-sec", false); ah.Add(TwinUI.Icon("sparkles", 16)); Txt(ah, "Что делать сейчас", "mon-title");
-            Txt(ac, "три действия с наибольшим эффектом на срок ввода · правила по данным двойника", "mon-src");
-            int n = 1;
-            foreach (var a in Actions(d)) ActCard(ac, a, n++);
-            ac.Add(SourceTags.Line(SrcActs));
+        }
+        /// <summary>The delay against the previous survey, in a few words.</summary>
+        string TrendShort()
+        {
+            if (trendD.Count < 2) return "первая съёмка";
+            int dd = trendD[trendD.Count - 1] - trendD[trendD.Count - 2];
+            return dd > 3 ? string.Format("+{0} дн. к прошлой съёмке", dd) : dd < -3 ? string.Format("−{0} дн. к прошлой съёмке", -dd) : "как на прошлой съёмке";
+        }
+        /// <summary>A number of the answer row: a small label, the big value (its unit small), one muted line; status = the colour of the
+        /// value and a thin bar on the left.</summary>
+        void HeroK(VisualElement parent, string cap, string val, string sub, string cls, Action click)
+        {
+            var b = new Button(click) { focusable = false }; b.AddToClassList("w17-k"); if (cls.Length > 0) b.AddToClassList("s-" + cls); parent.Add(b);
+            Txt(b, cap, "w17-k-cap");
+            var vr = Box(b, "w17-k-vr", false);
+            SplitUnit(val, out var num, out var unit);
+            var nv = Txt(vr, num, "w17-k-v"); if (cls.Length > 0) nv.AddToClassList(cls);
+            if (unit.Length > 0) Txt(vr, unit, "w17-k-u");
+            Txt(b, sub, "w17-k-sub");
+        }
+        /// <summary>«39 дн.» → «39» + «дн.», «$881 млн» → «$881» + «млн», «58 %» → «58» + «%»; a date («сен 2030») stays whole.</summary>
+        static void SplitUnit(string s, out string num, out string unit)
+        {
+            int i = s.LastIndexOfAny(new[] { ' ', ' ' });
+            if (i > 0 && i < s.Length - 1 && !char.IsDigit(s[i + 1]) && char.IsDigit(s[i - 1])) { num = s.Substring(0, i); unit = s.Substring(i + 1); }
+            else { num = s; unit = ""; }
+        }
+        static void CardHead(VisualElement card, string icon, string title)
+        {
+            var h = Box(card, "w17-head", false); var ic = TwinUI.Icon(icon, 15); ic.AddToClassList("w17-head-ic"); h.Add(ic); Txt(h, title, "w17-title");
+        }
+        /// <summary>«Требует внимания»: the findings of the analytics, most serious first (four shown, the rest behind «Ещё N»); each
+        /// with the places in the documents it follows from (a click opens the document there) and a way to see it.</summary>
+        void BuildAttention(VisualElement parent)
+        {
+            var c = Box(parent, "w17-card");
+            var h = Box(c, "w17-head", false); var ic = TwinUI.Icon("triangle_alert", 15); ic.AddToClassList("w17-head-ic"); h.Add(ic); Txt(h, "Требует внимания", "w17-title"); Spacer(h);
+            int nb = 0, nw = 0; foreach (var f in finds) { if (f.Icon == "clock") continue; if (f.Sev >= 2) nb++; else if (f.Sev == 1) nw++; }
+            if (nb > 0) Txt(h, string.Format("{0} критично", nb), "w17-count bad");
+            if (nw > 0) Txt(h, string.Format("{0} важно", nw), "w17-count warn");
+            // the delays of the buildings are in «Сроки ввода» already: not repeated here
+            var list = new List<Finding>(); foreach (var f in finds) if (f.Sev >= 0 && f.Icon != "clock") list.Add(f);
+            VisualElement more = null; int shown = 0;
+            foreach (var f in list)
+            {
+                if (shown == 3) { more = Box(c, "w17-more-box"); more.style.display = DisplayStyle.None; }
+                AttnRow(more ?? c, f); shown++;
+            }
+            if (more != null)
+            {
+                var mb = more; int extra = list.Count - 3;
+                Button btn = null; btn = Widgets.Btn(string.Format("Ещё {0} ›", extra), () => { bool on = mb.style.display == DisplayStyle.None; mb.style.display = on ? DisplayStyle.Flex : DisplayStyle.None; btn.text = on ? "Свернуть" : string.Format("Ещё {0} ›", extra); }, "small", "ghost");
+                btn.AddToClassList("w17-go"); c.Add(btn);
+            }
+            if (list.Count == 0) Txt(c, "Всё идёт по плану.", "w17-answer ok");
+            c.Add(SourceTags.Line(SrcMon));
+        }
+        void AttnRow(VisualElement parent, Finding f)
+        {
+            // one line: what, and where to see it; why (the text and the places in the documents — a click opens the sheet there) folded
+            var r = Box(parent, "w17-at " + SevCls[Mathf.Clamp(f.Sev + 1, 0, 3)]);
+            var top = Box(r, "w17-at-top", false);
+            Txt(top, f.Title, "w17-at-t");
+            if (f.Show != null)
+            {
+                var g = new Button(f.Show) { focusable = false }; g.AddToClassList("an-go"); g.AddToClassList("w17-at-go");
+                g.Add(new Label(f.ShowText) { pickingMode = PickingMode.Ignore }); g.Add(TwinUI.Icon("arrow_right", 12)); top.Add(g);
+                top.pickingMode = PickingMode.Position;
+            }
+            var dt = Widgets.Details(r, "Почему так");
+            if (!string.IsNullOrEmpty(f.Text)) Txt(dt, f.Text, "w17-note");
+            if (f.Src.Count > 0) { var sr = Box(dt, "w17-at-src"); foreach (var s in f.Src) sr.Add(DocChip(s, f)); }
+        }
+        /// <summary>An action: its number, what to do, the effect on the hand-over, where to see it (the reason is folded below the list).</summary>
+        void ActRow(VisualElement parent, Act a, int n)
+        {
+            var c = Box(parent, "w17-act " + SevCls[Mathf.Clamp(a.Sev + 1, 0, 3)]);
+            Txt(c, n.ToString(), "ctl-actn");
+            var tx = Box(c, "w17-act-tx", false);
+            Txt(tx, a.Title, "w17-act-t");
+            var ef = Txt(tx, a.Effect, "w17-act-e"); ef.AddToClassList(a.Days > 0 ? "ok" : "muted");
+            if (a.Show != null)
+            {
+                var g = new Button(a.Show) { focusable = false }; g.AddToClassList("an-go");
+                g.Add(new Label(a.ShowText) { pickingMode = PickingMode.Ignore }); g.Add(TwinUI.Icon("arrow_right", 12)); c.Add(g);
+            }
         }
         /// <summary>Why the complex is handed over in time although it is behind now: the buildings behind work a second shift from the
         /// survey on (the model closes their gap before their hand-over), or they have room before the hand-over of the complex.</summary>
@@ -177,25 +262,6 @@ namespace AlatauCity.DigitalTwin.Landmarks
             if (t.Count == 0) t.Add("отстают работы, от которых срок ввода не зависит");
             return $"Почему в срок при отставании {sd} дн.: {string.Join("; ", t)}. Последним вводится {Pt(last).Name} — {IconicFloors.MonthYear(FactDate(last, 1f))}.";
         }
-        void ActCard(VisualElement parent, Act a, int n)
-        {
-            string sc = SevCls[Mathf.Clamp(a.Sev + 1, 0, 3)];
-            var c = Box(parent, "an-f ctl-act " + sc);
-            var top = Box(c, "an-f-top", false);
-            Txt(top, n.ToString(), "ctl-actn");
-            var ic = TwinUI.Icon(a.Icon, 16); ic.style.unityBackgroundImageTintColor = SevColor(a.Sev); ic.style.flexShrink = 0; ic.style.marginLeft = 6; top.Add(ic);
-            Txt(top, a.Title, "an-f-t");
-            Txt(c, a.Why, "an-f-x");
-            var br = Box(c, "an-f-src");
-            var ef = Txt(br, a.Effect, "ctl-eff"); ef.AddToClassList(a.Days > 0 ? "ok" : "muted");
-            br.Add(SourceTags.ModelTag(SrcActs));
-            if (a.Show != null)
-            {
-                Spacer(br);
-                var g = new Button(a.Show) { focusable = false }; g.AddToClassList("an-go");
-                g.Add(new Label(a.ShowText) { pickingMode = PickingMode.Ignore }); g.Add(TwinUI.Icon("arrow_right", 12)); br.Add(g);
-            }
-        }
         /// <summary>The rows of readiness by work type for the building chosen (the whole complex by default).</summary>
         void FillWt()
         {
@@ -205,18 +271,16 @@ namespace AlatauCity.DigitalTwin.Landmarks
             for (int t = 0; t < WtName.Length; t++)
             {
                 if (!TypeReady(t, ctlPart, Report, out float p, out float f, out int lag)) continue;
-                var r = Box(ctlWtRows, "ctl-wt", false);
-                var top = Box(r, "mon-row", false);
-                var nm = Box(top, "ctl-wt-tx", false); Txt(nm, WtName[t], "ctl-wt-n"); Txt(nm, WtHint[t], "mon-src");
-                Spacer(top);
-                var vals = Box(top, "ctl-wt-v", false);
-                Txt(vals, $"{Pct(f)} · план {Pct(p)}", "ctl-wt-p");
                 float dpp = (f - p) * 100f;
                 string cls = p <= 0f && f <= 0f ? "muted" : f >= 0.999f ? "ok" : dpp < -5f || lag > 21 ? "bad" : dpp < -1f || lag > 3 ? "warn" : "ok";
-                var dv = Txt(vals, p <= 0f && f <= 0f ? "не начато" : f >= 0.999f ? "выполнено" : lag > 3 ? $"{Signed(dpp)} · отстаёт {lag} дн." : $"{Signed(dpp)} · в графике", "ctl-wt-d"); dv.AddToClassList(cls);
+                // one line: the name, the percent done, the lag; the bar under it (blue: done, white tick: the plan)
+                var r = Box(ctlWtRows, "w17-wt", false);
+                var top = Box(r, "w17-wt-top", false);
+                Txt(top, WtName[t], "w17-wt-n");
+                Txt(top, Pct(f), "w17-wt-p");
+                var dv = Txt(top, p <= 0f && f <= 0f ? "не начато" : f >= 0.999f ? "готово" : lag > 3 ? $"−{lag}\u00A0дн." : "в графике", "w17-wt-d"); dv.AddToClassList(cls);
                 var bar = Box(r, "mon-bar ctl-wt-bar", false);
                 var fl = Box(bar, "mon-fill", false); fl.style.width = Length.Percent(f * 100f);
-                if (cls == "bad") fl.style.backgroundColor = new Color(1f, 0.35f, 0.31f); else if (cls == "warn") fl.style.backgroundColor = new Color(0.96f, 0.65f, 0.14f);
                 var mk = Box(bar, "mon-mark", false); mk.style.left = Length.Percent(p * 100f);
             }
         }
@@ -266,7 +330,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             var lc = Box(row, "ctl-weeks");
             var c = Box(lc, "mon-card an-card");
             var h = Box(c, "an-sec", false); h.Add(TwinUI.Icon("calendar", 16)); Txt(h, "Неделя отчёта", "mon-title");
-            Txt(c, "отчёт собирается из данных двойника за выбранные семь дней", "mon-src");
+
             for (int k = 0; k < 8; k++)
             {
                 float e = Report - k * 7f / 365f, s = e - 6f / 365f; int kk = k;
@@ -278,7 +342,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             c.Add(SourceTags.Line(SrcMon, SrcCrew, SrcDefects));
             var pc = Box(lc, "mon-card an-card");
             var ph = Box(pc, "an-sec", false); ph.Add(TwinUI.Icon("file_text", 16)); Txt(ph, "Отчёт в PDF", "mon-title");
-            Txt(pc, "отчёт выбранной недели — листами А4, как на экране", "mon-src");
+            Txt(pc, "листами А4, как на экране", "w17-sub");
             pdfRep = new Button(() => ExportPdf()) { focusable = false }; pdfRep.AddToClassList("btn"); pdfRep.AddToClassList("w7-pdf"); pdfRep.AddToClassList("w7-pdf-big");
             pdfRep.Add(TwinUI.Icon("file_text", 14)); pdfRep.Add(new Label("Скачать PDF") { pickingMode = PickingMode.Ignore }); pc.Add(pdfRep);
             ctlPdfNote = Txt(pc, "", "mon-src w7-pdf-note"); ctlPdfNote.style.display = DisplayStyle.None;
@@ -430,7 +494,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             // people and machines by day over the last six weeks
             var c = Box(lc, "mon-card an-card");
             var h = Box(c, "an-sec", false); h.Add(TwinUI.Icon("hard_hat", 16)); Txt(h, "Люди и техника на площадке", "mon-title");
-            Txt(c, $"по дням за шесть недель до {Day(Report)} · подсчёт видеоаналитикой на КПП и в зонах работ", "mon-src");
+            Txt(c, "за 6 недель · видеоаналитика", "w17-sub");
             DayCrew(Report, out int p0, out int pl0, out int m0, out _);
             int maxP = 0, sumP = 0, nd = 0, ws = 0; for (int k = 0; k < 42; k++) { DayCrew(Report - k / 365f, out int pp, out _, out _, out bool w); maxP = Mathf.Max(maxP, pp); if (pp > 0) { sumP += pp; nd++; } if (w) ws++; }
             var kr = Box(c, "ctl-minik", false);
@@ -448,7 +512,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             // the trades on the site: what the schedule asks for against what the cameras count
             var tc = Box(lc, "mon-card an-card");
             var th = Box(tc, "an-sec", false); th.Add(TwinUI.Icon("hard_hat", 16)); Txt(th, "Бригады по профессиям", "mon-title");
-            Txt(tc, $"весь комплекс на {Day(Report)} · по графику и по камерам", "mon-src");
+            Txt(tc, "есть на площадке из нужных по графику", "w17-sub");
             var agg = new Dictionary<string, Trade>(); var ord = new List<string>();
             for (int i = 0; i < L.Parts.Count; i++) foreach (var t in trades[i]) { if (!agg.ContainsKey(t.Name)) { agg[t.Name] = new Trade { Name = t.Name }; ord.Add(t.Name); } agg[t.Name].Need += t.Need; agg[t.Name].Have += t.Have; }
             ord.Sort((a, b) => (agg[b].Need - agg[b].Have).CompareTo(agg[a].Need - agg[a].Have));
@@ -467,7 +531,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             var rc = Box(row, "an-colR ctl-col");
             var wc = Box(rc, "mon-card an-card");
             var wh = Box(wc, "an-sec", false); wh.Add(TwinUI.Icon("cloud_sun", 16)); Txt(wh, "Погода Алматы и простои", "mon-title");
-            Txt(wc, "климатическая норма по месяцам и дни, потерянные по правилам площадки", "mon-src");
+            Txt(wc, "дней простоя в месяц по климатической норме", "w17-sub");
             int mNow = MonthOf(Report); float next3 = 0f; for (int k = 1; k <= 3; k++) next3 += DownDays((mNow + k) % 12);
             float all = DownBetween(L.Begin, L.Finish);
             var kw = Box(wc, "ctl-minik", false);
@@ -486,8 +550,8 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 Txt(col, MonthShort[m], "ctl-td-d");
                 Txt(col, $"{Mathf.RoundToInt(TempHi[m])}° / {Mathf.RoundToInt(TempLo[m])}°", "ctl-wt-t");
             }
-            Txt(wc, "Под столбиком: средняя температура днём / ночью. Над ним: дней простоя в месяц.", "mon-src ctl-note");
-            var rules = Box(wc, "ctl-rules", false);
+            var rules = Widgets.Details(wc, "Правила площадки");
+            Txt(rules, "Под столбиком: средняя температура днём / ночью. Над ним: дней простоя в месяц.", "w17-note");
             foreach (var (ic, t) in new[] { ("layers", "Бетон без прогрева — только при ночной температуре не ниже −5 °C; с прогревом темп падает на четверть"),
                                             ("hard_hat", "Башенные краны — стоп при порывах ветра выше 15 м/с: теряется около половины смены"),
                                             ("cloud_sun", "Фасад и кровля — не монтируются в дождь и снег: около трети рабочего дня") })
@@ -526,24 +590,25 @@ namespace AlatauCity.DigitalTwin.Landmarks
         // ================================================================== Дефекты (over the live model)
         VisualElement defL, defR, defList, defCard; readonly List<Button> defFilt = new List<Button>();
         readonly List<VisualElement> defPins = new List<VisualElement>(); readonly List<VisualElement> defRows = new List<VisualElement>();
-        int defSel = -1, defMode = 1;
+        int defSel = -1, defMode = 1; bool defAll; Button defMore;
         void BuildDefects()
         {
             defFilt.Clear(); defPins.Clear(); defRows.Clear();
             defL = Col("mon-left"); defR = Col("mon-right");
             var c = Card(defL); c.AddToClassList("def-card");
-            Head(c, "triangle_alert", $"Дефекты · {L.Short}");
-            var sub = new Label($"журнал технадзора на {Day(Report)} · нажмите — камера подлетит к месту") { pickingMode = PickingMode.Ignore }; sub.AddToClassList("mon-src"); c.Add(sub);
+            Head(c, "triangle_alert", "Дефекты");                                // the object is chosen in the header
+            Txt(c, "Нажмите на дефект — камера покажет его на модели", "w17-sub");
             int open = 0, crit = 0, closed30 = 0;
             foreach (var f in defects) { if (DefOpen(f, Report)) { open++; if (f.Sev >= 2) crit++; } else if (f.Closed > Report - 30f / 365f) closed30++; }
             var kr = Box(c, "ctl-minik", false);
-            MiniK(kr, "Открыто", open.ToString(), "в работе у подрядчиков", open > 0 ? "warn" : "");
-            MiniK(kr, "Критических", crit.ToString(), "мешают следующему этапу", crit > 0 ? "bad" : "");
+            MiniK(kr, "Открыто", open.ToString(), "в работе", open > 0 ? "warn" : "");
+            MiniK(kr, "Критических", crit.ToString(), "стоп этапу", crit > 0 ? "bad" : "");
             MiniK(kr, "Устранено", closed30.ToString(), "за 30 дней", "");
             var seg = Box(c, "mon-seg ctl-parts");
             foreach (var (t, m) in new[] { ("Открытые", 1), ("Все", 0), ("Устранённые", 2) })
-            { int mm = m; var b = Widgets.Btn(t, () => { defMode = mm; FillDefList(); }, "small"); seg.Add(b); defFilt.Add(b); b.userData = m; }
+            { int mm = m; var b = Widgets.Btn(t, () => { defMode = mm; defAll = false; FillDefList(); }, "small"); seg.Add(b); defFilt.Add(b); b.userData = m; }
             defList = Scroll(c, "def-list");
+            defMore = Widgets.Btn("", () => { defAll = !defAll; FillDefList(); }, "small", "ghost"); defMore.AddToClassList("w21-more"); c.Add(defMore);
             c.Add(SourceTags.Line(SrcDefects));
             defCard = Card(defR); defCard.AddToClassList("def-card");
             // the pins over the picture
@@ -563,28 +628,43 @@ namespace AlatauCity.DigitalTwin.Landmarks
             if (defList == null) return;
             foreach (var b in defFilt) b.EnableInClassList("active", (int)b.userData == defMode);
             defList.Clear(); defRows.Clear();
-            for (int i = 0; i < defects.Count; i++)
+            // the five most important first (critical, then significant, then minor); the rest behind «Ещё N», the selected one always shown
+            int total = 0; foreach (var f0 in defects) if (DefShown(f0)) total++;
+            int shown = 0;
+            var order = new List<int>(); for (int i = 0; i < defects.Count; i++) order.Add(i);
+            order.Sort((x, y) => { int sx = DefOpen(defects[x], Report) ? defects[x].Sev : -1, sy = DefOpen(defects[y], Report) ? defects[y].Sev : -1; return sx != sy ? sy.CompareTo(sx) : x.CompareTo(y); });
+            foreach (int i in order)
             {
                 var f = defects[i]; if (!DefShown(f)) continue; int k = i; bool op = DefOpen(f, Report);
+                if (!defAll && shown >= 5 && k != defSel) continue;
+                shown++;
                 var r = new Button(() => SelectDef(k, true)) { focusable = false }; r.AddToClassList("def-row"); if (k == defSel) r.AddToClassList("sel"); defList.Add(r); r.userData = k; defRows.Add(r);
                 r.Add(Widgets.Dot(op ? SevColor(f.Sev) : new Color(0.55f, 0.55f, 0.55f), true));
                 var tx = Box(r, "def-tx", false);
-                Txt(tx, $"{f.No} · {f.Type} · {f.Where}", "def-t");
-                Txt(tx, f.Text, "def-x");
-                Txt(tx, op ? $"обнаружен {Day(f.Found)} · {f.Who}" : $"устранён {Day(f.Closed)} · {f.Who}", "mon-src");
+                Txt(tx, $"{f.No} · {f.Type}", "def-t");
+                Txt(tx, f.Where, "w17-def-w");
                 Txt(r, op ? DefSev[f.Sev] : "устранён", "an-tag " + (op ? (f.Sev >= 2 ? "s-bad" : f.Sev == 1 ? "s-warn" : "s-info") : "s-ok"));
             }
+            if (defMore != null) { Vis(defMore, total > 5); defMore.text = defAll ? "Свернуть" : string.Format("Ещё {0} ›", total - shown); if (!defAll && total - shown <= 0) Vis(defMore, false); }
             if (defRows.Count == 0) Txt(defList, defMode == 1 ? "Открытых дефектов нет." : "Устранённых дефектов пока нет.", "mon-para");
         }
+        /// <summary>A defect shown from outside (ShotRig, the AI assistant): the defects page, defect k selected, the camera at it.</summary>
+        public void ShowDefect(int k) { if (open) { if (tab != TDef) { defSel = Mathf.Clamp(k, 0, defects.Count - 1); SetTab(TDef); } else SelectDef(k, true); } }
+        /// <summary>Selects defect k: the row and its pin are marked, the card shows it; fly — the 3D view flies to it (a short pull-back
+        /// and a flight in, so the click is seen even when the camera already looks at it) and a pulsing ring marks the place.</summary>
         void SelectDef(int k, bool fly)
         {
             if (k < 0 || k >= defects.Count) return;
             defSel = k; var f = defects[k];
-            foreach (var r in defRows) r.EnableInClassList("sel", (int)r.userData == k);
+            bool listed = false; foreach (var r in defRows) listed |= (int)r.userData == k;
+            if (!listed) FillDefList();                               // a defect behind «Ещё N» (picked on the model): its row joins the list
+            foreach (var r in defRows) { bool on = (int)r.userData == k; r.EnableInClassList("sel", on); if (on && defList is ScrollView sv) sv.ScrollTo(r); }
             FillDefCard();
             if (!fly) return;
+            if (tab != TDef && overlay != null) { SetTab(TDef); return; }          // SetTab(TDef) flies to defSel itself
+            defPulse = 0f; defFly = 0.5f;
             if (obj != f.Part) SelectObj(f.Part, false);
-            view = View.Complex; zoomK = 1f; focusLocal = f.Pos; focusDist = f.Part == TI ? 95f : 120f; pitch = 20f;
+            view = View.Complex; zoomK = 2.4f; focusLocal = f.Pos; focusDist = f.Part == TI ? 95f : 120f; pitch = 20f;
             if (model != null && f.Part == TI)
             {
                 // the tower's defects are on its east face: look at it from outside, a little from the south
@@ -604,18 +684,18 @@ namespace AlatauCity.DigitalTwin.Landmarks
             var h = Box(defCard, "an-sec", false); var ic = TwinUI.Icon("map_pin", 16); ic.style.unityBackgroundImageTintColor = op ? SevColor(f.Sev) : Green; h.Add(ic);
             Txt(h, $"{f.No} · {f.Type}", "mon-title"); Spacer(h);
             Txt(h, op ? DefSev[f.Sev] : "устранён", "an-tag " + (op ? (f.Sev >= 2 ? "s-bad" : f.Sev == 1 ? "s-warn" : "s-info") : "s-ok"));
-            defCard.Add(Para(f.Text));
+            var ans = Txt(defCard, f.Text, "w17-def-text");
             void F(string k, string v, string cls = "") { defCard.Add(FactRow(k, out var l)); l.text = v; if (cls.Length > 0) l.AddToClassList(cls); }
             F("Где", f.Where);
-            F("Обнаружен", Day(f.Found));
             int left = Mathf.RoundToInt((f.Due - Report) * 365f);
-            F("Срок устранения", op ? (left >= 0 ? $"{Day(f.Due)} · осталось {left} дн." : $"{Day(f.Due)} · просрочен на {-left} дн.") : Day(f.Due), op && left < 0 ? "bad" : "");
-            F("Статус", op ? "открыт" : $"устранён {Day(f.Closed)}", op ? "warn" : "");
+            F("Срок", op ? (left >= 0 ? $"{Day(f.Due)} · {left}\u00A0дн." : $"просрочен на {-left}\u00A0дн.") : $"устранён {Day(f.Closed)}", op && left < 0 ? "bad" : "");
+            F("Статус", op ? (left >= 0 ? "в работе у подрядчика" : "просрочен") : "устранён", op ? (left >= 0 ? "" : "bad") : "ok");
             F("Ответственный", f.Who);
-            defCard.Add(Para(f.Sev >= 2 ? "Критический: влияет на прочность или безопасность — следующий этап на этом участке не начинают, пока дефект не устранён."
+            var why = Widgets.Details(defCard, "Почему важно");
+            Txt(why, string.Format("Обнаружен {0}.", Day(f.Found)), "w17-note");
+            Txt(why, f.Sev >= 2 ? "Критический: влияет на прочность или безопасность — следующий этап на этом участке не начинают, пока дефект не устранён."
                 : f.Sev == 1 ? "Значительный: влияет на качество и долговечность — устранить до сдачи этапа, иначе дороже переделывать."
-                : "Малозначительный: на прочность и сроки не влияет — устраняется в общем порядке."));
-            var b = Widgets.Btn("Показать на модели", () => SelectDef(defSel, true), "small"); b.style.marginTop = 10; b.style.alignSelf = Align.FlexStart; defCard.Add(b);
+                : "Малозначительный: на прочность и сроки не влияет — устраняется в общем порядке.", "w17-note");
             var sl = SourceTags.Line(SrcDefects); sl.style.marginTop = 8; defCard.Add(sl);
         }
         /// <summary>The pins of the defects over the picture (the page of defects only), placed where the camera sees them.</summary>
@@ -631,6 +711,12 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 {
                     var vp = mon.WorldToViewportPoint(model.TransformPoint(f.Pos));
                     on = vp.z > 0f && vp.x > 0.02f && vp.x < 0.98f && vp.y > 0.05f && vp.y < 0.95f;
+                    // not under the columns of the page: a pin there would sit on top of the list or the card
+                    if (on && body != null && body.layout.width > 10f)
+                    {
+                        var bp = new Vector2(vp.x * body.layout.width, (1f - vp.y) * body.layout.height);
+                        if ((defL != null && defL.layout.Contains(bp)) || (defR != null && defR.layout.Contains(bp))) on = false;
+                    }
                     defScr[i] = new Vector2(vp.x, 1f - vp.y); defY0[i] = defScr[i].y;
                 }
                 defOn[i] = on;
@@ -663,5 +749,29 @@ namespace AlatauCity.DigitalTwin.Landmarks
             }
         }
         Vector2[] defScr; bool[] defOn; float[] defY0;
+        // ---- the pulsing mark of the selected defect: a dot at the place and a ring that grows and fades (faster for 2 s after a click)
+        VisualElement defMark, defRing; float defPulse = -1f, defFly;
+        void BuildDefMark()
+        {
+            defMark = new VisualElement { pickingMode = PickingMode.Ignore }; defMark.AddToClassList("w17-dmark"); defMark.style.display = DisplayStyle.None;
+            defRing = new VisualElement { pickingMode = PickingMode.Ignore }; defRing.AddToClassList("w17-dmark-ring"); defMark.Add(defRing);
+            var core = new VisualElement { pickingMode = PickingMode.Ignore }; core.AddToClassList("w17-dmark-core"); defMark.Add(core);
+            body.Add(defMark);
+        }
+        void DefMark(float dt)
+        {
+            if (defMark == null) return;
+            bool on = tab == TDef && defSel >= 0 && defOn != null && defSel < defOn.Length && defOn[defSel];
+            if (defFly > 0f) { defFly -= dt; if (defFly <= 0f && tab == TDef) zoomK = 1f; }      // the pull-back is over: fly in
+            if (!on) { if (defMark.style.display != DisplayStyle.None) defMark.style.display = DisplayStyle.None; return; }
+            defMark.style.display = DisplayStyle.Flex;
+            defMark.style.left = Length.Percent(defScr[defSel].x * 100f); defMark.style.top = Length.Percent(defY0[defSel] * 100f);
+            var df = defects[defSel]; var c = DefOpen(df, Report) ? SevColor(df.Sev) : new Color(0.20f, 0.78f, 0.35f);
+            if (defPulse >= 0f) { defPulse += dt; if (defPulse > 2f) defPulse = -1f; }
+            float speed = defPulse >= 0f ? 1.8f : 0.9f, t = (phase * speed) % 1f, sc = 1f + (defPulse >= 0f ? 3.2f : 2.2f) * t;
+            defRing.style.scale = new Scale(new Vector3(sc, sc, 1f)); defRing.style.opacity = 1f - t;
+            defRing.style.borderTopColor = defRing.style.borderRightColor = defRing.style.borderBottomColor = defRing.style.borderLeftColor = c;
+            defMark[1].style.backgroundColor = c;
+        }
     }
 }

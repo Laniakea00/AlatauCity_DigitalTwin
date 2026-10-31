@@ -132,8 +132,10 @@ namespace AlatauCity.DigitalTwin.UI
         VisualElement Column(VisualElement parent, string cls)
         {
             var c = new VisualElement(); c.AddToClassList("col"); c.AddToClassList(cls); parent.Add(c); Chrome(c);
-            var sv = new ScrollView(ScrollViewMode.Vertical) { horizontalScrollerVisibility = ScrollerVisibility.Hidden, verticalScrollerVisibility = ScrollerVisibility.Auto };
-            sv.style.flexGrow = 1; c.Add(sv); return sv.contentContainer;
+            // the side columns scroll with the wheel (and drag on touch screens) without a visible scrollbar: the panels stay calm
+            var sv = new ScrollView(ScrollViewMode.Vertical) { horizontalScrollerVisibility = ScrollerVisibility.Hidden, verticalScrollerVisibility = ScrollerVisibility.Hidden };
+            sv.mouseWheelScrollSize = 60f; sv.touchScrollBehavior = ScrollView.TouchScrollBehavior.Clamped;
+            sv.AddToClassList("col-scroll"); sv.style.flexGrow = 1; c.Add(sv); return sv.contentContainer;
         }
 
         VisualElement BuildHeader()
@@ -242,7 +244,7 @@ namespace AlatauCity.DigitalTwin.UI
             var b = new VisualElement(); b.AddToClassList("dock"); Chrome(b);
             playBtn = new Button(TogglePlay); playBtn.AddToClassList("dock-play"); playIcon = Icon("play", 16); playBtn.Add(playIcon); b.Add(playBtn);
             var lo = new Label(TwinState.MinYear.ToString()); lo.AddToClassList("bound"); lo.style.marginLeft = 12; b.Add(lo);
-            slider = new TwinSlider(new[] { 2030, 2040 }) { Value = TwinState.Year, OnChange = y => { TwinState.Playing = false; TwinState.Year = y; } }; b.Add(slider);
+            slider = new TwinSlider(new[] { 2030, 2040 }) { Value = TwinState.Year, OnChange = y => { TwinState.Playing = false; TwinState.Year = y; }, OnRelease = FlushYear }; b.Add(slider);
             var hi = new Label(TwinState.MaxYear.ToString()); hi.AddToClassList("bound"); b.Add(hi);
             var sep = new VisualElement { pickingMode = PickingMode.Ignore }; sep.AddToClassList("dsep"); b.Add(sep);
             b.Add(DockTool("house", Loc.T("t_home"), () => { var c = Cam; if (c != null) c.FlyTo(c.overview); TwinState.SetDistrict(-1); }));
@@ -315,16 +317,30 @@ namespace AlatauCity.DigitalTwin.UI
             foreach (var (c, t) in items) legend3d.Add(Widgets.LegendItem(c, t));
         }
 
+        // A new year: the year labels and the slider handle follow every change at once. The panels of the open module and the passport
+        // card are rebuilt from the data of the year, the heaviest part of a change: at once for a change from the timeline, the keyboard,
+        // the presentation or the assistant (as before), but while the hand drags the year slider only when it rests (YearQuiet without
+        // a change) or lets go, so the drag runs at the speed of the 3D city. What the panels show for a year is the same either way.
+        const float YearQuiet = 0.2f;
+        float yearChangedAt; bool yearDirty;
         void OnYear(int y)
         {
             yearLabel.text = y.ToString(); if (dockYear != null) dockYear.text = y.ToString(); if (slider != null && slider.Value != y) slider.Value = y;
-            active?.Refresh(); RefreshCard();
+            if (slider != null && slider.Dragging) { yearDirty = true; yearChangedAt = Time.realtimeSinceStartup; return; }
+            ShowYear();
+        }
+        void ShowYear() { yearDirty = false; active?.Refresh(); RefreshCard(); }
+        /// <summary>The slider was let go: the panels show its year now.</summary>
+        void FlushYear() { if (yearDirty) ShowYear(); }
+        void UpdateYear()
+        {
+            if (yearDirty && (slider == null || !slider.Dragging || Time.realtimeSinceStartup - yearChangedAt >= YearQuiet)) ShowYear();
         }
         void OnScenario(Scenario s)
         {
             scenarioName.text = TwinScenario.Name(s);
             int i = 0; foreach (var c in popup.Children()) { c.EnableInClassList("active", i == (int)s); i++; }
-            active?.Refresh(); RefreshCard();
+            ShowYear();
         }
         void OnDistrict(int d)
         {
@@ -400,7 +416,8 @@ namespace AlatauCity.DigitalTwin.UI
             var t = new Label(Loc.T("passport")); t.AddToClassList("t"); head.Add(t);
             head.Add(Widgets.Btn("×", () => { var s = Camera.main != null ? Camera.main.GetComponent<TwinSelector>() : null; if (s != null) s.Select(-1); else TwinState.SetSelected(null); }, "small", "ghost"));
             card.Add(head);
-            var id = new Label(b.Id); id.AddToClassList("id"); card.Add(id);
+            var idRow = new VisualElement(); idRow.AddToClassList("pp-idrow"); card.Add(idRow);
+            var id = new Label(b.Id); id.AddToClassList("id"); idRow.Add(id);
             int eff = CityStats.Ready ? CityStats.EffectiveYearOf(b.Bid) : b.Year, y = TwinState.Year;
             string status, cls;
             if (b.Source == "existing_osm") { status = Loc.T("st_existing"); cls = "muted"; }
@@ -412,12 +429,10 @@ namespace AlatauCity.DigitalTwin.UI
             var dRow = Widgets.Fact(Loc.T("p_district"), string.IsNullOrEmpty(b.District) ? "—" : b.District + " District"); if (di >= 0) dRow.Q<Label>(className: "v").style.color = CityStats.DistrictColors[di];
             card.Add(dRow);
             card.Add(Widgets.Fact(Loc.T("p_type"), Loc.Kind(b.Kind)));
-            card.Add(Widgets.Fact(Loc.T("p_source"), b.Source == "existing_osm" ? Loc.T("src_osm") : b.Source == "master_plan" ? Loc.T("src_plan") : Loc.T("src_gen")));
             card.Add(Widgets.Fact(Loc.T("p_year"), b.Source == "existing_osm" ? "—" : eff > TwinState.MaxYear ? "> 2050" : eff.ToString() + (eff != b.Year ? "  (" + Loc.T("sc_base").Split(' ')[0].ToLower() + ": " + b.Year + ")" : "")));
-            card.Add(Widgets.Fact(Loc.T("p_height"), Loc.N0(b.HeightM) + " m · " + Loc.T("p_floors").ToLower() + ": " + b.Floors));
-            card.Add(Widgets.Fact(Loc.T("p_gfa"), b.GfaM2 > 0 ? Loc.N0(b.GfaM2) + " m²" : "—"));
-            if (!string.IsNullOrEmpty(b.Parcel)) card.Add(Widgets.Fact(Loc.T("p_parcel"), b.Parcel));
-            card.Add(Widgets.Fact("UTM 43N", "E " + b.Easting.ToString("F0") + "  N " + b.Northing.ToString("F0")));
+            card.Add(Widgets.Fact(Loc.T("p_height"), Loc.N0(b.HeightM) + "\u00A0м · " + b.Floors + "\u00A0эт."));
+            card.Add(Widgets.Fact(Loc.T("p_gfa"), b.GfaM2 > 0 ? Loc.N0(b.GfaM2) + "\u00A0м²" : "—"));
+            string contractor = null;
             if (b.Source != "existing_osm" && eff <= TwinState.MaxYear && Data.TwinData.Ready)
             {
                 ConstructionLayer.Timing(b, out int start, out int plan, out int fact);
@@ -427,11 +442,18 @@ namespace AlatauCity.DigitalTwin.UI
                     status = stc == ConstructionLayer.Behind ? Loc.T("st_behind") : Loc.T("st_building"); cls = stc == ConstructionLayer.Behind ? "bad" : "warn";
                 }
                 int ci = ConstructionLayer.ContractorOf(b.Bid);
-                if (ci < Data.TwinData.ContractorNames.Length) card.Add(Widgets.Fact(Loc.T("p_contractor"), Data.TwinData.ContractorNames[ci]));
+                if (ci < Data.TwinData.ContractorNames.Length) contractor = Data.TwinData.ContractorNames[ci];
                 card.Add(Widgets.Fact(Loc.T("p_works"), start + " – " + plan + (fact > plan ? "  ·  " + Loc.T("p_forecast") + " " + fact : "")));
-                if (ConstructionLayer.Active && y >= start && y < fact) card.Add(Widgets.Fact(Loc.T("p_progress"), Mathf.RoundToInt(ConstructionLayer.ProgressOf(b.Bid) * 100) + " %"));
+                if (ConstructionLayer.Active && y >= start && y < fact) card.Add(Widgets.Fact(Loc.T("p_progress"), Mathf.RoundToInt(ConstructionLayer.ProgressOf(b.Bid) * 100) + "\u00A0%"));
             }
-            var st = Widgets.Fact(Loc.T("p_status"), ""); st.RemoveAt(1); st.Add(Widgets.Status(status, cls)); st.style.borderBottomWidth = 0; card.Add(st);
+            // the status is the answer: next to the id, at the top
+            var stl = Widgets.Status(status, cls); stl.AddToClassList("pp-status"); idRow.Add(stl);
+            // where the data comes from, the plot and the coordinates: one click away
+            var more = Widgets.Details(card, "Подробнее");
+            more.Add(Widgets.Fact(Loc.T("p_source"), b.Source == "existing_osm" ? Loc.T("src_osm") : b.Source == "master_plan" ? Loc.T("src_plan") : Loc.T("src_gen")));
+            if (contractor != null) more.Add(Widgets.Fact(Loc.T("p_contractor"), contractor));
+            if (!string.IsNullOrEmpty(b.Parcel)) more.Add(Widgets.Fact(Loc.T("p_parcel"), b.Parcel));
+            var utm = Widgets.Fact("UTM 43N", "E " + b.Easting.ToString("F0") + "  N " + b.Northing.ToString("F0")); utm.style.borderBottomWidth = 0; more.Add(utm);
         }
 
         void BimCard(BimQuarter q)
@@ -477,6 +499,29 @@ namespace AlatauCity.DigitalTwin.UI
             if (srcOverlay != null) { ForgetChrome(srcOverlay); srcOverlay.RemoveFromHierarchy(); srcOverlay = null; }
         }
 
+        /// <summary>The kind of a source, the group it is listed under: 0 laws and the master plan, 1 press and official news,
+        /// 2 open data and reference sites, 3 QTwin models.</summary>
+        static int SrcKind(Src s)
+        {
+            if (s.Model) return 3;
+            var u = s.Url ?? "";
+            if (s.Id == Sources.GenPlan || s.Id == Sources.SpecialRegime || u.Contains("adilet.zan.kz") || u.Contains("prg.kz")) return 0;
+            if (s.Id == Sources.Osm || s.Id == Sources.OlxPrices || s.Id == Sources.NbrkRate || u.Contains("weatherspark")) return 2;
+            return 1;
+        }
+        static readonly string[] SrcGroups = { "Законы и генплан", "Пресса и официальные сообщения", "Открытые данные", "Модели QTwin и допущения" };
+        /// <summary>A sortable date: "17.05.2024", "22–26.10.2026" (the last day counts), "07.2026"; none — 0 (listed last).</summary>
+        static int SrcDate(Src s)
+        {
+            var d = s.Date; if (string.IsNullOrEmpty(d)) return 0;
+            var parts = d.Split('.'); int n = parts.Length;
+            if (n < 2) return 0;
+            int.TryParse(parts[n - 1].Trim(), out int yy);
+            int.TryParse(new string(parts[n - 2].Trim().ToCharArray()), out int mm);
+            int dd = 0; if (n >= 3) { var t = parts[n - 3]; int k = t.Length; while (k > 0 && char.IsDigit(t[k - 1])) k--; int.TryParse(t.Substring(k), out dd); }
+            return yy * 10000 + mm * 100 + dd;
+        }
+
         void BuildSources()
         {
             if (root == null) return;
@@ -485,42 +530,52 @@ namespace AlatauCity.DigitalTwin.UI
             ov.RegisterCallback<PointerDownEvent>(e => { if (e.target == ov) CloseSources(); });      // a press on the dimmed backdrop closes
             var p = new VisualElement(); p.AddToClassList("srcp-panel"); ov.Add(p);
 
+            int nOpen = 0, nModel = 0; foreach (var s in Sources.All) if (s.Model) nModel++; else nOpen++;
             var head = new VisualElement(); head.AddToClassList("srcp-head");
             head.Add(Icon("file_text", 18));
-            var t = new Label("Источники и допущения") { pickingMode = PickingMode.Ignore }; t.AddToClassList("t"); head.Add(t);
+            var hc = new VisualElement { pickingMode = PickingMode.Ignore }; hc.AddToClassList("srcp-hcol");
+            var t = new Label("Источники и допущения") { pickingMode = PickingMode.Ignore }; t.AddToClassList("t"); hc.Add(t);
+            var cnt = new Label(string.Format("Открытые источники: {0} · модели QTwin: {1}", nOpen, nModel)) { pickingMode = PickingMode.Ignore }; cnt.AddToClassList("srcp-count"); hc.Add(cnt);
+            head.Add(hc);
             head.Add(Widgets.Btn("×", CloseSources, "small", "ghost")); p.Add(head);
+            // one line to read; the why stays one click away
+            var legend = new VisualElement { pickingMode = PickingMode.Ignore }; legend.AddToClassList("srcp-legend");
+            var l1 = new Label("открытый источник · ссылка") { pickingMode = PickingMode.Ignore }; l1.AddToClassList("src-tag"); legend.Add(l1);
+            var l2 = new Label("модель QTwin") { pickingMode = PickingMode.Ignore }; l2.AddToClassList("src-tag"); l2.AddToClassList("model"); legend.Add(l2);
+            p.Add(legend);
+            var why = Widgets.Details(p, "Почему в демо модели");
             var intro = new Label("Контрактов с заказчиком пока нет, поэтому реальных данных города в демо нет. Цифры из открытых источников (пресса 2026 года, сайты государства, OpenStreetMap) отмечены синей меткой с датой. Остальное — модели QTwin, жёлтая метка «модель QTwin»: правдоподобные данные, согласованные с генпланом. После подключения к системам заказчика реальные данные заменят модели.")
                 { pickingMode = PickingMode.Ignore };
-            intro.AddToClassList("srcp-intro"); p.Add(intro);
+            intro.AddToClassList("srcp-intro"); why.Add(intro);
 
             srcScroll = new ScrollView(ScrollViewMode.Vertical) { horizontalScrollerVisibility = ScrollerVisibility.Hidden, verticalScrollerVisibility = ScrollerVisibility.Auto };
             srcScroll.AddToClassList("srcp-scroll"); p.Add(srcScroll);
             VisualElement focusEl = null;
-            int nOpen = 0, nModel = 0; foreach (var s in Sources.All) if (s.Model) nModel++; else nOpen++;
-            for (int g = 0; g < 2; g++)
+            var list = new List<Src>(Sources.All);
+            for (int g = 0; g < SrcGroups.Length; g++)
             {
-                bool model = g == 1; if ((model ? nModel : nOpen) == 0) continue;
+                var items = list.FindAll(x => SrcKind(x) == g); if (items.Count == 0) continue;
+                if (g < 3) items.Sort((x, y) => SrcDate(y).CompareTo(SrcDate(x)));          // the newest first
                 var gh = new VisualElement { pickingMode = PickingMode.Ignore }; gh.AddToClassList("srcp-group");
-                var gl = new Label(model ? "Модели QTwin и допущения" : "Открытые источники") { pickingMode = PickingMode.Ignore }; gl.AddToClassList("gt"); gh.Add(gl);
-                var gn = new Label((model ? nModel : nOpen).ToString()) { pickingMode = PickingMode.Ignore }; gn.AddToClassList("gn"); gh.Add(gn);
+                var gl = new Label(SrcGroups[g]) { pickingMode = PickingMode.Ignore }; gl.AddToClassList("gt"); gh.Add(gl);
+                var gn = new Label(items.Count.ToString()) { pickingMode = PickingMode.Ignore }; gn.AddToClassList("gn"); gh.Add(gn);
                 srcScroll.Add(gh);
-                foreach (var s in Sources.All)
+                foreach (var s in items)
                 {
-                    if (s.Model != model) continue;
-                    var it = new VisualElement(); it.AddToClassList("srcp-item"); it.EnableInClassList("model", s.Model);
+                    bool link = !s.Model && !string.IsNullOrEmpty(s.Url);
+                    var it = new VisualElement(); it.AddToClassList("srcp-item"); it.EnableInClassList("model", s.Model); it.EnableInClassList("link", link);
                     var row = new VisualElement { pickingMode = PickingMode.Ignore }; row.AddToClassList("srcp-row");
-                    var col = new VisualElement { pickingMode = PickingMode.Ignore }; col.AddToClassList("srcp-col");
-                    var ti = new Label(s.Title ?? s.Id) { pickingMode = PickingMode.Ignore }; ti.AddToClassList("srcp-title"); col.Add(ti);
-                    string meta = s.Model ? "модель QTwin" : (s.Publisher ?? "") + (string.IsNullOrEmpty(s.Date) ? "" : " · " + s.Date);
-                    if (!string.IsNullOrEmpty(meta)) { var me = new Label(meta) { pickingMode = PickingMode.Ignore }; me.AddToClassList("srcp-meta"); col.Add(me); }
-                    row.Add(col);
-                    if (!s.Model && !string.IsNullOrEmpty(s.Url))
-                    {
-                        var url = s.Url; var ob = Widgets.Btn("Открыть", () => Application.OpenURL(url), "small"); ob.AddToClassList("srcp-open"); ob.tooltip = url; row.Add(ob);
-                    }
+                    var ti = new Label(s.Title ?? s.Id) { pickingMode = PickingMode.Ignore }; ti.AddToClassList("srcp-title"); row.Add(ti);
+                    if (link) { var go = new Label("Открыть ›") { pickingMode = PickingMode.Ignore }; go.AddToClassList("srcp-go"); row.Add(go); }
                     it.Add(row);
+                    string meta = s.Model ? "модель QTwin" : (s.Publisher ?? "") + (string.IsNullOrEmpty(s.Date) ? "" : " · " + s.Date);
+                    if (!string.IsNullOrEmpty(meta)) { var me = new Label(meta) { pickingMode = PickingMode.Ignore }; me.AddToClassList("srcp-meta"); it.Add(me); }
                     if (!string.IsNullOrEmpty(s.Note)) { var no = new Label(s.Note) { pickingMode = PickingMode.Ignore }; no.AddToClassList("srcp-note"); it.Add(no); }
-                    if (!s.Model && !string.IsNullOrEmpty(s.Url)) { var ul = new Label(ShortUrl(s.Url)) { pickingMode = PickingMode.Ignore }; ul.AddToClassList("srcp-url"); ul.AddToClassList("no-tr"); it.Add(ul); }
+                    if (link)
+                    {
+                        var ul = new Label(ShortUrl(s.Url)) { pickingMode = PickingMode.Ignore }; ul.AddToClassList("srcp-url"); ul.AddToClassList("no-tr"); it.Add(ul);
+                        var url = s.Url; it.tooltip = url; it.AddManipulator(new Clickable(() => Application.OpenURL(url)));
+                    }
                     if (srcFocus != null && s.Id == srcFocus) { it.AddToClassList("hl"); focusEl = it; }
                     srcScroll.Add(it);
                 }
@@ -573,6 +628,8 @@ namespace AlatauCity.DigitalTwin.UI
         void Update()
         {
             PruneHover();
+            TwinState.Scrubbing = slider != null && slider.Dragging;
+            UpdateYear();
             // the sources panel is modal: it keeps the keyboard (MapCamera.Typing) until the frame after it closes, so its Esc
             // does not also leave the tower camera, the monitoring window or a landmark passport
             if (srcOpen) { MapCamera.Typing = true; if (Input.GetKeyDown(KeyCode.Escape)) CloseSources(); }

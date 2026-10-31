@@ -5,66 +5,270 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{{ PRODUCT_NAME }}}</title>
   <meta name="description" content="Цифровой двойник города Alatau: 3D-модель, дороги, ЛРТ, ключевые объекты и этапы развития до 2050 года.">
+  <meta property="og:title" content="Alatau City · цифровой двойник">
+  <meta property="og:description" content="3D-модель нового города у Капшагая: стройка, сети, транспорт и развитие до 2050 года.">
+  <meta property="og:image" content="cover.jpg">
+  <link rel="preload" as="image" href="cover.jpg">
   <style>
-    :root { --bg:#0a0e13; --panel:rgba(14,20,27,.92); --line:#1f2a35; --text:#e8eef3; --muted:#8a99a8; --accent:#2ec4b6; --err:#ff6b6b; }
+    :root { --bg:#0a0e13; --panel:rgba(12,18,24,.78); --line:rgba(255,255,255,.10); --text:#e8eef3; --muted:#9aa8b5; --dim:#6c7a87;
+            --accent:#2ec4b6; --warn:#f3d98b; --err:#ff8a80; }
     * { box-sizing:border-box; }
     html, body { margin:0; height:100%; background:var(--bg); color:var(--text); overflow:hidden;
       font:15px/1.45 -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
     #unity-canvas { position:fixed; inset:0; width:100vw; height:100vh; display:block; background:var(--bg); outline:none; }
-    #overlay { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; padding:16px;
-      background:radial-gradient(ellipse at 50% 40%, #12202a 0%, var(--bg) 70%); transition:opacity .6s; }
+
+    /* ---- cover: a muted film loop behind the loading card ---- */
+    #overlay { position:fixed; inset:0; overflow:hidden; background:#05080b url(cover.jpg) center/cover no-repeat; transition:opacity .8s; }
     #overlay.hide { opacity:0; pointer-events:none; }
-    .card { width:min(440px, 100%); background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:28px 28px 22px; }
-    .brand { font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--accent); margin:0 0 6px; }
-    h1 { font-size:26px; font-weight:600; margin:0 0 4px; }
-    .sub { color:var(--muted); margin:0 0 22px; }
-    .bar { height:6px; background:#18232d; border-radius:3px; overflow:hidden; }
-    .bar > i { display:block; height:100%; width:0; background:var(--accent); transition:width .3s; }
-    .row { display:flex; justify-content:space-between; margin-top:10px; font-size:13px; color:var(--muted); font-variant-numeric:tabular-nums; }
-    .note { margin:18px 0 0; font-size:13px; color:var(--muted); }
-    .warn { margin:14px 0 0; padding:10px 12px; border-radius:8px; font-size:13px; background:#2a2412; color:#f3d98b; display:none; }
-    .error { margin:14px 0 0; padding:10px 12px; border-radius:8px; font-size:13px; background:#2b1416; color:var(--err); display:none; white-space:pre-wrap; }
+    #cover-video { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; opacity:0; transition:opacity 1.2s; }
+    #cover-video.on { opacity:1; }
+    #overlay::after { content:""; position:absolute; inset:0; pointer-events:none;
+      background:linear-gradient(90deg, rgba(5,8,11,.92) 0%, rgba(5,8,11,.70) 34%, rgba(5,8,11,.15) 70%, rgba(5,8,11,.05) 100%),
+                 linear-gradient(0deg, rgba(5,8,11,.85) 0%, rgba(5,8,11,0) 40%); }
+    .cover-in { position:relative; z-index:1; height:100%; display:flex; flex-direction:column; justify-content:space-between;
+      padding:clamp(20px, 5vh, 56px) clamp(16px, 5vw, 72px); max-width:720px; }
+    .brand { display:flex; align-items:center; gap:10px; font-size:12px; letter-spacing:.18em; text-transform:uppercase; color:var(--accent); margin:0; }
+    .brand i { width:8px; height:8px; border-radius:50%; background:var(--accent); box-shadow:0 0 12px var(--accent); }
+    h1 { font-size:clamp(34px, 6vw, 64px); line-height:1.02; font-weight:600; letter-spacing:-.01em; margin:0 0 14px; }
+    .lead { font-size:clamp(15px, 1.6vw, 18px); color:#cfd8e0; margin:0 0 28px; max-width:580px; }
+    .card { width:min(460px, 100%); background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:18px 20px 16px;
+      backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); }
+    .row { display:flex; justify-content:space-between; align-items:baseline; gap:12px; min-height:32px; font-variant-numeric:tabular-nums; }
+    #stage { font-size:13px; color:var(--muted); }
+    #pct { font-size:22px; font-weight:600; }
+    .bar { height:6px; margin:10px 0 8px; background:rgba(255,255,255,.08); border-radius:3px; overflow:hidden; }
+    .bar > i { display:block; height:100%; width:0; min-width:6px; border-radius:3px; background:var(--accent); transition:width .35s; box-shadow:0 0 10px rgba(46,196,182,.6); }
+    /* second phase (start-up): no honest percentage, so a moving light over the full bar */
+    .bar.busy > i { width:100% !important; background:linear-gradient(90deg, #1f8f85 0%, #1f8f85 35%, #7ff0e6 50%, #1f8f85 65%, #1f8f85 100%);
+      background-size:200% 100%; animation:busy 1.6s linear infinite; }
+    @keyframes busy { from { background-position:100% 0; } to { background-position:-100% 0; } }
+    #detail { font-size:12px; color:var(--dim); min-height:17px; }
+    .note { margin:14px 0 0; font-size:12.5px; color:var(--muted); max-width:460px; }
+    .warn { margin:12px 0 0; padding:10px 12px; border-radius:8px; font-size:13px; background:rgba(60,48,14,.85); color:var(--warn); display:none; }
+
+    /* ---- a fatal problem: what happened and what to do ---- */
+    .problem { display:none; }
+    .problem h2 { font-size:17px; margin:0 0 6px; color:var(--err); font-weight:600; }
+    .problem p { margin:0 0 8px; font-size:13.5px; color:#d5dde4; }
+    .problem ol { margin:0 0 12px; padding-left:20px; font-size:13.5px; color:#d5dde4; }
+    .problem li { margin:2px 0; }
+    .problem .tech { font:11.5px/1.4 ui-monospace, Consolas, monospace; color:var(--dim); white-space:pre-wrap; max-height:72px; overflow:auto; margin:0 0 12px; }
+    .btns { display:flex; gap:8px; flex-wrap:wrap; }
+    .btn { padding:8px 14px; border-radius:8px; border:1px solid var(--line); background:rgba(255,255,255,.06); color:var(--text);
+      font:inherit; font-size:13px; cursor:pointer; }
+    .btn.primary { background:var(--accent); border-color:var(--accent); color:#04201d; font-weight:600; }
+    .btn:hover { filter:brightness(1.12); }
+    .card.failed .progress { display:none; }
+    .card.failed .problem { display:block; }
+
     #fs { position:fixed; right:16px; bottom:16px; display:none; padding:8px 12px; border-radius:8px; border:1px solid var(--line);
       background:var(--panel); color:var(--text); font:inherit; font-size:13px; cursor:pointer; opacity:.75; }
     #fs:hover { opacity:1; }
     #toast { position:fixed; left:50%; top:16px; transform:translateX(-50%); max-width:calc(100% - 32px); display:none;
       padding:8px 14px; border-radius:8px; background:var(--panel); border:1px solid var(--line); font-size:13px; }
+    /* the twin is running but something broke: small and quiet, bottom left */
+    #oops { position:fixed; left:16px; bottom:16px; display:none; align-items:center; gap:8px; padding:8px 14px; border-radius:18px;
+      border:1px solid rgba(255,138,128,.55); background:rgba(36,14,16,.92); color:#ffe1dc; font:inherit; font-size:13px; cursor:pointer;
+      box-shadow:0 6px 20px rgba(0,0,0,.4); }
+    #oops b { font-weight:600; text-decoration:underline; text-underline-offset:3px; }
+    #oops::before { content:""; width:7px; height:7px; border-radius:50%; background:var(--err); }
+    #oops:hover { background:rgba(50,18,20,.95); }
+    @media (max-width:640px) { #overlay::after { background:linear-gradient(0deg, rgba(5,8,11,.96) 0%, rgba(5,8,11,.85) 45%, rgba(5,8,11,.4) 72%, rgba(5,8,11,.35) 88%, rgba(5,8,11,.8) 100%); } }
+    @media (prefers-reduced-motion:reduce) { #cover-video { display:none; } }
   </style>
 </head>
 <body>
   <canvas id="unity-canvas" tabindex="-1"></canvas>
   <div id="overlay">
-    <div class="card">
-      <p class="brand">qTwin</p>
-      <h1>Alatau City</h1>
-      <p class="sub">Цифровой двойник города</p>
-      <div class="bar"><i id="bar"></i></div>
-      <div class="row"><span id="stage">Загрузка</span><span id="pct">0%</span></div>
-      <p class="note">Первое открытие — около 140&nbsp;МБ, дальше двойник берётся из кэша браузера. Лучше всего работает в Chrome или Edge на компьютере.</p>
-      <div class="warn" id="warn"></div>
-      <div class="error" id="error"></div>
+    <video id="cover-video" muted loop playsinline preload="none" aria-hidden="true"></video>
+    <div class="cover-in">
+      <p class="brand"><i></i>qTwin · цифровой двойник</p>
+      <div>
+        <h1>Alatau City</h1>
+        <p class="lead">Новый город у Капшагайского водохранилища в 3D: стройка, дороги, сети, транспорт и&nbsp;развитие до&nbsp;2050&nbsp;года.</p>
+        <div class="card" id="card">
+          <div class="progress">
+            <div class="row"><span id="stage">Подготовка</span><span id="pct">0&nbsp;%</span></div>
+            <div class="bar"><i id="bar"></i></div>
+            <div id="detail"></div>
+          </div>
+          <div class="problem" id="problem">
+            <h2 id="p-title"></h2>
+            <p id="p-text"></p>
+            <ol id="p-steps"></ol>
+            <div class="tech" id="p-tech"></div>
+            <div class="btns">
+              <button class="btn primary" type="button" onclick="location.reload()">Обновить страницу</button>
+              <button class="btn" type="button" id="p-copy">Скопировать отчёт</button>
+            </div>
+          </div>
+          <div class="warn" id="warn"></div>
+        </div>
+        <p class="note" id="note">Первое открытие — около 140&nbsp;МБ, дальше двойник берётся из кэша браузера. Лучше всего работает в Chrome или Edge на компьютере.</p>
+      </div>
     </div>
   </div>
   <button id="fs" type="button" title="Во весь экран">⛶ Во весь экран</button>
+  <button id="oops" type="button" title="Обновить страницу">Что-то пошло не так · <b>перезагрузить</b></button>
   <div id="toast"></div>
   <script>
-    var canvas = document.getElementById("unity-canvas");
+    // ================= diagnostics: errors, GPU info, context loss =================
+    // Everything is kept in window.__alatau (the build check reads it). Sending to the server is OFF until the
+    // Cloudflare worker has its /log route: then set REPORT_ERRORS = true.
+    var REPORT_ERRORS = false;
+    var LOG_URL = "https://alatau-ai.alatau-city.workers.dev/log";
+    var T0 = Date.now();
+    var A = window.__alatau = { state: "loading", progress: 0, errors: [], fatal: null, gpu: null, started: 0, build: "" };
+    var CHECK = /[?&]check=1/.test(location.search);
     var $ = function (id) { return document.getElementById(id); };
+    var sent = 0, seen = {};
 
-    function show(el, text) { el.textContent = text; el.style.display = "block"; }
-    function fail(text) { $("stage").textContent = "Ошибка"; show($("error"), text); }
+    function send(kind, msg) {
+      if (!REPORT_ERRORS || sent >= 15) return;
+      var key = kind + msg.slice(0, 120); if (seen[key]) return; seen[key] = 1; sent++;
+      var body = JSON.stringify({ v: 1, kind: kind, msg: msg.slice(0, 4000), state: A.state, t: Date.now() - T0, url: location.href.split("#")[0],
+        build: A.build, gpu: A.gpu, ua: navigator.userAgent, lang: navigator.language, mem: navigator.deviceMemory || 0,
+        cores: navigator.hardwareConcurrency || 0, screen: screen.width + "x" + screen.height + "@" + (window.devicePixelRatio || 1) });
+      try { fetch(LOG_URL, { method: "POST", body: body, keepalive: body.length < 60000, headers: { "content-type": "text/plain" } }).catch(function () {}); } catch (e) {}
+    }
+    function record(kind, msg) {
+      msg = String(msg || "").slice(0, 4000);
+      if (A.errors.length < 200) A.errors.push({ t: Date.now() - T0, kind: kind, msg: msg });
+      send(kind, msg);
+    }
 
-    // non-fatal Unity messages: a short toast; errors: kept on the loading card
+    // GPU and WebGL 2 probe (the probe context is released at once)
+    var gl2 = false;
+    (function () {
+      try {
+        var c = document.createElement("canvas"), g = c.getContext("webgl2");
+        if (!g) { A.gpu = { webgl2: false }; return; }
+        gl2 = true;
+        var ext = g.getExtension("WEBGL_debug_renderer_info");
+        A.gpu = { webgl2: true, renderer: String(ext ? g.getParameter(ext.UNMASKED_RENDERER_WEBGL) : g.getParameter(g.RENDERER)),
+                  vendor: String(ext ? g.getParameter(ext.UNMASKED_VENDOR_WEBGL) : g.getParameter(g.VENDOR)),
+                  version: String(g.getParameter(g.VERSION)), maxTexture: g.getParameter(g.MAX_TEXTURE_SIZE) };
+        var lose = g.getExtension("WEBGL_lose_context"); if (lose) lose.loseContext();
+      } catch (e) { A.gpu = { webgl2: false, error: String(e) }; }
+    })();
+
+    // shader compile / program link failures (28.10: the site died on a GLSL link error in Chrome/ANGLE)
+    if (window.WebGL2RenderingContext) (function (P) {
+      var gp = P.getProgramParameter, gs = P.getShaderParameter;
+      P.getProgramParameter = function (p, name) {
+        var r = gp.call(this, p, name);
+        if (name === 0x8B82 && r === false && !this.isContextLost()) record("gl-link", "Шейдер не собрался (link): " + (this.getProgramInfoLog(p) || "").slice(0, 1500));
+        return r;
+      };
+      P.getShaderParameter = function (s, name) {
+        var r = gs.call(this, s, name);
+        if (name === 0x8B81 && r === false && !this.isContextLost()) record("gl-compile", "Шейдер не скомпилировался: " + (this.getShaderInfoLog(s) || "").slice(0, 1500));
+        return r;
+      };
+    })(WebGL2RenderingContext.prototype);
+
+    // JS errors, failed promises, Unity's console.error (Debug.LogError and exceptions land there)
+    window.addEventListener("error", function (e) {
+      if (e.target && e.target !== window) { if (e.target.id !== "cover-video") record("resource", "Не загрузился файл: " + (e.target.src || e.target.href || e.target.tagName)); return; }
+      record("js", (e.message || "error") + (e.filename ? " @ " + e.filename.split("/").pop() + ":" + e.lineno : "") + (e.error && e.error.stack ? "\n" + e.error.stack : ""));
+    }, true);
+    window.addEventListener("unhandledrejection", function (e) { var r = e.reason; record("promise", r && r.stack ? r.stack : String(r)); });
+    (function () {
+      var ce = console.error;
+      console.error = function () {
+        try { record("console", Array.prototype.map.call(arguments, function (a) { return a && a.stack ? a.stack : typeof a === "object" ? JSON.stringify(a) : String(a); }).join(" ")); } catch (e) {}
+        return ce.apply(console, arguments);
+      };
+    })();
+
+    // ================= the cover =================
+    var canvas = document.getElementById("unity-canvas");
+    // A.progress: 0..0.9 download, 0.9..1 start-up (read by the build check); the bar shows the download share only
+    function setProgress(p, stage, detail) {
+      A.progress = p;
+      if (stage != null) $("stage").textContent = stage;
+      if (detail != null) $("detail").textContent = detail;
+    }
+
+    var PROBLEMS = {
+      nogl: { title: "Браузер не может показать 3D", text: "Двойнику нужен WebGL 2 — 3D-графика через видеокарту. Здесь она недоступна.",
+              steps: ["Откройте ссылку в свежем Chrome или Edge на компьютере.", "Включите аппаратное ускорение: Настройки → Система → «Использовать аппаратное ускорение», затем перезапустите браузер.", "На рабочем ноутбуке видеокарту иногда отключает администратор — попробуйте другой компьютер."] },
+      lost: { title: "Видеокарта сбросила 3D-сцену", text: "Браузер отключил 3D-графику: так бывает, когда видеокарте не хватает памяти или драйвер перезапустился.",
+              steps: ["Закройте лишние вкладки и обновите страницу — скачанное не пропадёт.", "Откройте в Chrome или Edge с включённым аппаратным ускорением.", "На ноутбуке с двумя видеокартами подключите зарядку: тогда работает мощная."] },
+      crash: { title: "Двойник остановился", text: "Во время работы произошла ошибка, и 3D-сцена дальше не отвечает.",
+              steps: ["Обновите страницу — скачанное не пропадёт.", "Если повторяется: закройте лишние вкладки, откройте в Chrome или Edge на компьютере."] },
+      net: { title: "Не удалось скачать двойник", text: "Связь с сервером прервалась.",
+             steps: ["Проверьте интернет и обновите страницу.", "В корпоративной сети или через VPN загрузка иногда обрывается — попробуйте другую сеть."] },
+      start: { title: "Двойник не запустился", text: "Файлы скачались, но запустить город не получилось.",
+               steps: ["Закройте лишние вкладки и обновите страницу.", "Откройте в Chrome или Edge на компьютере с включённым аппаратным ускорением."] },
+    };
+
+    // fatal: show the problem on the cover (the cover comes back if the twin was already running)
+    function fail(kind, tech) {
+      if (A.state === "failed") return;
+      var was = A.state; A.state = "failed"; A.fatal = kind + (tech ? ": " + String(tech).slice(0, 500) : "");
+      record("fatal-" + kind, tech || kind);
+      var p = PROBLEMS[kind] || PROBLEMS.crash, o = $("overlay");
+      $("p-title").textContent = p.title; $("p-text").textContent = p.text;
+      $("p-steps").innerHTML = ""; p.steps.forEach(function (s) { var li = document.createElement("li"); li.textContent = s; $("p-steps").appendChild(li); });
+      $("p-tech").textContent = tech ? String(tech).slice(0, 600) : ""; $("p-tech").style.display = tech ? "block" : "none";
+      $("card").classList.add("failed"); $("note").style.display = "none";
+      $("oops").style.display = "none"; $("fs").style.display = "none";
+      if (was === "running") { o.style.display = "block"; requestAnimationFrame(function () { o.classList.remove("hide"); }); }
+      checkPost();
+    }
+    // non-fatal while running: the small pill; the app goes on
+    function oops() { if (A.state === "running") $("oops").style.display = "flex"; }
+    $("oops").onclick = function () { location.reload(); };
+    $("p-copy").onclick = function () {
+      var txt = JSON.stringify({ fatal: A.fatal, gpu: A.gpu, ua: navigator.userAgent, url: location.href, errors: A.errors.slice(-20) }, null, 1);
+      try { navigator.clipboard.writeText(txt).then(function () { $("p-copy").textContent = "Скопировано"; }); } catch (e) {}
+    };
+
+    // GPU context loss on the twin's canvas
+    canvas.addEventListener("webglcontextlost", function (e) { fail("lost", "webglcontextlost" + (A.gpu ? " · " + A.gpu.renderer : "")); }, false);
+
+    // Unity messages: errors are fatal, the rest is a short toast
     function unityShowBanner(msg, type) {
-      if (type == "error") { fail(msg); return; }
+      if (type == "error") { record("unity", msg); fail(A.state === "running" ? "crash" : "start", msg); return; }
+      if (type == "warning") record("unity-warning", msg);
       var t = $("toast"); t.textContent = msg; t.style.display = "block";
       clearTimeout(t._h); t._h = setTimeout(function () { t.style.display = "none"; }, 5000);
     }
+    // after start: a Wasm abort is fatal (the card); an uncaught JS error or a broken shader shows the small pill
+    var recordBase = record;
+    record = function (kind, msg) {
+      recordBase(kind, msg);
+      if (A.state !== "running") return;
+      if (/RuntimeError|unreachable|memory access out of bounds|Out of memory|abort\(/i.test(msg) && kind !== "unity-warning") fail("crash", msg);
+      else if (/^(js|promise|gl-link|gl-compile)$/.test(kind)) oops();   // Debug.LogError lines are only recorded
+    };
+
+    // the build check (?check=1) also gets a POST with the state, for the Windows script without Playwright
+    var posted = false;
+    function checkPost() {
+      if (!CHECK || posted) return; posted = true;
+      var shot = "";
+      try { shot = canvas.toDataURL("image/jpeg", 0.7); } catch (e) {}
+      var body = JSON.stringify({ state: A.state, fatal: A.fatal, gpu: A.gpu, errors: A.errors, startSeconds: A.started ? Math.round((A.started - T0) / 1000) : null, ua: navigator.userAgent, shot: shot });
+      try { fetch("__check", { method: "POST", body: body }).catch(function () {}); } catch (e) {}
+    }
+
+    // the preview film: only once the page is idle, so it never delays the first build bytes
+    function startVideo() {
+      var v = $("cover-video");
+      if (CHECK || (navigator.connection && navigator.connection.saveData) || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+      v.src = v.canPlayType('video/webm; codecs="vp9"') ? "cover.webm" : "cover.mp4"; v.preload = "auto";
+      v.addEventListener("playing", function () { v.classList.add("on"); }, { once: true });
+      v.addEventListener("error", function () { v.remove(); }, { once: true });
+      var p = v.play(); if (p && p.catch) p.catch(function () {});
+    }
+    function stopVideo() { var v = $("cover-video"); if (v) { try { v.pause(); v.removeAttribute("src"); v.load(); } catch (e) {} } }
 
     var mobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-    if (mobile) show($("warn"), "На телефоне двойник может не загрузиться: ему нужно 1–4 ГБ памяти. Откройте ссылку на компьютере.");
-    var gl2 = (function () { try { return !!document.createElement("canvas").getContext("webgl2"); } catch (e) { return false; } })();
+    if (mobile) { var w = $("warn"); w.textContent = "На телефоне двойник может не загрузиться: ему нужно 1–4 ГБ памяти. Откройте ссылку на компьютере."; w.style.display = "block"; }
 
+    // ================= loading =================
     var buildUrl = "Build";
     var config = {
       arguments: [],
@@ -142,6 +346,7 @@
       for (var k in files) {
         var abs = new URL(files[k], location.href).href, h = null;
         try { h = await head(abs); } catch (e) {}
+        if (h && k == "dataUrl") A.build = h.tag;
         var hit = cache ? await cache.match(abs) : null;
         if (hit && (!h || hit.headers.get("x-build-tag") == h.tag)) { out[k] = URL.createObjectURL(await hit.blob()); continue; }  // cached (or offline)
         if (!h || !h.ranges || !h.size) return null;
@@ -158,6 +363,7 @@
       }
       var ws = []; for (var w = 0; w < PARALLEL; w++) ws.push(worker());
       await Promise.all(ws);
+      startingUi();
       for (var k2 in info) {
         var f = info[k2], blob = new Blob(f.parts, { type: "application/octet-stream" });
         if (cache) try { await cache.put(f.url, new Response(blob, { headers: { "x-build-tag": f.tag, "content-length": String(f.size) } })); } catch (e) {}
@@ -166,45 +372,77 @@
       return out;
     }
 
+    // speed and time left, smoothed over the last ~8 s
+    var rate = { t: 0, b: 0, v: 0 };
+    function eta(d, t) {
+      var now = Date.now();
+      if (!rate.t) { rate.t = now; rate.b = d; return ""; }
+      var dt = (now - rate.t) / 1000;
+      if (dt >= 1) { var v = (d - rate.b) / dt; rate.v = rate.v ? rate.v * 0.85 + v * 0.15 : v; rate.t = now; rate.b = d; }
+      if (rate.v < 1024) return "";
+      var left = (t - d) / rate.v, sp = rate.v / 1048576;
+      var spd = sp >= 1 ? sp.toFixed(1).replace(".", ",") + "&nbsp;МБ/с" : Math.round(rate.v / 1024) + "&nbsp;КБ/с";
+      var tl = left < 60 ? "меньше минуты" : left < 3600 ? "≈&nbsp;" + Math.ceil(left / 60) + "&nbsp;мин" : "≈&nbsp;" + (left / 3600).toFixed(1).replace(".", ",") + "&nbsp;ч";
+      return spd + " · осталось " + tl;
+    }
+
+    // second phase: the files are here, Unity unpacks and builds the scene (no honest percentage for that)
+    function startingUi() {
+      A.progress = Math.max(A.progress, 0.9);
+      if ($("bar").parentNode.classList.contains("busy")) return;
+      $("stage").textContent = "Запуск города…"; $("pct").innerHTML = "";
+      $("detail").textContent = "Распаковка и подготовка 3D-сцены, до минуты";
+      $("bar").parentNode.classList.add("busy");
+    }
+
     async function start() {
       var files = { dataUrl: config.dataUrl, frameworkUrl: config.frameworkUrl };
       if (config.codeUrl) files.codeUrl = config.codeUrl;
+      setProgress(0, "Загрузка", "Подключение…");
       try {
+        var noted = false;
         var urls = await download(files, function (d, t) {
+          if (!noted) { noted = true; $("note").innerHTML = t > 0 ? "Первое открытие — " + MB(t) + "&nbsp;МБ, дальше двойник берётся из кэша браузера. Лучше всего работает в Chrome или Edge на компьютере." : "Двойник уже в кэше браузера, запуск займёт несколько секунд."; }
           var p = t ? d / t : 1;
-          $("bar").style.width = Math.round(p * 90) + "%";
-          $("pct").textContent = Math.round(p * 90) + "%";
-          $("stage").textContent = "Загрузка · " + MB(d) + " из " + MB(t) + " МБ";
+          setProgress(p * 0.9, "Загрузка · " + MB(d) + " из " + MB(t) + " МБ");
+          var dp = Math.floor(p * 100); $("bar").style.width = dp + "%"; $("pct").innerHTML = dp + "&nbsp;%";
+          var e = eta(d, t); if (e) $("detail").innerHTML = e;
         });
         if (urls) { for (var k in urls) config[k] = urls[k]; }
-      } catch (e) { fail("Не удалось скачать файлы двойника: " + e.message + "\n\nПроверьте интернет и обновите страницу — уже скачанное не пропадёт."); return; }
+      } catch (e) { fail("net", e.message); return; }
       // our files are blob URLs already kept in Cache Storage: Unity must not cache them again
       config.cacheControl = function (url) { return /^blob:/.test(url) ? "no-store" : "must-revalidate"; };
 
       var script = document.createElement("script");
       script.src = buildUrl + "/{{{ LOADER_FILENAME }}}";
-      script.onerror = function () { fail("Не удалось загрузить файлы двойника. Проверьте интернет и обновите страницу."); };
+      script.onerror = function () { fail("net", "loader.js"); };
       script.onload = function () {
-        $("stage").textContent = "Запуск города…";
+        startingUi();
         createUnityInstance(canvas, config, function (p) {
-          var pct = Math.max(90, Math.round(90 + p * 10));
-          $("bar").style.width = pct + "%"; $("pct").textContent = pct + "%";
+          A.progress = Math.max(A.progress, 0.9 + p * 0.1);           // the build check reads it; on screen the bar just moves
         }).then(function (unity) {
-          $("bar").style.width = "100%"; $("pct").textContent = "100%";
+          if (A.state === "failed") return;
+          A.progress = 1; $("stage").textContent = "Готово"; $("detail").textContent = "";
+          A.state = "running"; A.started = Date.now();
+          stopVideo();
           $("overlay").classList.add("hide");
-          setTimeout(function () { $("overlay").style.display = "none"; }, 700);
+          setTimeout(function () { if (A.state === "running") $("overlay").style.display = "none"; }, 900);
           var fs = $("fs"); fs.style.display = "block";
           fs.onclick = function () { unity.SetFullscreen(1); };
           canvas.focus();
-        }).catch(function (message) {
-          fail(String(message) + "\n\nЧасто помогает: закрыть лишние вкладки, открыть в Chrome или Edge на компьютере и обновить страницу.");
-        });
+          if (A.errors.some(function (e) { return /gl-link|gl-compile/.test(e.kind); })) oops();
+          if (CHECK) setTimeout(function () { requestAnimationFrame(function () { requestAnimationFrame(checkPost); }); }, 20000);
+        }).catch(function (message) { fail("start", String(message)); });
       };
       document.body.appendChild(script);
     }
 
-    if (!gl2) fail("Браузер не поддерживает WebGL 2. Откройте ссылку в свежем Chrome или Edge на компьютере и проверьте, что аппаратное ускорение включено.");
-    else start();
+    if (!gl2) fail("nogl", A.gpu && A.gpu.error ? A.gpu.error : "");
+    else {
+      start();
+      if (document.readyState === "complete") setTimeout(startVideo, 300);
+      else window.addEventListener("load", function () { setTimeout(startVideo, 300); });
+    }
   </script>
 </body>
 </html>

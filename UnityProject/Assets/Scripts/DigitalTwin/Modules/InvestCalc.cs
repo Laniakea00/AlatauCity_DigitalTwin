@@ -8,7 +8,7 @@ namespace AlatauCity.DigitalTwin.Modules
 {
     /// <summary>«Калькулятор инвестора»: the investor picks a sector, a district, the size of the investment, the jobs and the horizon and sees
     /// the benefits of the special legal regime (sourced), the taxes saved over the horizon (QTwin model, capped at 10 % by law),
-    /// the year the networks reach a plot in the district (twin balance) and the nearest LRT station.</summary>
+    /// whether the networks of the district have room for it in the timeline year (twin balance, NetForPlot) and the nearest LRT station.</summary>
     public class InvestCalc
     {
         static readonly float[] Amounts = { 10, 50, 100, 250, 500, 1000 };
@@ -21,7 +21,7 @@ namespace AlatauCity.DigitalTwin.Modules
         public VisualElement Build(VisualElement parent)
         {
             var b = Widgets.Block(parent, "Калькулятор инвестора", "особый правовой режим");
-            var intro = new Label("Выберите проект — двойник покажет льготы, сколько налогов останется в проекте и когда к участку подойдут сети.");
+            var intro = new Label("Льготы, налоги и сети для вашего проекта");
             intro.AddToClassList("note"); intro.style.marginBottom = 6; b.Add(intro);
 
             Group(b, "Отрасль", InvestRegistry.Sectors, () => sector, v => sector = v);
@@ -72,19 +72,21 @@ namespace AlatauCity.DigitalTwin.Modules
             var head = new Label(string.Format("Налоговая экономия за {0} лет", hor)); head.AddToClassList("w2-h"); result.Add(head);
             var big = new Label(string.Format("≈\u00A0${0}\u00A0млн", Loc.N1(s.Result))); big.AddToClassList("w2-big"); result.Add(big);
             var bigSub = new Label(s.Total > s.Cap
-                ? string.Format("Без потолка вышло бы ${0} млн, но закон ограничивает льготы ≈ 10 % вложений — ${1} млн.", Loc.N1(s.Total), Loc.N1(s.Cap))
-                : string.Format("Это {0} % вложений — в пределах потолка закона (≈ 10 %).", Loc.N1(100f * s.Result / Mathf.Max(inv, 0.01f))));
+                ? "Упирается в потолок закона: 10 % вложений"
+                : string.Format("{0} % вложений, в пределах потолка 10 %", Mathf.RoundToInt(100f * s.Result / Mathf.Max(inv, 0.01f))));
             bigSub.AddToClassList("note"); result.Add(bigSub);
-            result.Add(Widgets.Fact("Налог на прибыль (КПН)", string.Format("${0}\u00A0млн", Loc.N1(s.Cit))));
-            result.Add(Widgets.Fact("НДС на ввоз оборудования", string.Format("${0}\u00A0млн", Loc.N1(s.Vat))));
-            result.Add(Widgets.Fact("Налог на имущество", string.Format("${0}\u00A0млн", Loc.N1(s.Property))));
-            var pf = Widgets.Fact("Соцналог с зарплат", string.Format("${0}\u00A0млн", Loc.N1(s.Payroll))); pf.style.borderBottomWidth = 0; result.Add(pf);
+            var tx = Widgets.Details(result, "Из чего складывается");
+            if (s.Total > s.Cap) { var cap = new Label(string.Format("Без потолка вышло бы ${0} млн, но закон ограничивает льготы ≈ 10 % вложений — ${1} млн.", Loc.N1(s.Total), Loc.N1(s.Cap))); cap.AddToClassList("note"); tx.Add(cap); }
+            tx.Add(Widgets.Fact("Налог на прибыль (КПН)", string.Format("${0}\u00A0млн", Loc.N1(s.Cit))));
+            tx.Add(Widgets.Fact("НДС на ввоз оборудования", string.Format("${0}\u00A0млн", Loc.N1(s.Vat))));
+            tx.Add(Widgets.Fact("Налог на имущество", string.Format("${0}\u00A0млн", Loc.N1(s.Property))));
+            var pf = Widgets.Fact("Соцналог с зарплат", string.Format("${0}\u00A0млн", Loc.N1(s.Payroll))); pf.style.borderBottomWidth = 0; tx.Add(pf);
             var how = new Label("Модель: сколько налогов общего режима проект не заплатит при полной льготе. Реальный размер льготы решает администрация города.");
-            how.AddToClassList("note"); result.Add(how);
+            how.AddToClassList("note"); tx.Add(how);
             var ml = SourceTags.Line(InvestRegistry.CalcModel, InvestRegistry.MorganLewis); result.Add(ml);
 
             // ---- networks
-            var nh = new Label(string.Format("Когда сети придут на участок · {0}", CityStats.DistrictIds[district])); nh.AddToClassList("w2-h"); nh.style.marginTop = 10; result.Add(nh);
+            var nh = new Label(string.Format("Сети на участке · {0} · {1}", CityStats.DistrictIds[district], TwinState.Year)); nh.AddToClassList("w2-h"); nh.style.marginTop = 10; result.Add(nh);
             result.Add(NetRows(district));
 
             // ---- LRT
@@ -92,48 +94,8 @@ namespace AlatauCity.DigitalTwin.Modules
             result.Add(LrtLine(district));
         }
 
-        /// <summary>Five rows: power, heat, gas, water, sewer — from which year the district's capacity covers the demand (twin balance, active scenario).</summary>
-        /// <summary>"Today" in the twin: late October 2026. The answer never follows the timeline slider.</summary>
-        public const int TodayYear = 2026;
-
-        public static VisualElement NetRows(int d)
-        {
-            var box = new VisualElement();
-            int s = (int)TwinState.Scenario, y0 = TodayYear;
-            if (!TwinData.Ready) { var l = new Label("Данные сетей загружаются…"); l.AddToClassList("note"); box.Add(l); return box; }
-            bool anyPooled = false;
-            foreach (var (key, name, _) in InvestRegistry.NetRes)
-            {
-                var a = InvestRegistry.When(s, key, d, y0); anyPooled |= a.Pooled;
-                var r = new VisualElement(); r.AddToClassList("w2-net");
-                var n = new Label(name); n.AddToClassList("w2-net-n"); r.Add(n);
-                string v, cls;
-                if (a.Year < 0) { v = "не хватает до 2050"; cls = "bad"; }
-                else if (a.Year <= y0) { v = string.Format("есть сейчас · запас {0}\u00A0%", Mathf.RoundToInt(a.Spare * 100f)); cls = "ok"; }
-                else { v = string.Format("через {0} · ≈\u00A0{1}", Years(a.Year - y0), a.Year); cls = "warn"; }
-                var vl = new Label(v); vl.AddToClassList("w2-net-v"); vl.AddToClassList(cls); r.Add(vl);
-                box.Add(r);
-                if (a.Year > y0 || a.Year < 0)
-                {
-                    var sub = new Label(a.DefYears == 1
-                        ? string.Format("Дефицит мощности в {0} году: новых потребителей подключить нельзя.", a.DefRanges)
-                        : string.Format("Дефицит мощности в годы: {0}. В эти годы новых потребителей подключить нельзя.", a.DefRanges));
-                    sub.AddToClassList("note"); sub.AddToClassList("w2-net-sub"); box.Add(sub);
-                }
-            }
-            var hint = new Label("Когда мощности района хватит на всех потребителей и дальше до 2050 года дефицита не будет. Отсчёт от сегодня (октябрь 2026), год на шкале не влияет."
-                + (anyPooled ? " Вода и газ — общие системы города." : ""));
-            hint.AddToClassList("note"); hint.style.marginTop = 4; box.Add(hint);
-            box.Add(SourceTags.Line(InvestRegistry.NetModel, Sources.ModelCity));
-            return box;
-        }
-
-        static string Years(int n)
-        {
-            int m10 = n % 10, m100 = n % 100;
-            string w = m10 == 1 && m100 != 11 ? "год" : m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14) ? "года" : "лет";
-            return string.Format("{0}\u00A0{1}", n, w);
-        }
+        /// <summary>Networks for a plot in district d: the timeline year and the scenario (shared with Инфраструктура).</summary>
+        public static VisualElement NetRows(int d) => NetForPlot.Build(d);
 
         static VisualElement LrtLine(int d)
         {
@@ -151,7 +113,7 @@ namespace AlatauCity.DigitalTwin.Modules
             int oy = TwinData.LrtPhaseYear[s] != null && ph < TwinData.LrtPhaseYear[s].Length ? TwinData.LrtPhaseYear[s][ph] : 0;
             var f = Widgets.Fact(string.Format("{0}-я очередь · {1}", ph + 1, TwinData.LrtPhaseNames[ph]), string.Format("{0} км · открытие {1}", Loc.N1(bd / 1000f), oy));
             f.style.borderBottomWidth = 0; box.Add(f);
-            var n = new Label("Расстояние от центра района. Трасса — по генплану, год открытия — по сценарию двойника."); n.AddToClassList("note"); box.Add(n);
+            var n = new Label("От центра района; год открытия — по сценарию"); n.AddToClassList("note"); box.Add(n);
             box.Add(SourceTags.Line(Sources.GenPlan, Sources.ModelCity));
             return box;
         }

@@ -19,22 +19,20 @@ namespace AlatauCity.DigitalTwin.Modules
             (CityEconomy.SectorColors[3], "туризм"), (CityEconomy.SectorColors[4], "строительство (ПГС)")
         };
 
-        Label eyebrow, summary, pgsNote, budgetNote, laborNote; readonly Label[] kv = new Label[4], kl = new Label[4]; readonly VisualElement[] kb = new VisualElement[4];
-        TwinChart grpChart, budChart; VisualElement pgsFacts, revRows, expRows, capRows, laborFacts;
+        Label eyebrow, summary, pgsNote, budgetNote, laborNote, capLine; Glance.Hero hero, budHero; readonly (Label v, Label l, VisualElement cell)[] st = new (Label, Label, VisualElement)[3];
+        TwinChart grpChart, budChart; VisualElement pgsFacts, pgsMore, revRows, expRows, capRows, laborFacts;
 
         protected override void Build()
         {
+            // answer first: the GRP of the year as one big number, three small numbers under it, the long sentence folded
             var top = Widgets.Block(panel);
             eyebrow = Widgets.Eyebrow(top, "");
-            summary = new Label(); summary.AddToClassList("summary"); summary.style.marginBottom = 10; top.Add(summary);
-            var grid = new VisualElement(); grid.AddToClassList("kpi-grid"); top.Add(grid); VisualElement row = null;
-            for (int i = 0; i < 4; i++)
-            {
-                if (i % 2 == 0) { row = new VisualElement(); row.AddToClassList("kpi-row"); grid.Add(row); }
-                var k = new VisualElement(); k.AddToClassList("kpi");
-                kl[i] = new Label(); kl[i].AddToClassList("l"); k.Add(kl[i]); kv[i] = new Label("—"); kv[i].AddToClassList("v"); k.Add(kv[i]);
-                kb[i] = k; row.Add(k);
-            }
+            hero = Glance.MakeHero(top);
+            var strip = Glance.Strip(top); for (int i = 0; i < 3; i++) st[i] = Glance.Stat(strip);
+            var why = Widgets.Details(top, "Почему так");
+            summary = Glance.Prose(why);
+            Glance.Prose(why, "Модель двойника, не официальная статистика: ВРП = рабочие места по зданиям × выработка отрасли (Алматы ≈ 23 млн ₸ на занятого) + стройка по деньгам finance.json; бюджет — налоги с фонда оплаты труда, прибыли и имущества. Цены 2026 года, $1 = 500 ₸.");
+            top.Add(SourceTags.Line(Data.Sources.ModelCity));
 
             var g = Widgets.Block(panel, "ВРП по отраслям", "трлн ₸");
             grpChart = new TwinChart { Colors = CityEconomy.SectorColors, Stacked = true }; g.Add(grpChart);
@@ -43,10 +41,13 @@ namespace AlatauCity.DigitalTwin.Modules
 
             var pb = Widgets.Block(panel, "ПГС — строительная отрасль", "");
             pgsFacts = new VisualElement(); pb.Add(pgsFacts);
-            pgsNote = new Label(); pgsNote.AddToClassList("note"); pgsNote.style.marginTop = 6; pb.Add(pgsNote);
+            pgsMore = Widgets.Details(pb, "Подробнее");
+            pgsNote = Glance.Prose(pgsMore);
+            pb.Add(SourceTags.Line(Data.Sources.ModelCity));
 
             Right();
             var bb = Widgets.Block(panel, "Бюджет города", "млрд ₸ в год");
+            budHero = Glance.MakeHero(bb);
             budChart = new TwinChart { Colors = new[] { new Color(0.31f, 0.82f, 0.48f), new Color(1f, 0.45f, 0.38f) }, Stacked = false, LineWidths = new[] { 2.5f, 2f } }; bb.Add(budChart);
             var bl = new VisualElement(); bl.AddToClassList("legend"); bb.Add(bl);
             bl.Add(Widgets.LegendItem(new Color(0.31f, 0.82f, 0.48f), "собственные доходы")); bl.Add(Widgets.LegendItem(new Color(1f, 0.45f, 0.38f), "расходы"));
@@ -54,19 +55,19 @@ namespace AlatauCity.DigitalTwin.Modules
             revRows = new VisualElement(); bb.Add(revRows);
             var eh = new Label("Расходы"); eh.AddToClassList("eco-h"); eh.style.marginTop = 10; bb.Add(eh);
             expRows = new VisualElement(); bb.Add(expRows);
-            budgetNote = new Label(); budgetNote.AddToClassList("note"); budgetNote.style.marginTop = 8; bb.Add(budgetNote);
+            budgetNote = Glance.Prose(Widgets.Details(bb, "Почему так"));
+            bb.Add(SourceTags.Line(Data.Sources.ModelCity));
 
             var cb = Widgets.Block(panel, "Производственные мощности", "");
+            capLine = new Label(); capLine.AddToClassList("w19-hero-c"); cb.Add(capLine);
             capRows = new VisualElement(); cb.Add(capRows);
+            cb.Add(SourceTags.Line(Data.Sources.ModelCity));
 
             var lb = Widgets.Block(panel, "Рынок труда и доходы", "");
             laborFacts = new VisualElement(); lb.Add(laborFacts);
-            laborNote = new Label(); laborNote.AddToClassList("note"); laborNote.style.marginTop = 6; lb.Add(laborNote);
+            laborNote = Glance.Line(lb);
             Widgets.SetCollapsed(lb, true);
-
-            var n = Widgets.Block(panel);
-            var note = new Label("Модель двойника, не официальная статистика: ВРП = рабочие места по зданиям × выработка отрасли (Алматы ≈ 23 млн ₸ на занятого) + стройка по деньгам finance.json; бюджет — налоги с фонда оплаты труда, прибыли и имущества. Цены 2026 года, $1 = 500 ₸.");
-            note.AddToClassList("note"); n.Add(note);
+            Widgets.SetCollapsed(cb, true);
         }
 
         public override void Refresh()
@@ -78,10 +79,12 @@ namespace AlatauCity.DigitalTwin.Modules
             int self = CityEconomy.SelfSufficientYear();
             summary.text = $"ВРП Alatau City в {y} году — {CityEconomy.Trln(e.GrpTotal)} ({CityEconomy.Usd(e.GrpTotal)}), {Loc.N0(e.GrpPerCapitaUsd)} $ на жителя. Крупнейшая отрасль — {CityEconomy.SectorsInText[big]} ({Mathf.RoundToInt(100f * e.Grp[big] / Mathf.Max(e.GrpTotal, 1f))} %)."
                 + (self > 0 ? $" Свои доходы города покрывают все его расходы с {self} года." : "");
-            Set(0, CityEconomy.Trln(e.GrpTotal), "ВРП города", "");
-            Set(1, "$" + Loc.N0(e.GrpPerCapitaUsd), "ВРП на жителя", "");
-            Set(2, (e.GrpGrowth >= 0 ? "+" : "") + Loc.N1(e.GrpGrowth) + " %", "рост ВРП за год, реальный", e.GrpGrowth < 0 ? "warn" : "ok");
-            Set(3, CityEconomy.Trln(e.Capex), "инвестиции в стройку · частные " + Mathf.RoundToInt(100f * e.CapexPrivate / Mathf.Max(e.Capex, 1f)) + " %", "");
+            bool tr = e.GrpTotal >= 1000f; string[] shortSec = { "деловые услуги", "социальная сфера", "промышленность", "туризм", "стройка", "прочее" };
+            hero.Set(tr ? Loc.N1(e.GrpTotal / 1000f) : Loc.N0(e.GrpTotal), tr ? "трлн\u00A0₸" : "млрд\u00A0₸", string.Format("ВРП города в {0} году", y), "",
+                string.Format("≈ {0} · {1} — {2}\u00A0%", CityEconomy.Usd(e.GrpTotal), shortSec[big], Mathf.RoundToInt(100f * e.Grp[big] / Mathf.Max(e.GrpTotal, 1f))));
+            Glance.SetStat(st[0], "$" + Loc.N0(e.GrpPerCapitaUsd), "на жителя");
+            Glance.SetStat(st[1], (e.GrpGrowth >= 0 ? "+" : "") + Loc.N0(e.GrpGrowth) + "\u00A0%", "рост за год", e.GrpGrowth < 0 ? "warn" : "ok");
+            Glance.SetStat(st[2], CityEconomy.Trln(e.Capex), "в стройку за год");
 
             // GRP chart, trillions
             var ser = new float[6][]; for (int c = 0; c < 6; c++) ser[c] = new float[CityStats.Years];
@@ -94,8 +97,9 @@ namespace AlatauCity.DigitalTwin.Modules
             pgsFacts.Add(Widgets.Fact("Доля стройки в ВРП", Mathf.RoundToInt(100f * e.Grp[4] / Mathf.Max(e.GrpTotal, 1f)) + " %"));
             pgsFacts.Add(Widgets.Fact("Занято в стройке", "≈ " + Loc.N0(e.ConstrJobs / 1000f) + " тыс. человек"));
             pgsFacts.Add(Widgets.Fact("Ввод жилья за год", Loc.N0(e.HousingM2 / 1000f) + " тыс. м²"));
+            while (pgsMore.childCount > 1) pgsMore.RemoveAt(1);
             var last = Widgets.Fact("Кто платит", "частные и ГЧП " + Mathf.RoundToInt(100f * e.CapexPrivate / Mathf.Max(e.Capex, 1f)) + " % · бюджет и квазигоссектор " + Mathf.RoundToInt(100f * e.CapexBudget / Mathf.Max(e.Capex, 1f)) + " %");
-            last.style.borderBottomWidth = 0; pgsFacts.Add(last);
+            last.style.borderBottomWidth = 0; pgsMore.Add(last);
             float sum = 0; for (int i = 0; i < CityStats.Years; i++) sum += CityEconomy.Of(TwinState.MinYear + i).Capex;
             pgsNote.text = $"За 2026–2050 в стройку города вкладывается {CityEconomy.Trln(sum)} ({CityEconomy.Usd(sum)}). В первые годы стройка — основа экономики города, к 2040-м её доля падает: город начинает зарабатывать сам.";
 
@@ -104,10 +108,14 @@ namespace AlatauCity.DigitalTwin.Modules
             for (int i = 0; i < CityStats.Years; i++) { var ei = CityEconomy.Of(TwinState.MinYear + i); inc[i] = ei.RevOwn; exp[i] = ei.Opex + ei.BudgetCapex; }
             budChart.Series = new[] { inc, exp }; budChart.MarkYear = y; budChart.Refresh();
             revRows.Clear(); float rmax = e.Rev.Max();
-            for (int i = 0; i < e.Rev.Length; i++) revRows.Add(Bar(CityEconomy.Revenue[i], e.Rev[i], rmax, new Color(0.31f, 0.82f, 0.48f)));
+            foreach (int i in Enumerable.Range(0, e.Rev.Length).OrderByDescending(i => e.Rev[i])) revRows.Add(Bar(CityEconomy.Revenue[i], e.Rev[i], rmax, new Color(0.31f, 0.82f, 0.48f)));
+            Glance.More(revRows, 3);
             expRows.Clear();
             float[] ex = e.Exp.Concat(new[] { e.BudgetCapex }).ToArray(); string[] en = CityEconomy.Spend.Concat(new[] { "Развитие: школы, сети, дороги" }).ToArray(); float emax = ex.Max();
-            for (int i = 0; i < ex.Length; i++) expRows.Add(Bar(en[i], ex[i], emax, new Color(1f, 0.45f, 0.38f)));
+            foreach (int i in Enumerable.Range(0, ex.Length).OrderByDescending(i => ex[i])) expRows.Add(Bar(en[i], ex[i], emax, new Color(1f, 0.45f, 0.38f)));
+            Glance.More(expRows, 3);
+            budHero.Set((e.Balance < 0 ? "−" : "+") + Loc.N0(e.Balance < 0 ? e.Transfers : e.ToRepublic), "млрд\u00A0₸",
+                e.Balance < 0 ? "Разрыв закрывают трансферты" : "Город сам покрывает расходы", e.Balance < 0 ? "warn" : "ok");
             budgetNote.text = e.Balance < 0
                 ? $"Свои доходы {Loc.N0(e.RevOwn)} млрд ₸ против расходов {Loc.N0(e.Opex + e.BudgetCapex)} млрд ₸: разрыв {Loc.N0(e.Transfers)} млрд ₸ закрывают целевые трансферты республики на инфраструктуру."
                 : $"Свои доходы {Loc.N0(e.RevOwn)} млрд ₸ покрывают расходы {Loc.N0(e.Opex + e.BudgetCapex)} млрд ₸; излишек {Loc.N0(e.ToRepublic)} млрд ₸ уходит в республиканский бюджет. Налоговая нагрузка — {Mathf.RoundToInt(e.TaxBurden * 100f)} % ВРП.";
@@ -120,7 +128,8 @@ namespace AlatauCity.DigitalTwin.Modules
                     var l = sys.Get(c.Id); if (l == null) continue;
                     capRows.Add(CapRow(l, c, y));
                 }
-            var tot = new Label($"Крупные заводы и хабы в {y} году: выручка ≈ ${Loc.N0(e.IndustryOutputUsdM)} млн, экспорт ≈ ${Loc.N0(e.ExportUsdM)} млн."); tot.AddToClassList("note"); tot.style.marginTop = 6; capRows.Add(tot);
+            Glance.More(capRows, 4);
+            capLine.text = string.Format("Выручка ≈ ${0} млн · экспорт ≈ ${1} млн", Loc.N0(e.IndustryOutputUsdM), Loc.N0(e.ExportUsdM));
 
             // labour
             laborFacts.Clear();
@@ -156,17 +165,11 @@ namespace AlatauCity.DigitalTwin.Modules
             var rt = new VisualElement(); rt.AddToClassList("story-rtop"); r.Add(rt);
             var chip = new VisualElement(); chip.AddToClassList("story-chip"); chip.style.backgroundColor = c; rt.Add(chip);
             var l = new Label(name); l.AddToClassList("story-rn"); rt.Add(l);
-            var vl = new Label(Loc.N0(v)); vl.AddToClassList("story-rv"); rt.Add(vl);
+            var vl = new Label(Loc.N0(v)); vl.AddToClassList("story-rv"); vl.AddToClassList("w19-num"); rt.Add(vl);
             var bar = new VisualElement(); bar.AddToClassList("story-bar"); var fill = new VisualElement(); fill.AddToClassList("story-fill"); fill.style.backgroundColor = c;
             fill.style.width = Length.Percent(max > 0 ? Mathf.Clamp01(v / max) * 100f : 0f); bar.Add(fill); r.Add(bar);
             return r;
         }
 
-        void Set(int i, string v, string l, string cls)
-        {
-            kv[i].text = v; kl[i].text = l;
-            foreach (var c in new[] { "ok", "warn", "bad" }) kb[i].RemoveFromClassList(c);
-            if (cls != "") kb[i].AddToClassList(cls);
-        }
     }
 }

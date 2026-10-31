@@ -57,7 +57,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 case "logistics_griffin": Logistics(k, 2, 300f, 110f); break;
                 case "logistics_gtrans": Logistics(k, 1, 210f, 90f); break;
                 case "rail_terminal": RailTerminal(k); break;
-                case "substation": Substation(k); break;
+                case "substation": Substation(k, seed); break;
                 case "power": PowerPlant(k); break;
                 case "campus": if (QTwinData.Kaist() != null) KaistCampus(k); else Campus(k); break;
                 case "hospital": Hospital(k); break;
@@ -131,19 +131,20 @@ namespace AlatauCity.DigitalTwin.Landmarks
             var m = QTwinData.Bim();
             if (m == null) { k.Prism(LandmarkKit.Rect(0f, 0f, 270f, 200f), -2f, 0.3f, SandDark, LM.Solid, 3f, Sand, LM.Paving); return; }
             // parts of the model = the buildings of LandmarkData's Iconic Complex, each staged on its own dates:
-            // 1 T1, 2 T2, 3 the east pavilion, 4 the west pavilion, 5 the plaza (0 the plot)
-            k.Indexed(m.P, m.N, m.U, m.Tag, m.Part, m.I, LM.QTwin, new Color32(255, 255, 255, 255));
-            // the trees of the plaza on the page, planted with it
+            // 1 T1, 2 T2, 3 the east pavilion, 4 the west pavilion, 5 the plaza (0 the plot); the plaza is laid on its own works
+            // (IconicPlaza: an earth site first, paving, lawns and the square in their windows, cut by the buildings' footprints)
+            IconicPlaza.Add(k, m);
+            // the trees of the plaza on the page, planted with it (last of its works)
             var d = QTwinData.Gate();
             if (d != null)
             {
-                k.Part = 5;
+                k.Part = 5; W(k, Wbs.GTrees, 0f, 12f);
                 for (int i = 0; i < d.Trees.Length; i++)
                 {
                     var t = d.Trees[i]; if (Mathf.Abs(t.x) >= 136f || Mathf.Abs(t.z) >= 100f) continue;
                     k.Tree(new Vector3(t.x, t.y, t.z), 10.5f * t.w, (i & 1) == 0 ? Leaf : Leaf2, i * 0.37f);
                 }
-                k.Part = 0;
+                k.Part = 0; k.NoWin();
             }
         }
         /// <summary>KAIST Kazakhstan as on its QTwin monitoring page (QTwinData.Kaist, tools/build_kaist.py): B1, the library tower of teal
@@ -847,32 +848,19 @@ namespace AlatauCity.DigitalTwin.Landmarks
             for (int i = 0; i < 8; i++) Truck(k, new Vector3(40f + i * 16f, 0.3f, 22f), 90f, i % 2 == 0 ? White : LM.C("#2f5d8a"));
         }
 
-        // ------------------------------------------------------------------ 220/110 kV substation
-        static void Substation(LandmarkKit k)
+        // ------------------------------------------------------------------ 220/110 kV substation: the same model as the presentation step
+        // «Прогноз: энергия 2034» (SubstationModel) — gravel yard, switchyards, transformers, control building, masts — on the landmark's
+        // levelled plot; the 220 kV line and the access road are a separate object outside the plot (SubstationModel.AttachOutside).
+        static void Substation(LandmarkKit k, float seed)
         {
-            Pad(k, 180f, 140f, 4f, Gravel, LM.Roof);
-            // fence
-            var f = LandmarkKit.Rect(0, 0, 172f, 132f);
-            for (int i = 0; i < 4; i++) { var a = f[i]; var b = f[(i + 1) % 4]; k.Beam(new Vector3(a.x, 1.3f, a.y), new Vector3(b.x, 1.3f, b.y), 0.12f, 2.2f, MetalD, LM.Steel); }
-            // transformers (bodies, radiators, bushings)
-            for (int i = 0; i < 4; i++)
-            {
-                float x = -45f + i * 30f;
-                k.Box(new Vector3(x, 3.3f, -10f), new Vector3(9f, 6f, 6f), 0, LM.C("#8c949c"), LM.Metal, 2f, LM.C("#7c838a"), LM.Metal);
-                k.Box(new Vector3(x, 3f, -15f), new Vector3(8f, 5f, 2.4f), 0, LM.C("#7c838a"), LM.Metal, 1f, LM.C("#7c838a"), LM.Metal);
-                for (int b = -1; b <= 1; b++) k.Cylinder(new Vector3(x + b * 2.5f, 6.3f, -10f), 0.35f, 3.2f, 8, LM.C("#cfd3d6"), LM.Solid, 1f, LM.C("#cfd3d6"), LM.Solid);
-            }
-            // gantry portals and busbars
-            for (int i = 0; i < 6; i++)
-            {
-                float x = -70f + i * 28f;
-                k.Beam(new Vector3(x, 0.3f, 20f), new Vector3(x, 18f, 20f), 0.7f, 0.7f, MetalG, LM.Steel);
-                k.Beam(new Vector3(x, 0.3f, 50f), new Vector3(x, 18f, 50f), 0.7f, 0.7f, MetalG, LM.Steel);
-                k.Beam(new Vector3(x, 18f, 19f), new Vector3(x, 18f, 51f), 0.6f, 0.8f, MetalG, LM.Steel);
-            }
-            k.Beam(new Vector3(-72f, 14f, 30f), new Vector3(72f, 14f, 30f), 0.25f, 0.25f, MetalG, LM.Steel);
-            k.Beam(new Vector3(-72f, 14f, 40f), new Vector3(72f, 14f, 40f), 0.25f, 0.25f, MetalG, LM.Steel);
-            k.Prism(LandmarkKit.Rect(55f, -45f, 36f, 16f), 0.3f, 7f, White, LM.Solid, 3.5f, Roof, LM.Roof);
+            Landmark l = null;
+            var ls = LandmarkSystem.Instance;
+            if (ls != null) foreach (var x in ls.Items) if (x.Model == "substation" && Mathf.Abs(x.X * 0.001f - seed) < 1e-4f) { l = x; break; }
+            if (l == null) { Debug.LogWarning("[Alatau] substation landmark not found"); return; }
+            float level = l.Base != 0f ? l.Base : CityGround.HeightAt(l.X, l.Z);
+            var site = new Vector2(l.X, l.Z);
+            SubstationModel.FillYard(k, site, l.Yaw, level);
+            SubstationModel.AttachOutside(l.Id, site, l.Yaw, level);
         }
 
         // ------------------------------------------------------------------ gas-turbine power plant 2 × 250 MW (H2-ready)

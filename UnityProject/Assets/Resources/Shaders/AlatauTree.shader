@@ -101,6 +101,13 @@ Shader "AlatauCity/Tree"
             alb *= lerp(1.0, lerp(float3(0.88, 0.94, 1.02), float3(1.03, 1.02, 0.93), up), leaf);
             // seen from far away a crown is a few pixels: lift its shade towards the lit colour so groves read as soft green,
             // not as black pepper on the pale ground
+            // up close the clumps read as clumps: deeper shade in the gaps between them (cl low) and a touch of grey in the green,
+            // so a crown looks like foliage rather than a painted ball; the bark gets vertical furrows
+            alb *= lerp(1.0, lerp(0.78, 1.06, smoothstep(0.30, 0.70, cl)), leaf * nearK);
+            float lg = dot(alb, float3(0.299, 0.587, 0.114));
+            alb = lerp(alb, float3(lg, lg, lg) * float3(0.97, 1.03, 0.95), 0.12 * leaf);
+            float bark = LNoise(float3(atan2(IN.lp.z, IN.lp.x) * 4.0, IN.lp.y * 1.3, 0.0)) ;
+            alb *= lerp(1.0, 0.78 + 0.32 * bark, (1.0 - leaf) * nearK);
             float far = saturate((distance(_WorldSpaceCameraPos, IN.worldPos) - 700.0) / 1800.0);
             alb = lerp(alb, alb * 1.22 + float3(0.020, 0.024, 0.010), far * leaf * 0.6);
             o.Albedo = alb; o.Alpha = 1;

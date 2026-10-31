@@ -289,19 +289,26 @@ namespace AlatauCity.DigitalTwin
             ui.Middle?.AddToClassList("tour-clean");
         }
         // ------------------------------------------------------------------ construction control: the year runs, the figures and the late sites follow
-        bool cw; int cwYear = -1;
-        public void ConstructionWatch() { cw = true; cwYear = -1; }
+        bool cw; int cwYear = -1; UnityEngine.UIElements.VisualElement cwLegend;
+        public void ConstructionWatch()
+        {
+            cw = true; cwYear = -1;
+            // what every line and colour on the map means (networks by type, new streets, buildings by status)
+            cwLegend?.RemoveFromHierarchy(); cwLegend = null;
+            var ui = UI.TwinUI.Instance; if (ui != null && ui.Scene != null) { cwLegend = UI.BuildLegend.Card(); ui.Scene.Add(cwLegend); }
+        }
         void ConstructionStep()
         {
             if (!cw || TwinState.Year == cwYear) return;
             cwYear = TwinState.Year; int s = (int)TwinState.Scenario;
             ConstructionLayer.Compute(cwYear, s);
-            float km = LineLayers.RoadKmInWork(cwYear, s); foreach (var k in LineLayers.NetKeys) km += LineLayers.KmInWork(k, cwYear, s);
+            // the sites and the late ones are the left column's answer; the card over the map tells what the lines are: the networks
+            // and the streets being laid this year (the legend on the right names each colour)
+            float roads = LineLayers.RoadKmInWork(cwYear, s), nets = 0f; foreach (var k in LineLayers.NetKeys) nets += LineLayers.KmInWork(k, cwYear, s);
             Callout("КОНТРОЛЬ СТРОЙКИ · " + cwYear, new[] {
-                (Loc.N0(ConstructionLayer.Sites), "строек идёт", new Color(0.45f, 0.75f, 1f)),
-                (Loc.N0(ConstructionLayer.SitesBehind), "отстают от графика", new Color(1f, 0.38f, 0.30f)),
-                (Loc.N0(km), "км сетей и дорог в работе", new Color(1f, 0.78f, 0.30f)) },
-                "Каждая стройка, сеть и дорога — на одной карте: план против факта");
+                (Loc.N0(nets), "км сетей прокладывают", new Color(0.45f, 0.75f, 1f)),
+                (Loc.N0(roads), "км новых улиц", new Color(1f, 0.78f, 0.30f)) },
+                "Каждая стройка, сеть и улица — на одной карте: план против факта");
             // the late sites in the frame (Gate and Golden, along the glide): the biggest delays first
             var db = CityDatabase.Instance; var pins = new List<MapPins.Pin>(); int n = 0;
             if (db != null)
@@ -323,7 +330,7 @@ namespace AlatauCity.DigitalTwin
         public void ShowAi()
         {
             var ui = UI.TwinUI.Instance; if (ui == null || ui.Scene == null) return;
-            ai?.RemoveFromHierarchy(); ai = new UI.AiShow(TwinState.Year); ui.Scene.Add(ai); Clean(true);
+            ai?.RemoveFromHierarchy(); ai = new UI.AiShow(TwinState.Year, 0); ui.Scene.Insert(0, ai); Clean(true);   // Gate, the flagship district; under the tour card
         }
         TourSeaside seaside;
         public void Seaside() { seaside?.Stop(); seaside = new TourSeaside(); }
@@ -331,7 +338,7 @@ namespace AlatauCity.DigitalTwin
         public void ShowEnergy()
         {
             energy?.Stop(); energy = new TourEnergy(); Clean(true);
-            GlideDistrict(1, 10.1f, -0.30f, 0.0f, 5600f, 4600f, 40f, 10f);           // then the energy step takes the camera to the substation
+            GlideDistrict(1, TourEnergy.TGrowB - 1.4f, -0.30f, 0.0f, 5600f, 4600f, 40f, 10f);   // then the energy step takes the camera to the substation
         }
         /// <summary>Hides the side panels for a full-screen WOW step (the overlay tells the story itself).</summary>
         public void Clean(bool on) { var m = UI.TwinUI.Instance?.Middle; if (m == null) return; if (on) m.AddToClassList("tour-clean"); else m.RemoveFromClassList("tour-clean"); }
@@ -362,62 +369,50 @@ namespace AlatauCity.DigitalTwin
         void HideCallout() { callout?.RemoveFromHierarchy(); callout = null; }
 
         // ------------------------------------------------------------------ flood: the reservoir rises over the shore, the twin protects it
-        GameObject water; Material waterMat; float fT, fBase, fRise, fRiseT, fProtectAt, fLevel, fTint; int fDistrict; bool flooding;
-        /// <summary>Water sheet over 'area' (world x/z) at 'baseLevel' that rises by 'rise' metres in 'riseTime' s; at 'protectAt' s the twin's
-        /// measures (dam, regulated release) bring it back down to a safe level. Buildings below the water are outlined live.</summary>
+        // The water and the numbers come from the relief model (Modules.FloodModel): the level climbs from today's mark to the scenario
+        // mark; every half metre the wet cells, buildings and residents are recomputed; at 'protectAt' the measures hold the water at today's mark.
+        float fT, fRiseT, fProtectAt, fPeak, fStep = -1f; bool flooding;
+        /// <summary>The flood step: 'baseLevel' + 'rise' (twin metres) is the peak, reached in 'riseTime' s; at 'protectAt' s the twin's measures
+        /// (release of the dam raised in advance, evacuation) bring it back to today's mark. 'area' and 'district' are kept for the callers.</summary>
         public void Flood(Rect area, int district, float baseLevel, float rise, float riseTime, float protectAt)
         {
-            if (water == null)
-            {
-                var sh = Shader.Find("AlatauCity/Water"); if (sh == null) { Debug.LogWarning("[Alatau] water shader missing"); return; }
-                waterMat = new Material(sh) { name = "Flood water" };
-                water = new GameObject("Flood water"); var mf = water.AddComponent<MeshFilter>(); var mr = water.AddComponent<MeshRenderer>(); mr.sharedMaterial = waterMat;
-                mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-                var m = new Mesh { name = "Water sheet" };
-                m.vertices = new[] { new Vector3(-0.5f, 0, -0.5f), new Vector3(0.5f, 0, -0.5f), new Vector3(0.5f, 0, 0.5f), new Vector3(-0.5f, 0, 0.5f) };
-                m.triangles = new[] { 0, 2, 1, 0, 3, 2 }; m.RecalculateNormals(); m.RecalculateBounds(); mf.sharedMesh = m;
-            }
-            water.SetActive(true);
-            water.transform.position = new Vector3(area.center.x, baseLevel, area.center.y); water.transform.localScale = new Vector3(area.width, 1, area.height);
-            fT = 0; fBase = baseLevel; fRise = rise; fRiseT = riseTime; fProtectAt = protectAt; fDistrict = district; fLevel = baseLevel; fTint = -1; flooding = true;
+            Modules.FloodModel.Register();
+            float want = baseLevel + rise + Modules.FloodModel.Datum; fPeak = Modules.FloodModel.Levels[0];
+            foreach (var lv in Modules.FloodModel.Levels) if (Mathf.Abs(lv - want) < Mathf.Abs(fPeak - want)) fPeak = lv;
+            fT = 0; fRiseT = riseTime; fProtectAt = protectAt; fStep = -1f; flooding = true;
         }
 
         void FloodStep(float dt)
         {
-            if (!flooding || water == null) return;
+            if (!flooding) return;
             fT += dt;
+            float now = Modules.FloodModel.NowReal;
             float up = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(fT / fRiseT)), down = fT > fProtectAt ? Mathf.SmoothStep(0f, 1f, Mathf.Clamp01((fT - fProtectAt) / 5f)) : 0f;
-            fLevel = fBase + fRise * up - (fRise + 0.6f) * down;            // the measures bring the water back below the old shore line
-            water.transform.position = new Vector3(water.transform.position.x, fLevel, water.transform.position.z);
-            if (Mathf.Abs(fLevel - fTint) < 0.08f) return;
-            fTint = fLevel;
-            // buildings standing below the water: red; once protected, the ones the measures saved turn green
-            var db = CityDatabase.Instance; if (db == null) return;
-            string id = CityStats.DistrictIds[Mathf.Clamp(fDistrict, 0, 3)];
-            int wet = 0; float people = 0; bool saved = fT > fProtectAt;
-            float peak = fBase + fRise;
-            TintLayer.Enable();
-            TintLayer.Apply(b =>
-            {
-                if (b.District != id || b.Source == "existing_osm" && false) return new Color(0, 0, 0, 0);
-                // once the twin's measures work, every building of the risk zone is shown saved (green), none is left under water
-                if (saved && b.GroundM < peak) return new Color(0.22f, 0.82f, 0.42f, 0.85f);
-                if (!saved && b.GroundM < fLevel) { wet++; if (b.Kind == "house" || b.Kind.StartsWith("res")) people += b.GfaM2 / 30f; return new Color(1f, 0.28f, 0.20f, 0.92f); }
-                return new Color(0, 0, 0, 0);
-            });
-            int at = 0; float atP = 0; foreach (var b in db.Buildings) if (b != null && b.District == id && b.GroundM < peak) { at++; if (b.Kind == "house" || b.Kind.StartsWith("res")) atP += b.GfaM2 / 30f; }
+            float real = now + (fPeak - now) * (up - down), q = Mathf.Round(real * 2f) / 2f;
+            Modules.FloodWater.Show(q); Modules.FloodWater.Lift(real - q);      // the sheet moves smoothly between recomputed half metres
+            if (Mathf.Approximately(q, fStep)) return;
+            fStep = q;
+            bool saved = fT > fProtectAt; int y = TwinState.Year;
+            var peak = Modules.FloodModel.Compute(fPeak, y); var cur = saved ? peak : Modules.FloodModel.Compute(q, y);
+            TintLayer.Enable(); TintLayer.Apply(b => Modules.FloodModel.Tint(cur, b, saved));
+            var blue = new Color(0.45f, 0.75f, 1f); var red = new Color(1f, 0.38f, 0.30f); var green = new Color(0.30f, 0.85f, 0.45f); var amber = new Color(0.96f, 0.65f, 0.14f);
             if (!saved)
-                Callout("Капшагай: подъём воды", new[] { ("+" + Loc.N1(fLevel - fBase) + " м", "уровень воды", new Color(0.45f, 0.75f, 1f)), (Loc.N0(wet), "зданий в зоне затопления", new Color(1f, 0.38f, 0.30f)), ("≈ " + Loc.N0(people / 1000f) + " тыс.", "жителей под угрозой", new Color(1f, 0.38f, 0.30f)) }, "Модель двойника: рельеф, уровни воды, отметки зданий");
+                Callout("Капшагай: подъём воды · расчёт по рельефу", new[] { (string.Format("{0} м", Loc.N1(q)), "отметка воды", blue), (Loc.N0(cur.Buildings), "зданий в воде", red), (Loc.N0(cur.People), "жителей в воде", red) },
+                    string.Format("Рельеф Copernicus GLO-30 · приток Или {0} м³/с · пик через {1} сут.", Loc.N0(Modules.FloodModel.InflowM3s), Loc.N0(Mathf.Max(1f, peak.Days))));
             else
-                Callout("Решение двойника принято", new[] { ("норма", "уровень после мер", new Color(0.45f, 0.75f, 1f)), (Loc.N0(at), "зданий спасено", new Color(0.30f, 0.85f, 0.45f)), ("≈ " + Loc.N0(atP / 1000f) + " тыс.", "жителей вне опасности", new Color(0.30f, 0.85f, 0.45f)) }, "Дамба на берегу и регулируемый сброс воды — за 48 часов до пика");
+                Callout("Что делать: сброс ГЭС заранее и эвакуация", new[] { (string.Format("{0} мин", Loc.N0(peak.EvacMin)), string.Format("эвакуация {0} жит.", Loc.N0(peak.EvacPeople)), green), (Modules.SituationModule.MoneyText(Modules.FloodModel.InactionMln(fPeak, y)), "цена бездействия", amber), (Loc.N0(peak.Buildings), "зданий спасено", green) },
+                    string.Format("Сброс поднят за 10 суток до пика, вода держится у {0} м", Loc.N0(now)));
         }
 
         // ------------------------------------------------------------------ evening: the sun goes down, the resorts light up
-        float eveFrom = -1f, eveTo, eveT, eveDur, hour0 = -1f;
+        float eveFrom = -1f, eveTo, eveT, eveDur, hour0 = -1f; int cycle0 = -1;
         public void Evening(float toHour, float dur)
         {
             var fl = FilmLook.Instance; if (fl == null) return;
             if (hour0 < 0f) hour0 = fl.hour;
+            // the step owns the hour: the viewer's «сутки за 2 минуты» would run the clock on to 22:00 and wrap to morning, which
+            // switched the city's lights off and on again in the middle of the story; it comes back when the step ends
+            if (cycle0 < 0) cycle0 = FilmLook.Cycling ? 1 : 0; FilmLook.Cycling = false;
             eveFrom = fl.hour; eveTo = toHour; eveT = 0; eveDur = dur;
         }
 
@@ -477,8 +472,9 @@ namespace AlatauCity.DigitalTwin
         {
             glide = null; later = null; Paused = false; LineLayers.JamOff();
             HideCallout();
-            if (flooding) { flooding = false; if (water != null) water.SetActive(false); TintLayer.Disable(); }
+            if (flooding) { flooding = false; Modules.FloodWater.Hide(); TintLayer.Disable(); }
             if (hour0 >= 0f && FilmLook.Instance != null) { FilmLook.Instance.hour = hour0; hour0 = -1f; }
+            if (cycle0 >= 0) { FilmLook.Cycling = cycle0 == 1; cycle0 = -1; }
             eveFrom = -1f;
             if (silk != null) { silk.Hide(); silk = null; UI.TwinUI.Instance?.Middle?.RemoveFromClassList("tour-map"); }
             if (shown.Count > 0) { shown.Clear(); TintLayer.Disable(); MapPins.Instance?.Clear(); }
@@ -487,6 +483,7 @@ namespace AlatauCity.DigitalTwin
             if (energy != null) { energy.Stop(); energy = null; }
             if (seaside != null) { seaside.Stop(); seaside = null; }
             if (cw) { cw = false; MapPins.Instance?.Clear(); }
+            if (cwLegend != null) { cwLegend.RemoveFromHierarchy(); cwLegend = null; }
             if (ai != null) { ai.RemoveFromHierarchy(); ai = null; TintLayer.Disable(); MapPins.Instance?.Clear(); }
             Clean(false);
         }

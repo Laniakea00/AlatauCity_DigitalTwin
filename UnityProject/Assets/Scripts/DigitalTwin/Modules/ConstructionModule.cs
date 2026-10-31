@@ -25,10 +25,10 @@ namespace AlatauCity.DigitalTwin.Modules
         static readonly float[] InfraShare = { 0.60f, 0f, 0.10f, 0.30f };   // budget, private, PPP, quasi-state (norms.FUNDING["infra"])
 
         Label eyebrow, summary, sGap, moneyNote; readonly Label[] kv = new Label[4], kl = new Label[4]; readonly VisualElement[] kb = new VisualElement[4];
-        BuildChart bChart; Label bcV1, bcL1, bcV2, bcL2; VisualElement srcBar, srcLeg; VisualElement worstList, contractors;
+        Glance.Hero hero; BuildChart bChart; Label bcV1, bcL1, bcV2, bcL2; VisualElement srcBar, srcLeg; VisualElement worstList, contractors;
 
         static bool showNets = true, showRoads = true, showTraffic;
-        VisualElement netRows; Label trafficNote; Button chipNets, chipRoads, chipTraffic;
+        VisualElement netRows, netKey; Label trafficNote; Button chipNets, chipRoads, chipTraffic;
 
         public override void OnEnter() { ConstructionLayer.Enable(); ApplyLayers(); }
         public override void OnExit() { if (bimMode) LeaveBim(false); ConstructionLayer.Disable(); LineLayers.Instance?.HideAll(); }
@@ -58,7 +58,8 @@ namespace AlatauCity.DigitalTwin.Modules
             if (bimMode) { BuildBim(); return; }
             var top = Widgets.Block(panel);
             eyebrow = Widgets.Eyebrow(top, "");
-            summary = new Label(); summary.AddToClassList("summary"); summary.style.marginBottom = 12; top.Add(summary);
+            // answer first: how many sites are behind; the full sentence and the method fold into «Почему так»
+            hero = Glance.MakeHero(top);
             var grid = new VisualElement(); grid.AddToClassList("kpi-grid"); top.Add(grid); VisualElement row = null;
             for (int i = 0; i < 4; i++)
             {
@@ -66,8 +67,11 @@ namespace AlatauCity.DigitalTwin.Modules
                 var k = new VisualElement(); k.AddToClassList("kpi");
                 kl[i] = new Label(); kl[i].AddToClassList("l"); k.Add(kl[i]); kv[i] = new Label("—"); kv[i].AddToClassList("v"); k.Add(kv[i]);
                 kb[i] = k; row.Add(k);
-                SourceTags.Attach(k, i == 1 ? Sources.ModelCity : i == 3 ? TwinModels.Money : TwinModels.Build);
             }
+            kb[2].style.display = DisplayStyle.None;   // shown as the hero
+            var why = Widgets.Details(top, "Почему так");
+            summary = Glance.Prose(why); Glance.Prose(why, Loc.T("c_note"));
+            top.Add(SourceTags.Line(TwinModels.Build, Sources.ModelCity, TwinModels.Money));
 
 
             // one chart: commissioning plan vs fact (lines) over the money spent per year (columns)
@@ -91,8 +95,10 @@ namespace AlatauCity.DigitalTwin.Modules
             chipNets = Chip(chips, Loc.T("c_chip_nets"), () => showNets, () => showNets = !showNets);
             chipRoads = Chip(chips, Loc.T("c_chip_roads"), () => showRoads, () => showRoads = !showRoads);
             chipTraffic = Chip(chips, Loc.T("c_chip_traffic"), () => showTraffic, () => showTraffic = !showTraffic);
+            // the key of the lines on the map: thin = built, running dash = being laid this year (colours per network in the rows)
+            netKey = BuildLegend.Patterns(); netKey.AddToClassList("w22-net-key"); nb.Add(netKey);
             netRows = new VisualElement(); nb.Add(netRows);
-            trafficNote = new Label(); trafficNote.AddToClassList("note"); trafficNote.style.marginTop = 6; nb.Add(trafficNote);
+            trafficNote = Glance.Prose(Widgets.Details(nb, "Подробнее"));
             nb.Add(SourceTags.Line(Sources.GenPlan, TwinModels.Build, TwinModels.Traffic));
 
             var wb = Widgets.Block(panel, Loc.T("c_worst"), Loc.T("c_worst_sub"));
@@ -101,7 +107,6 @@ namespace AlatauCity.DigitalTwin.Modules
             var cb = Widgets.Block(panel, Loc.T("c_contractors"), Loc.T("c_contractors_sub"));
             contractors = new VisualElement(); cb.Add(contractors); cb.Add(SourceTags.Line(TwinModels.Build));
 
-            var n = Widgets.Block(panel); var note = new Label(Loc.T("c_note")); note.AddToClassList("note"); n.Add(note);
             // secondary blocks start folded: the first screen shows status, plan/fact and the worst sites
             Widgets.SetCollapsed(cb, true);
         }
@@ -133,6 +138,14 @@ namespace AlatauCity.DigitalTwin.Modules
                 int wc = -1, wv = 0; for (int c = 0; c < ConstructionLayer.BehindByContractor.Length; c++) if (ConstructionLayer.BehindByContractor[c] > wv) { wv = ConstructionLayer.BehindByContractor[c]; wc = c; }
                 string who = wc >= 0 && TwinData.Ready ? TwinData.ContractorNames[wc] : "—";
                 summary.text = behindPct > 97f ? string.Format(Loc.T("c_sum_tail"), y, Loc.N0(sites), who) : string.Format(Loc.T("c_sum"), y, Loc.N0(sites), Loc.N1(ConstructionLayer.GfaInWork / 1e6), Mathf.RoundToInt(behindPct), who);
+            }
+            if (sites == 0) hero.Set("—", "", string.Format("В {0} году строек нет", y));
+            else if (behind == 0) hero.Set(Loc.N0(sites), "", "Все стройки в графике", "ok");
+            else
+            {
+                int wc2 = -1, wv2 = 0; for (int c = 0; c < ConstructionLayer.BehindByContractor.Length; c++) if (ConstructionLayer.BehindByContractor[c] > wv2) { wv2 = ConstructionLayer.BehindByContractor[c]; wc2 = c; }
+                hero.Set(Loc.N0(behind), string.Format("из {0}", Loc.N0(sites)), "Строек отстают от графика", behindPct > 15 ? "bad" : behindPct > 5 ? "warn" : "ok",
+                    wc2 >= 0 && TwinData.Ready ? string.Format("Больше всего — у «{0}»", TwinData.ContractorNames[wc2]) : null);
             }
             Set(0, Loc.N0(sites), Loc.T("c_k_sites"), "");
             Set(1, Loc.N1(ConstructionLayer.GfaInWork / 1e6), Loc.T("c_k_gfa"), "");
@@ -174,24 +187,26 @@ namespace AlatauCity.DigitalTwin.Modules
             netRows.Clear();
             if (TwinData.Ready)
             {
-                string[] names = { "net_water", "net_sewer", "net_power", "net_heat", "net_gas", "net_telecom" };
                 float total = 0;
+                // the rows are the legend of the lines on the map: shown for the layers that are on
+                netKey.style.display = showNets || showRoads ? DisplayStyle.Flex : DisplayStyle.None;
                 for (int k = 0; k < LineLayers.NetKeys.Length; k++)
                 {
                     float w = LineLayers.KmInWork(LineLayers.NetKeys[k], y, s), b = LineLayers.KmBuilt(LineLayers.NetKeys[k], y, s); total += w;
+                    if (!showNets) continue;
                     var r = new VisualElement(); r.AddToClassList("net-row");
-                    var sw = new VisualElement(); sw.AddToClassList("swatch"); sw.style.backgroundColor = LineLayers.NetColors[k]; r.Add(sw);
-                    var n1 = new Label(Loc.T(names[k])); n1.AddToClassList("n"); r.Add(n1);
+                    var sw = new VisualElement(); sw.AddToClassList("w22-net-sw"); sw.Add(BuildLegend.Dash(LineLayers.NetColors[k])); r.Add(sw);
+                    var n1 = new Label(BuildLegend.NetNames[k]); n1.AddToClassList("n"); r.Add(n1);
                     var v1 = new Label(Loc.N0(b) + " " + Loc.T("km")); v1.AddToClassList("v"); v1.AddToClassList("muted"); r.Add(v1);
                     var w1 = new Label(w >= 0.5f ? "+" + Loc.N0(w) + " " + Loc.T("km") : "—"); w1.AddToClassList("w"); r.Add(w1);
                     netRows.Add(r);
                 }
                 float rk = LineLayers.RoadKmInWork(y, s);
                 var rr = new VisualElement(); rr.AddToClassList("net-row"); rr.style.borderBottomWidth = 0;
-                var sw2 = new VisualElement(); sw2.AddToClassList("swatch"); sw2.style.backgroundColor = LineLayers.RoadWorkColor; rr.Add(sw2);
+                var sw2 = new VisualElement(); sw2.AddToClassList("w22-net-sw"); sw2.Add(BuildLegend.Dash(LineLayers.RoadWorkColor)); rr.Add(sw2);
                 var n2 = new Label(Loc.T("net_roads")); n2.AddToClassList("n"); rr.Add(n2);
                 var w2 = new Label(rk >= 0.5f ? "+" + Loc.N0(rk) + " " + Loc.T("km") : "—"); w2.AddToClassList("w"); rr.Add(w2);
-                netRows.Add(rr);
+                if (showRoads) netRows.Add(rr);
                 int ti = 0; while (ti < TwinData.TrafficYears.Length - 1 && TwinData.TrafficYears[ti] < y) ti++;
                 var kpi = TwinData.TrafficKpi[s][ti];
                 trafficNote.text = string.Format(Loc.T("c_traffic_note"), Loc.N0(total), Loc.N0(rk), TwinData.TrafficYears[ti],
@@ -218,6 +233,7 @@ namespace AlatauCity.DigitalTwin.Modules
                 int bid = site.Bid; r.AddManipulator(new Clickable(() => FocusBuilding(bid)));
                 worstList.Add(r);
             }
+            Glance.More(worstList, 4);
 
             // contractors ranking
             contractors.Clear();

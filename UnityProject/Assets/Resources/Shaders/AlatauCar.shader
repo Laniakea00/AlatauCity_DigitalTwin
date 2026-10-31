@@ -54,10 +54,10 @@ Shader "AlatauCity/Car"
             {
                 // car paint: the clear coat mirrors the sky (the ground below the horizon line, so the flanks darken towards the sill),
                 // more at grazing angles; a metallic flake gives back the sky in the paint's own tint
-                a = pc.rgb * IN.color.rgb; spec = 0.65;
+                a = min(pc.rgb * IN.color.rgb, float3(0.84, 0.84, 0.84)); spec = 0.65;
                 float lum = dot(a, float3(0.30, 0.59, 0.11));
-                emit = (sky * (0.03 + 0.62 * fres) + sky * a * (0.08 + 0.22 * lum)) * (1.0 - 0.6 * night);
-                a *= 0.86;
+                emit = (sky * (0.03 + 0.58 * fres) + sky * a * (0.16 - 0.08 * lum)) * (1.0 - 0.6 * night);
+                a *= 0.84;
             }
             else if (id > 0.7) { spec = 0.08; }
             else if (id > 0.5)

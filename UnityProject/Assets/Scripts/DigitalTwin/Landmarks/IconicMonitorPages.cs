@@ -19,7 +19,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
         // the sections; the index is what the recorded video asks for (VideoTab 0, 1, 2)
         const int TObj = 0, T4D = 1, TVid = 2, TInv = 3, TSurv = 4;
         static readonly (string icon, string name, int tab)[] Rail =
-            { ("house", "Объект", TObj), ("trending_up", "Контроль", TCtl), ("gauge", "Аналитика", TAn), ("triangle_alert", "Дефекты", TDef), ("history", "Съёмки", TSurv), ("box", "4D", T4D), ("video", "Видео", TVid), ("presentation", "Инвестору", TInv) };
+            { ("house", "Объект", TObj), ("trending_up", "Контроль", TCtl), ("receipt", "Смета", TAn), ("triangle_alert", "Дефекты", TDef), ("history", "Съёмки", TSurv), ("box", "4D", T4D), ("video", "Видео", TVid), ("presentation", "Инвестору", TInv) };
         static readonly string[] District = { "Gate District", "Golden District", "Growing District", "Green District" };
 
         VisualElement overlay, body, pin, top, gantt, track, strip, viewSw, dimSw, tools;
@@ -34,7 +34,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
         class GRow { public VisualElement Row, Bars; public Label Plan, Fact, Dev; public int W; }
         readonly List<GRow> grows = new List<GRow>(); readonly List<Label> axisLabels = new List<Label>();
         // investor
-        VisualElement inv, invChart, invTable; Label invNote;
+        VisualElement inv, invChart, invTable;
         readonly Label[] kCap = new Label[5], kVal = new Label[5], kSub = new Label[5];
         class IRow { public VisualElement Row, Bar, Mark; public Label Done, Due, Dev; public int I; }
         readonly List<IRow> irows = new List<IRow>();
@@ -53,7 +53,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             ui.BlockWhileHovered(overlay);
             var win = new VisualElement(); win.AddToClassList("mon-win"); overlay.Add(win);
             BuildHead(win);
-            BuildAnswers(win);                                  // the three answers of the investor over every page
+            // (the three answers of the investor are the four numbers of Контроль → Сводка now: one summary, not a strip on every page)
             var row = new VisualElement(); row.AddToClassList("mon-main"); win.Add(row);
             var rail = new VisualElement(); rail.AddToClassList("mon-rail"); row.Add(rail);
             foreach (var (icon, name, t) in Rail)
@@ -107,6 +107,8 @@ namespace AlatauCity.DigitalTwin.Landmarks
             BuildAnalytics();                                   // so does the analytics
             BuildDefects();                                     // the defects: columns and pins over the live model
             BuildControl();                                     // the investor control covers the whole page
+            BuildViewer();                                      // the document sheet: over any page (Сводка, Документы, Смета)
+            BuildDefMark();                                     // the pulsing mark of the selected defect over the picture
 
             (mid.parent ?? mid).Add(overlay);                 // the root of the interface: it carries the style sheet, the window covers the header too
             RebuildLists(); SetTab(tab); Refresh();
@@ -173,6 +175,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
         void SetTab(int t)
         {
             int was = tab; tab = t;
+            if (t != was) CloseDoc();
             for (int i = 0; i < railBtns.Count; i++) railBtns[i].EnableInClassList("on", Rail[i].tab == t);
             Vis(objL, t == TObj); Vis(objR, t == TObj); Vis(tools, t == TObj);
             Vis(svL, t == TSurv); Vis(svR, t == TSurv); Vis(svBar, t == TSurv); Vis(svTools, t == TSurv); Vis(svOver, t == TSurv);
@@ -208,7 +211,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
         {
             if (overlay == null || works.Count == 0) return;
             bool fc = date > Report + 0.002f;
-            headDate.text = (tab == TCtl ? "контроль на " : tab == TDef ? "дефекты на " : tab == TAn ? "аналитика на " : tab == TSurv ? "съёмка " : fc ? "прогноз на " : planMode ? "план на " : "факт на ") + Day(tab == TAn || tab == TCtl ? Report : date);
+            headDate.text = (tab == TCtl ? "контроль на " : tab == TDef ? "дефекты на " : tab == TAn ? "смета на " : tab == TSurv ? "съёмка " : fc ? "прогноз на " : planMode ? "план на " : "факт на ") + Day(tab == TAn || tab == TCtl ? Report : date);
             stripDate.text = Day(date);
             stripMode.text = planMode ? "показан план" : fc ? "прогноз после съёмки" : "факт по съёмке";
             playIcon.style.backgroundImage = new StyleBackground(Resources.Load<Texture2D>("UI/Icons/i_" + (playing ? "pause" : "play")));
@@ -266,7 +269,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 foreach (var cc in new[] { "ok", "warn", "bad" }) { r.Row.EnableInClassList(cc, cc == c); r.D.EnableInClassList(cc, cc == c); }
                 r.Row.EnableInClassList("sel", r.I == obj);
             }
-            if (pfNote != null) pfNote.text = "состояние на " + Day(date) + (date > Report + 0.002f ? " · прогноз после съёмки " + Day(Report) : " · по съёмке");
+            if (pfNote != null) { bool fc2 = date > Report + 0.002f; pfNote.text = fc2 ? string.Format("прогноз · последняя съёмка {0}", Day(Report)) : ""; Vis(pfNote, fc2); }
         }
         /// <summary>The lists that follow the building looked at: readiness by stages (4D), the stage columns over the timeline.</summary>
         void RebuildLists() { FillStages(); FillStg(); }
@@ -296,7 +299,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
         {
             int next = -1; float ne = float.MaxValue;
             for (int i = 0; i < L.Parts.Count; i++) { float fe = FactDate(i, 1f); if (fe > date + 0.001f && fe < ne) { ne = fe; next = i; } }
-            return next < 0 ? "комплекс введён" : "ввод: " + Pt(next).Name + " · " + IconicFloors.MonthYear(ne);
+            return next < 0 ? "комплекс введён" : Pt(next).Short + " · " + IconicFloors.MonthYear(ne);
         }
 
         // ================================================================== Объект
@@ -307,14 +310,16 @@ namespace AlatauCity.DigitalTwin.Landmarks
         void BuildObject()
         {
             var c = Card(objL);
-            Head(c, "building_2", L.Short);
-            var sub = new Label("Паспорт объекта") { pickingMode = PickingMode.Ignore }; sub.AddToClassList("mon-src"); sub.style.marginTop = 2; c.Add(sub);
+            Head(c, "building_2", "Паспорт · " + L.Short);
             string[] keys = { "Проект", "Заказчик", "Участники", "Площадка", "Локация", "Стадия", "Направление" };
-            for (int i = 0; i < keys.Length; i++) c.Add(FactRow(keys[i], out pasV[i]));
+            // the three facts that matter at a glance; the rest one click away
+            foreach (int i in new[] { 1, 3 }) c.Add(FactRow(keys[i], out pasV[i]));
+            var more = Widgets.Details(c, "Подробнее");                        // the stage is in «Мониторинг объекта» below
+            foreach (int i in new[] { 0, 2, 4, 6, 5 }) more.Add(FactRow(keys[i], out pasV[i]));
             pasV[0].text = L.Name; pasV[1].text = Customer(); pasV[2].text = Members(); pasV[3].text = Site();
             pasV[4].text = "Alatau City, Алматинская область"; pasV[6].text = L.Purpose;
 
-            var c2 = Card(objL); Head(c2, "calendar", "Плановый срок завершения");
+            var c2 = Card(objL); Head(c2, "calendar", "Завершение · прогноз");
             endBig = new Label { pickingMode = PickingMode.Ignore }; endBig.AddToClassList("mon-bignum"); c2.Add(endBig);
             endSub = Para(""); c2.Add(endSub);
             MonitorCard(objL);
@@ -322,7 +327,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             // right: the latest notifications of the site
             var r = Card(objR); Head(r, "bell", "Последние уведомления");
             noteList = new VisualElement(); r.Add(noteList); FillNotes();
-            var all = Widgets.Btn("Посмотреть все", () => SetTab(TVid), "small"); all.style.marginTop = 10; r.Add(all);
+            var all = Widgets.Btn("Все камеры", () => SetTab(TVid), "small"); all.style.marginTop = 10; r.Add(all);
 
             // the toolbar under the picture
             tools = new VisualElement(); tools.AddToClassList("mon-tools"); body.Add(tools);
@@ -358,8 +363,8 @@ namespace AlatauCity.DigitalTwin.Landmarks
             int worst = -1, wd = 3;
             for (int i = 0; i < L.Parts.Count; i++) { var o = Obj(i, Report); if (o.Fact > 0f && o.Fact < 0.999f && o.Days > wd) { wd = o.Days; worst = i; } }
             if (worst >= 0) { int k = worst; N(now.Date.AddHours(8).AddMinutes(25), "triangle_alert", "Отставание " + wd + " дн. · " + Pt(k).Name, "по съёмке " + Day(Report), new Color(0.96f, 0.65f, 0.14f), () => { SetTab(T4D); SelectObj(k, true); }); }
-            if (anCrew >= 0) { Sum(trades[anCrew], out int need, out int have); N(now.Date.AddHours(8).AddMinutes(40), "user_x", $"Не хватает {Loc.N0(need - have)} человек · {Pt(anCrew).Name}", "видеоаналитика · аналитика", new Color(0.96f, 0.65f, 0.14f), () => SetTab(TAn)); }
-            if (anTot.Over > 0f) N(now.Date.AddHours(8).AddMinutes(15), "wallet", $"Прогноз стоимости {SMln(anTot.Over)} к бюджету", NetOver > 0f ? "резерва не хватает · аналитика" : "в пределах резерва · аналитика", NetOver > 0f ? new Color(1f, 0.35f, 0.31f) : new Color(0.96f, 0.65f, 0.14f), () => SetTab(TAn));
+            if (anCrew >= 0) { Sum(trades[anCrew], out int need, out int have); N(now.Date.AddHours(8).AddMinutes(40), "user_x", $"Не хватает {Loc.N0(need - have)} человек · {Pt(anCrew).Name}", "видеоаналитика", new Color(0.96f, 0.65f, 0.14f), () => CtlView(2)); }
+            if (anTot.Over > 0f) N(now.Date.AddHours(8).AddMinutes(15), "wallet", $"Прогноз стоимости {SMln(anTot.Over)} к бюджету", NetOver > 0f ? "резерва не хватает · смета" : "в пределах резерва · смета", NetOver > 0f ? new Color(1f, 0.35f, 0.31f) : new Color(0.96f, 0.65f, 0.14f), () => AnView(1));
             N(now.Date.AddHours(8).AddMinutes(10), "history", "Загружена съёмка " + Day(Report), "ортофотоплан и 3D-модель площадки", Blue, () => SetTab(TSurv));
         }
         void OpenCam(int i) { SetTab(TVid); camIx = i; camYawOff = camPitchOff = 0f; camFov = 58f; view = View.Cam; crewSeen = -1; SetTab(TVid); }
@@ -369,8 +374,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             var c = Card(parent); Head(c, "scan_eye", "Мониторинг объекта");
             var m = new MonCard();
             c.Add(FactRow("Последняя съёмка", out m.Last)); c.Add(FactRow("Текущий этап", out m.Stage));
-            c.Add(FactRow("Следующая контрольная точка", out m.Next)); c.Add(FactRow("Следующая съёмка", out m.NextSv));
-            c.Add(Para("В разделе «Съёмки» можно сравнить объект по датам съёмок, план и факт."));
+            c.Add(FactRow("Следующий ввод", out m.Next)); c.Add(FactRow("Следующая съёмка", out m.NextSv));
             monCards.Add(m);
         }
         void RefreshMonCards()
@@ -384,8 +388,8 @@ namespace AlatauCity.DigitalTwin.Landmarks
             pasV[5].text = "Строительство · " + StageNow(obj);
             int last = 0; for (int i = 1; i < os.Length; i++) if (os[i].FactEnd > os[last].FactEnd) last = i;
             int ld = Mathf.RoundToInt((os[last].FactEnd - L.Finish) * 365f);
-            endBig.text = Mathf.FloorToInt(L.Finish) + " год";
-            endSub.text = "План — " + IconicFloors.MonthYear(L.Finish) + " · прогноз по съёмке — " + IconicFloors.MonthYear(os[last].FactEnd) + " (" + EndDev(ld) + ")";
+            endBig.text = IconicFloors.MonthYear(os[last].FactEnd);
+            endSub.text = string.Format("по плану {0} · {1}", IconicFloors.MonthYear(L.Finish), EndDev(ld));
             endSub.EnableInClassList("warn", ld > 3);
         }
 
@@ -395,6 +399,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
         bool svPlan = false, lyBase = true, lyBim = true, lyGcp = true, lyDiff = true;
         VisualElement cmpClip, cmpDiv, svOver, svBar, svTools, chrono, chronoList, lyList, zoneChart, chgList;
         Image photoB; Label chipL, chipR, chipA, chipB, attrib, lyText, zoneTitle, zP, zF, zD, chgSub, chronoText;
+        Label svHead, svBig, svSub, svStage, svNext, svGsd;
         readonly List<Button> lyBtns = new List<Button>(); readonly List<Button> svToolBtns = new List<Button>();
         bool pickB;
         Camera mon2; RenderTexture monRT2;
@@ -436,16 +441,24 @@ namespace AlatauCity.DigitalTwin.Landmarks
             var lh = new Button(() => Vis(lyList, lyList.style.display == DisplayStyle.None)) { focusable = false }; lh.AddToClassList("mon-drop");
             lh.Add(TwinUI.Icon("layers", 16)); lyText = new Label { pickingMode = PickingMode.Ignore }; lyText.AddToClassList("mon-title"); lh.Add(lyText);
             var lsp = new VisualElement { pickingMode = PickingMode.Ignore }; lsp.style.flexGrow = 1; lh.Add(lsp); lh.Add(TwinUI.Icon("chevron_down", 14)); lc.Add(lh);
-            lyList = new VisualElement(); lyList.style.marginTop = 6; lc.Add(lyList);
+            lyList = new VisualElement(); lyList.style.marginTop = 6; lyList.style.display = DisplayStyle.None; lc.Add(lyList);   // folded: the picture first
             Layer("Ортофотоплан и город", () => lyBase, v => lyBase = v);
             Layer("BIM-контуры зданий", () => lyBim, v => lyBim = v);
             Layer("Контрольные точки (GCP)", () => lyGcp, v => lyGcp = v);
             Layer("Прирост над зданиями", () => lyDiff, v => lyDiff = v);
-            MonitorCard(svL);
+            // the answer of the page: how much the complex grew since the survey before (the facts of «Объект» are not repeated here)
+            var ac = Card(svL); svHead = Head(ac, "history", "Прирост за период");
+            svBig = new Label { pickingMode = PickingMode.Ignore }; svBig.AddToClassList("w21-hero"); ac.Add(svBig);
+            svSub = new Label { pickingMode = PickingMode.Ignore }; svSub.AddToClassList("w21-line"); ac.Add(svSub);
+            var sm = Widgets.Details(ac, "О съёмке");
+            sm.Add(FactRow("Текущий этап", out svStage)); sm.Add(FactRow("Следующая съёмка", out svNext)); sm.Add(FactRow("Разрешение", out svGsd));
+            var sn = new Label("Съёмка с дрона: ортофотоплан и 3D-модель площадки. Готовность сверяется с BIM-моделью и графиком работ.") { pickingMode = PickingMode.Ignore };
+            sn.AddToClassList("w17-note"); sm.Add(sn);
+            ac.Add(SourceTags.Line(SrcMon));
             var zc = Card(svL);
             zoneTitle = Head(zc, "chart_line", "Прогресс зоны");
             var tiles = new VisualElement(); tiles.AddToClassList("mon-ztiles"); zc.Add(tiles);
-            zP = ZTile(tiles, "План"); zF = ZTile(tiles, "Факт"); zD = ZTile(tiles, "Откл.");
+            zP = ZTile(tiles, "План"); zF = ZTile(tiles, "Факт"); zD = ZTile(tiles, "Разница");
             zoneChart = new VisualElement(); zoneChart.AddToClassList("mon-chart"); zoneChart.generateVisualContent += DrawZone; zc.Add(zoneChart);
             var leg = new VisualElement(); leg.AddToClassList("mon-legend");
             leg.Add(new Label("- - План") { pickingMode = PickingMode.Ignore });
@@ -548,7 +561,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             chipA.text = Day(surveys[svA]) + "  текущий";
             chipB.text = svB >= 0 ? Day(surveys[svB]) : svDiff && svA > 0 ? Day(surveys[svA - 1]) + " · предыдущая" : "Выберите дату";
             chronoText.text = "Хронология съёмок · " + surveys.Count;
-            attrib.text = "Ортофотоплан " + Day(surveys[svA]) + (svB >= 0 ? " и " + Day(surveys[svB]) : "") + " · " + Loc.N1(Gsd(svA)) + " см/пикс · сценарий двойника";
+            attrib.text = string.Format("{0}\u00A0см/пикс", Loc.N1(Gsd(svA)));          // the dates are on the chips, the scenario in the header
             // the zone: the building looked at, else the tower
             int z = obj >= 0 ? obj : TI; float pp = PlanP(z, date), fp = FactP(z, date), d = (fp - pp) * 100f;
             zoneTitle.text = "Прогресс зоны · " + Pt(z).Name;
@@ -558,7 +571,17 @@ namespace AlatauCity.DigitalTwin.Landmarks
             // changes: from the compared survey (or the one before) to the one shown
             float dA = surveys[svA], dB = svB >= 0 ? surveys[svB] : svA > 0 ? surveys[svA - 1] : dA;
             float d0 = Mathf.Min(dA, dB), d1 = Mathf.Max(dA, dB);
-            chgSub.text = Day(d0) + " → " + Day(d1) + (svB < 0 ? " · с предыдущей съёмкой" : "");
+            chgSub.text = Day(d0) + " → " + Day(d1);
+            // the answer card: the growth of the complex between the two surveys
+            if (svBig != null)
+            {
+                float r0 = Ready(d0, true), r1 = Ready(d1, true), gr = (r1 - r0) * 100f; int months = Mathf.Max(1, Mathf.RoundToInt((d1 - d0) * 12f));
+                svHead.text = d1 > d0 ? string.Format("Прирост за {0} мес.", months) : "Первая съёмка";
+                svBig.text = d1 > d0 ? (gr >= 0.05f ? "+" : "") + Loc.N1(gr) + "\u00A0п.п." : Pct(r1);
+                svBig.EnableInClassList("ok", d1 > d0 && gr >= 0.05f);
+                svSub.text = string.Format("готовность комплекса {0} → {1}", Pct(r0), Pct(r1));
+                svStage.text = StageNow(obj); svNext.text = Day(LastSurvey(date) + 2f / 12f); svGsd.text = string.Format("{0}\u00A0см/пикс", Loc.N1(Gsd(svA)));
+            }
             chgList.Clear();
             var th = new VisualElement(); th.AddToClassList("mon-tr"); th.AddToClassList("mon-th"); chgList.Add(th);
             foreach (var (c, cls) in new[] { ("Объект", "w"), ("Было", "n"), ("Стало", "n"), ("Прирост", "d") }) th.Add(Cell(c, cls));
@@ -589,7 +612,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             if (i == TI)
             {
                 int f0 = Count(a, IconicFloors.PFacade), f1 = Count(b, IconicFloors.PFacade), g0 = Count(a, IconicFloors.PFacade + 1), g1 = Count(b, IconicFloors.PFacade + 1);
-                if (f1 > f0 || g1 > g0) return (f1 > f0 ? "каркас +" + (f1 - f0) + " эт. (" + f1 + " из " + IconicShape.Floors + ")" : "каркас завершён") + (g1 > g0 ? " · фасад +" + (g1 - g0) + " эт." : "");
+                if (f1 > f0 || g1 > g0) return (f1 > f0 ? string.Format("каркас +{0}\u00A0эт.", f1 - f0) : "каркас завершён") + (g1 > g0 ? string.Format(" · фасад +{0}\u00A0эт.", g1 - g0) : "");
             }
             string now = null; float best = -1f;
             foreach (var w in works) { if (w.Sum || w.Part != i) continue; float q = Mathf.Clamp01((b - w.A) / (w.B - w.A)); if (q > 0f && q < 0.999f && w.B > best) { best = w.B; now = w.Name.ToLower(); } }
@@ -917,6 +940,8 @@ namespace AlatauCity.DigitalTwin.Landmarks
         // ================================================================== 4D
         bool d4Plan, d4Base, wireOn = true, ganttOn;
         VisualElement stList, stg, stgRow, optBody; Label stTitle; Button ganttBtn;
+        Label d4Head, d4Big, d4Dev, d4Sub, d4Peak; Button stMore; bool stAll;
+        OS[] CurOS() { var os = new OS[L.Parts.Count]; for (int i = 0; i < os.Length; i++) os[i] = Obj(i, date); return os; }
         readonly Label[] kpV = new Label[6], kpS = new Label[6], kpC = new Label[6];
         class Tile { public Button B; public Label P; public VisualElement Dot; public int I; }
         readonly List<Tile> tileRows = new List<Tile>();
@@ -926,23 +951,19 @@ namespace AlatauCity.DigitalTwin.Landmarks
         readonly List<PRow> prows = new List<PRow>(); Label pfNote;
         void Build4D()
         {
-            var c = Card(d4L); Head(c, "box", L.Short + " · BIM 4D");
-            c.Add(FactRow("Заказчик", out var a)); a.text = Customer();
-            c.Add(FactRow("Площадка", out var b)); b.text = Site();
-            c.Add(FactRow("Шифр", out var s)); s.text = "AC-" + District[Mathf.Clamp(L.District, 0, 3)].Substring(0, 2).ToUpper() + "-" + L.Id.ToUpper() + "-4D";
-            c.Add(FactRow("Генплан", out var g)); g.text = "мастер-план Alatau City";
-            var n = new Label("шифр, график и численность — сценарий цифрового двойника") { pickingMode = PickingMode.Ignore }; n.AddToClassList("mon-src"); n.style.marginTop = 6; c.Add(n);
-            // the buildings as tiles
-            var tc = Card(d4L); var tg = new VisualElement(); tg.AddToClassList("mon-tiles"); tc.Add(tg);
-            for (int i = -1; i < L.Parts.Count; i++)
-            {
-                int k = i; var t = new Tile { I = i, B = new Button(() => SelectObj(k, true)) { focusable = false } }; t.B.AddToClassList("mon-tile"); tg.Add(t.B);
-                var tr = new VisualElement { pickingMode = PickingMode.Ignore }; tr.AddToClassList("mon-row"); t.B.Add(tr);
-                t.Dot = Widgets.Dot(Color.gray, true); tr.Add(t.Dot);
-                var nm = new Label(i < 0 ? "Весь комплекс" : Pt(i).Short) { pickingMode = PickingMode.Ignore }; nm.AddToClassList("mon-tile-n"); tr.Add(nm);
-                t.P = new Label { pickingMode = PickingMode.Ignore }; t.P.AddToClassList("mon-tile-p"); t.B.Add(t.P);
-                tileRows.Add(t);
-            }
+            // the answer: how ready the complex (or the building looked at) is against the plan; the buildings are chosen in the bar
+            // over the picture and in «План / факт», so no third set of tiles here
+            var c = Card(d4L); d4Head = Head(c, "box", "Готовность");
+            var hr = new VisualElement { pickingMode = PickingMode.Ignore }; hr.AddToClassList("w21-hero-r"); c.Add(hr);
+            d4Big = new Label { pickingMode = PickingMode.Ignore }; d4Big.AddToClassList("w21-hero"); hr.Add(d4Big);
+            d4Dev = new Label { pickingMode = PickingMode.Ignore }; d4Dev.AddToClassList("w21-hero-d"); hr.Add(d4Dev);
+            d4Sub = new Label { pickingMode = PickingMode.Ignore }; d4Sub.AddToClassList("w21-line"); c.Add(d4Sub);
+            var d4More = Widgets.Details(c, "Как считается");
+            d4More.Add(FactRow("Шифр модели", out var s)); s.text = "AC-" + District[Mathf.Clamp(L.District, 0, 3)].Substring(0, 2).ToUpper() + "-" + L.Id.ToUpper() + "-4D";
+            d4More.Add(FactRow("Пик численности", out d4Peak));
+            var hw = new Label("Готовность комплекса взвешена по бюджетам объектов. Факт — по последней съёмке, после неё — прогноз по темпу работ.") { pickingMode = PickingMode.Ignore };
+            hw.AddToClassList("w17-note"); d4More.Add(hw);
+            c.Add(SourceTags.Line(SrcMon));
             // how the model is shown (folds)
             var oc = Card(d4L);
             var oh = new Button(() => Vis(optBody, optBody.style.display == DisplayStyle.None)) { focusable = false }; oh.AddToClassList("mon-drop");
@@ -952,25 +973,27 @@ namespace AlatauCity.DigitalTwin.Landmarks
             Toggle4(optBody, "Проектируемое (каркас BIM)", () => wireOn, v => wireOn = v);
             Toggle4(optBody, "Город вокруг", () => d4Base, v => d4Base = v);
             // readiness by stages of the building looked at
-            var sc = Card(d4L); stTitle = Head(sc, "list_checks", "Готовность по этапам");
+            // the stages are the strip over the timeline (one place for them on the screen); the list stays built for the PDF report
+            var sc = Card(d4L); sc.style.display = DisplayStyle.None; stTitle = Head(sc, "list_checks", "Готовность по этапам");
             stList = new VisualElement(); stList.style.marginTop = 4; sc.Add(stList);
+            stMore = Widgets.Btn("", () => { stAll = !stAll; FillStages(); Refresh4D(CurOS()); }, "small", "ghost"); stMore.AddToClassList("w21-more"); sc.Add(stMore);
 
             // right: the schedule with the crew, the KPI tiles, plan and actual by buildings
             ganttBtn = new Button(() => { ganttOn = !ganttOn; SetTab(tab); }) { focusable = false }; ganttBtn.AddToClassList("mon-wide");
             ganttBtn.Add(TwinUI.Icon("gantt_chart", 16)); ganttBtn.Add(new Label("График работ и численность") { pickingMode = PickingMode.Ignore }); d4R.Add(ganttBtn);
             var kg = new VisualElement(); kg.AddToClassList("mon-kgrid"); d4R.Add(kg);
-            for (int i = 0; i < 6; i++)
+            foreach (int i in new[] { 2, 3, 0 })              // on the site now, concrete, the term; the status is the answer on the left
             {
-                var t = new VisualElement { pickingMode = PickingMode.Ignore }; t.AddToClassList("mon-kt"); kg.Add(t);
+                var t = new VisualElement { pickingMode = PickingMode.Ignore }; t.AddToClassList("mon-kt"); t.AddToClassList("w21-kt"); kg.Add(t);
                 kpC[i] = new Label { pickingMode = PickingMode.Ignore }; kpC[i].AddToClassList("mon-inv-cap"); t.Add(kpC[i]);
                 kpV[i] = new Label { pickingMode = PickingMode.Ignore }; kpV[i].AddToClassList("mon-kt-v"); t.Add(kpV[i]);
                 kpS[i] = new Label { pickingMode = PickingMode.Ignore }; kpS[i].AddToClassList("mon-inv-sub"); t.Add(kpS[i]);
             }
-            var pc = Card(d4R); Head(pc, "chart_line", "План / факт");
+            var pc = Card(d4R); Head(pc, "chart_line", "План и факт по объектам");
             pfNote = new Label { pickingMode = PickingMode.Ignore }; pfNote.AddToClassList("mon-src"); pfNote.style.marginTop = 2; pc.Add(pfNote);
             var tb = new VisualElement(); tb.AddToClassList("mon-table"); pc.Add(tb);
             var th = new VisualElement(); th.AddToClassList("mon-tr"); th.AddToClassList("mon-th"); tb.Add(th);
-            foreach (var (cc, cls) in new[] { ("Объект", "w"), ("План", "n"), ("Факт", "n"), ("Откл.", "d") }) th.Add(Cell(cc, cls));
+            foreach (var (cc, cls) in new[] { ("Объект", "w"), ("План", "n"), ("Факт", "n"), ("Разница", "d") }) th.Add(Cell(cc, cls));
             for (int i = 0; i < L.Parts.Count; i++)
             {
                 int k = i; var pr = new PRow { I = i };
@@ -1001,9 +1024,20 @@ namespace AlatauCity.DigitalTwin.Landmarks
         {
             if (stList == null) return;
             stList.Clear(); stRows.Clear();
-            stTitle.text = obj < 0 ? "Готовность по объектам" : "Готовность по этапам · " + Pt(obj).Short;
-            foreach (int k in vis)
+            stTitle.text = obj < 0 ? "Готовность по объектам" : "Сейчас в работе · " + Pt(obj).Short;
+            // the works going on first, then the ones ahead, the finished ones last: the list answers «what is being built now»
+            var order = new List<int>(vis);
+            int Rank(int k) { var st0 = Stat(works[k], date); float f0 = planMode ? st0.Plan : st0.Fact; return f0 >= 0.999f ? 2 : f0 > 0f ? 0 : 1; }
+            order.Sort((a, b) => { int ra = Rank(a), rb = Rank(b); return ra != rb ? ra.CompareTo(rb) : vis.IndexOf(a).CompareTo(vis.IndexOf(b)); });
+            int shown = stAll ? order.Count : Mathf.Min(5, order.Count);
+            if (stMore != null)
             {
+                Vis(stMore, order.Count > 5);
+                stMore.text = stAll ? "Свернуть" : string.Format("Ещё {0} ›", order.Count - 5);
+            }
+            for (int oi = 0; oi < shown; oi++)
+            {
+                int k = order[oi];
                 var w = works[k]; var sr = new StRow { W = k };
                 var r = new VisualElement(); r.AddToClassList("mon-st"); stList.Add(r); sr.Row = r;
                 r.RegisterCallback<ClickEvent>(_ => { if (works[k].Sum) SelectObj(works[k].Part, true); else Select(k, true); });
@@ -1054,16 +1088,24 @@ namespace AlatauCity.DigitalTwin.Landmarks
             float crew = Crew(date, fact); int machines = Mathf.RoundToInt(crew / 42f) + (crew > 1f ? 2 : 0);
             float conc = 0f, concDone = 0f; for (int i = 0; i < L.Parts.Count; i++) { conc += Concrete(Pt(i)); concDone += Concrete(Pt(i)) * Mathf.Clamp01(((fact ? FactP(i, date) : PlanP(i, date)) - 0.03f) / 0.67f); }
             float dpp = obj >= 0 ? (os[obj].Fact - os[obj].Plan) * 100f : (rf - rp) * 100f;
-            KT(0, "Срок СМР", Loc.N0(Mathf.RoundToInt((L.Finish - L.Begin) * 365f)) + " дн.", IconicFloors.MonthYear(L.Begin) + " – " + IconicFloors.MonthYear(L.Finish), "");
-            KT(1, "Пиковая численность", Loc.N0(CrewPeak()) + " чел", "по графику работ", "");
-            KT(2, "На площадке", Loc.N0(crew) + " чел", machines + " ед. техники · " + Day(date), "");
-            KT(3, "Бетон", Loc.N0(concDone) + " м³", "из " + Loc.N0(conc) + " м³ по проекту", "");
-            KT(4, "Факт по съёмке", Pct(Ready(Report, true)), "готовность комплекса на " + Day(Report), "");
-            KT(5, obj >= 0 ? "Статус · " + Pt(obj).Short : "Статус комплекса", Signed(dpp), dpp < -0.2f ? "отставание от плана" : dpp > 0.2f ? "опережение плана" : "в графике", dpp < -1f ? "bad" : dpp < -0.2f ? "warn" : "ok");
+            KT(0, "Срок работ", string.Format("{0}\u00A0мес.", Mathf.RoundToInt((L.Finish - L.Begin) * 12f)), string.Format("до {0}", IconicFloors.MonthYear(L.Finish)), "");
+            if (d4Peak != null) d4Peak.text = string.Format("{0}\u00A0чел · по графику", Loc.N0(CrewPeak()));
+            KT(2, "На площадке", Loc.N0(crew) + "\u00A0чел", string.Format("{0} ед. техники", machines), "");
+            KT(3, "Бетон, тыс. м³", Loc.N0(concDone / 1000f), string.Format("из {0}", Loc.N0(conc / 1000f)), "");
+            // the answer card: readiness (fact or plan) and the gap to the plan in one coloured word
+            // always the complex: the buildings are in «План и факт по объектам» right beside it
+            float fNow = planMode ? rp : rf, pNow = rp; dpp = (rf - rp) * 100f;
+            d4Head.text = "Готовность комплекса";
+            d4Big.text = Pct(fNow);
+            string dc = planMode ? "" : dpp < -1f ? "bad" : dpp < -0.2f ? "warn" : "ok";
+            d4Dev.text = planMode ? "по плану" : dpp < -0.2f ? string.Format("отстаёт на {0}", Signed(-dpp).Substring(1)) : dpp > 0.2f ? string.Format("опережает на {0}", Signed(dpp).Substring(1)) : "в графике";
+            foreach (var cc in new[] { "ok", "warn", "bad" }) d4Dev.EnableInClassList(cc, cc == dc);
+            d4Sub.text = planMode ? "" : date > Report + 0.002f ? string.Format("план {0} · прогноз", Pct(pNow)) : string.Format("по плану {0}", Pct(pNow));       // the date is in the header
             ganttBtn.EnableInClassList("on", ganttOn);
         }
         void KT(int i, string cap, string val, string sub, string cls)
         {
+            if (kpC[i] == null) return;
             kpC[i].text = cap; kpV[i].text = val; kpS[i].text = sub;
             foreach (var c in new[] { "ok", "warn", "bad" }) kpV[i].EnableInClassList(c, c == cls);
             kpV[i].parent.EnableInClassList("bad", cls == "bad");
@@ -1093,7 +1135,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             var side = new VisualElement(); side.AddToClassList("mon-vid-side"); vidPage.Add(side);
             Side(side, "bell", "Все события", () => VidGroup(0), -1);
             var gh = new VisualElement { pickingMode = PickingMode.Ignore }; gh.AddToClassList("mon-vid-gh"); side.Add(gh);
-            gh.Add(new Label("ГРУППЫ КАМЕР") { pickingMode = PickingMode.Ignore }); var gs = new VisualElement { pickingMode = PickingMode.Ignore }; gs.style.flexGrow = 1; gh.Add(gs); gh.Add(TwinUI.Icon("plus", 14));
+            gh.Add(new Label("ГРУППЫ КАМЕР") { pickingMode = PickingMode.Ignore });
             Side(side, "layout_grid", "Главная", () => VidGroup(0), 0);
             Side(side, "building_2", "Башня", () => VidGroup(1), 1);
             Side(side, "map", "Площадка", () => VidGroup(2), 2);
@@ -1104,15 +1146,15 @@ namespace AlatauCity.DigitalTwin.Landmarks
             Side(side, "settings", "Настройка", () => VidInfo("Настройка аналитики: зоны контроля касок и жилетов, линии подсчёта техники на КПП, опасные зоны под кранами."), -4);
             var mainV = new VisualElement(); mainV.AddToClassList("mon-vid-main"); vidPage.Add(mainV);
             var ev = new VisualElement(); ev.AddToClassList("mon-vid-ev"); mainV.Add(ev);
-            var eh = new VisualElement { pickingMode = PickingMode.Ignore }; eh.AddToClassList("mon-row"); ev.Add(eh);
-            eh.Add(TwinUI.Icon("scan_eye", 16)); var et = new Label("Последние события") { pickingMode = PickingMode.Ignore }; et.AddToClassList("mon-title"); eh.Add(et);
+            // the answer first: all cameras work and what the analytics saw lately (three events, the camera named on its tile)
+            var eh = new VisualElement { pickingMode = PickingMode.Ignore }; eh.AddToClassList("mon-row"); eh.AddToClassList("w21-vid-h"); ev.Add(eh);
+            eh.Add(Widgets.Dot(Green, true)); var et = new Label("6 из 6 камер на связи") { pickingMode = PickingMode.Ignore }; et.AddToClassList("w21-answer"); eh.Add(et);
             var esp = new VisualElement { pickingMode = PickingMode.Ignore }; esp.style.flexGrow = 1; eh.Add(esp);
-            var on = new Label("6 из 6 камер онлайн · ИИ-видеоаналитика") { pickingMode = PickingMode.Ignore }; on.AddToClassList("note"); eh.Add(on);
+            var on = new Label("видеоаналитика: каски, техника, опасные зоны") { pickingMode = PickingMode.Ignore }; on.AddToClassList("w21-meta"); eh.Add(on);
             var now = DateTime.Now;
-            Ev(ev, now.AddMinutes(-4).ToString("HH:mm"), "CAM-05", "Въезд бетоновоза: 6-я машина за смену, разгрузка на площадке Б", Blue);
-            Ev(ev, now.AddMinutes(-23).ToString("HH:mm"), "CAM-04", "Монтаж модулей витража: 4 модуля за час, норма — 5", Orange);
-            Ev(ev, now.AddMinutes(-49).ToString("HH:mm"), "CAM-07", "Работа у края плиты без страховки — прораб уведомлён, закрыто", Orange);
-            Ev(ev, now.AddMinutes(-71).ToString("HH:mm"), "CAM-01", "Все в касках и жилетах, опасных зон под краном не занято", Green);
+            Ev(ev, now.AddMinutes(-4).ToString("HH:mm"), "CAM-05", "Бетоновоз на въезде · 6-я машина за смену", Blue);
+            Ev(ev, now.AddMinutes(-23).ToString("HH:mm"), "CAM-04", "Витраж: 4 модуля за час при норме 5", Orange);
+            Ev(ev, now.AddMinutes(-49).ToString("HH:mm"), "CAM-07", "Работа у края плиты без страховки · устранено", Orange);
             vidInfo = new Label { pickingMode = PickingMode.Ignore }; vidInfo.AddToClassList("mon-vid-info"); mainV.Add(vidInfo);
             vidGrid = new VisualElement(); vidGrid.AddToClassList("mon-vid-grid"); mainV.Add(vidGrid);
             foreach (int i in CamOrder)

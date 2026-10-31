@@ -1,10 +1,10 @@
 // The living city of the film look, drawn in instanced batches by FilmLife.cs: people (walk cycle in the vertex shader), flags
-// (cloth waving in the wind) and birds (flapping wings). No skinned meshes, no textures except the flag's own.
-// _LifeKind (per material): 0 people, 1 flag cloth (texture), 2 bird, 3 plain coloured parts (poles), 4 flag cloth in two colours.
+// (cloth waving in the wind) and birds (flapping wings). No skinned meshes, no textures except the flags' atlas.
+// _LifeKind (per material): 0 people, 1 flag cloth (a cell of the atlas), 2 bird, 3 plain coloured parts (poles), 4 flag cloth in two colours.
 // Per instance: _LifeA, _LifeB, _LifeC (meaning by kind, see below). The project is in gamma colour space: colours are display values.
 Shader "AlatauCity/Life"
 {
-    Properties { _MainTex ("Flag", 2D) = "white" {} _LifeKind ("Kind", Float) = 0 }
+    Properties { _MainTex ("Flags", 2D) = "white" {} _LifeKind ("Kind", Float) = 0 }
     SubShader
     {
         Tags { "RenderType" = "Opaque" "Queue" = "Geometry" }
@@ -19,7 +19,7 @@ Shader "AlatauCity/Life"
             UNITY_DEFINE_INSTANCED_PROP(float4, _LifeB)
             UNITY_DEFINE_INSTANCED_PROP(float4, _LifeC)
         UNITY_INSTANCING_BUFFER_END(Props)
-        struct Input { float4 color : COLOR; float2 lifeUV; float4 top; float4 bot; float fade; float4 sPos; };
+        struct Input { float4 color : COLOR; float2 lifeUV; float4 top; float4 bot; float fade; float4 sPos; float side; };
 
         // people: colour.r = part (0 skin, 1 hair, 2 top, 3 bottom, 4 shoes, 5 bag); uv.x = limb (0 none, 1/2 left/right leg, 3/4 left/right arm),
         // uv.y = height of its pivot (hip, shoulder). _LifeA = (walk 0..1, phase, steps per second × 2π, fade), _LifeB = top colour + skin tone,
@@ -39,7 +39,8 @@ Shader "AlatauCity/Life"
             // the body bobs twice a stride
             v.vertex.y += A.x * 0.025 * abs(cos(ph));
         }
-        // flag: uv.x 0 at the pole .. 1 at the fly end, uv.y 0 bottom .. 1 top; _LifeA = (size, phase, wind 0..1, -)
+        // flag: uv.x 0 at the pole .. 1 at the fly end, uv.y 0 bottom .. 1 top; _LifeA = (size, phase, wind 0..1, two-ply 0/1);
+        // kind 1: _LifeB = its cell of the atlas (uv offset xy, size zw)
         void Flag(inout appdata_full v, float4 A)
         {
             float u = v.texcoord.x, t = _Time.y * (2.6 + 1.6 * A.z) + A.y;
@@ -69,6 +70,8 @@ Shader "AlatauCity/Life"
             else if (_LifeKind < 1.5 || _LifeKind > 3.5) Flag(v, A);
             else if (_LifeKind < 2.5) Bird(v, A);
             o.lifeUV = v.texcoord.xy;
+            // a two-ply cloth (the logo with its text) reads the right way from the back too: which side the camera is on
+            o.side = A.w > 0.5 && _LifeKind > 0.5 && _LifeKind < 1.5 ? dot(UnityObjectToWorldNormal(v.normal), _WorldSpaceCameraPos - mul(unity_ObjectToWorld, v.vertex).xyz) : -1.0;
             o.sPos = ComputeScreenPos(UnityObjectToClipPos(v.vertex));       // not the built-in screenPos: that breaks the generated shadow pass
         }
         half4 LightingLife(SurfaceOutput s, half3 lightDir, half atten)
@@ -79,6 +82,8 @@ Shader "AlatauCity/Life"
         }
         void surf(Input IN, inout SurfaceOutput o)
         {
+            // the flag's cell of the atlas: its derivatives first, before any branch (the same both ways round)
+            float2 fuv = IN.lifeUV * IN.top.zw, fdx = ddx(fuv), fdy = ddy(fuv);
             // fade in and out without blending: an ordered dither (people at the end of their path, at the edge of the drawn range)
             float2 sp = IN.sPos.xy / max(IN.sPos.w, 1e-4) * _ScreenParams.xy;
             float dither = frac(dot(floor(sp), float2(0.0625, 0.25)) + frac(floor(sp.y) * 0.5) * 0.5);
@@ -91,7 +96,7 @@ Shader "AlatauCity/Life"
                 float3 hair = lerp(float3(0.08, 0.06, 0.05), float3(0.42, 0.30, 0.20), IN.bot.w);
                 c = part < 0.5 ? skin : part < 1.5 ? hair : part < 2.5 ? IN.top.rgb : part < 3.5 ? IN.bot.rgb : part < 4.5 ? float3(0.10, 0.10, 0.11) : part < 5.5 ? IN.bot.rgb * 0.6 : float3(0.16, 0.16, 0.16);
             }
-            else if (_LifeKind < 1.5) c = tex2D(_MainTex, IN.lifeUV).rgb;
+            else if (_LifeKind < 1.5) c = tex2Dgrad(_MainTex, IN.top.xy + float2(IN.side > 0.0 ? 1.0 - IN.lifeUV.x : IN.lifeUV.x, IN.lifeUV.y) * IN.top.zw, fdx, fdy).rgb;
             else if (_LifeKind > 3.5) c = IN.lifeUV.y > 0.5 ? IN.top.rgb : IN.bot.rgb;
             else if (_LifeKind > 2.5) c = IN.top.rgb;
             else c = float3(0.30, 0.31, 0.33);

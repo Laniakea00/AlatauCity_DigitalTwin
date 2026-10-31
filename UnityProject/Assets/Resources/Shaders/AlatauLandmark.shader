@@ -81,7 +81,10 @@ Shader "AlatauCity/Landmark"
             if (win.y <= win.x + 1e-4) return;
             float q = saturate((pw - win.x) / (win.y - win.x));
             float h0 = win.z, h1 = win.w;
-            if (q <= 0.0) { rev = -1000.0; bld = 1.0; lnd = 0.0; }
+            // a ground piece (y1 < y0, the Iconic plaza and plot): an earth site from the start of the works, paved or grassed at the
+            // end of its window; the BIM look lays it only once its window opens
+            if (h1 < h0) { rev = _AlatauBim > 0.5 && q <= 0.0 ? -1000.0 : 100000.0; bld = q < 0.999 ? 1.0 : 0.0; fcd = 100000.0; lnd = saturate((q - 0.8) / 0.2); }
+            else if (q <= 0.0) { rev = -1000.0; bld = 1.0; lnd = 0.0; }
             else if (q >= 0.999) { rev = 100000.0; bld = 0.0; fcd = 100000.0; lnd = 1.0; }
             else if (treeTag) { rev = 100000.0; bld = 1.0; lnd = q; }       // trees: planted one by one over the window
             else { rev = max(h0 + (h1 - h0) * saturate(q / 0.6), h0 + 0.6); bld = 1.0; fcd = h0 + (h1 - h0) * saturate((q - 0.3) / 0.6); lnd = saturate((q - 0.8) / 0.2); }

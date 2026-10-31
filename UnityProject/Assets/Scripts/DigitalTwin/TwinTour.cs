@@ -46,7 +46,7 @@ namespace AlatauCity.DigitalTwin
         static void Boot() { if (Instance == null) new GameObject("Twin tour").AddComponent<TwinTour>(); }
         void Awake() { Instance = this; }
 
-        public static void Toggle() { if (Instance == null) return; if (Instance.running) Instance.Stop(); else Instance.Begin(); }
+        public static void Toggle() { if (Instance == null) return; if (Instance.running) Instance.Stop(); else Instance.PitchMenu(); }   // w26: the choice tour / pitches (TwinPitch.cs)
 
         // ------------------------------------------------------------------ video mode (F6)
         // The investor video in English (3:18): 15 scenes cut to the ElevenLabs voice-over in Resources/Video. Each scene is a tour step
@@ -63,7 +63,7 @@ namespace AlatauCity.DigitalTwin
         // (tour step or a special scene, step seconds the scene needs to show its point) — in the order of the voice-over
         static readonly (int step, float need)[] Cut = {
             (0, 16.6f), (1, 24f), (RiseScene, 24f), (InsideScene, 0f), (5, 18f), (7, 22f), (11, 22f), (12, 10f),
-            (13, 20f), (15, 24f), (14, 21f), (16, 18f), (17, 14f), (18, 25f), (19, 12f) };
+            (13, 20f), (15, 24f), (14, 21f), (16, 26.5f), (17, 14f), (18, 25f), (19, 12f) };
         // the voice-over of 15.10.2026 (196.6 s): the cuts sit in the pauses between its paragraphs (Iconic inside + monitoring + cameras
         // is one scene of three paragraphs; the energy and AI paragraph is cut at its inner sentence), found from the text against the pauses
         const float VoiceLen = 196.60f;
@@ -296,8 +296,8 @@ namespace AlatauCity.DigitalTwin
                     At(9f, () => { SmartCityModule.TourCam(SmartCity.CamType.Safety, 1); TourNotice("iKomek 109", "bell", "info", "Обращение: не горит освещение во дворе", "житель через приложение iKomek · заявка ушла в службу", "в работе"); }),
                     At(15.5f, () => { SmartCityModule.TourCam(SmartCity.CamType.Construction, -1); TourNotice("Стройка · видео", "hard_hat", "warn", "Рабочий без каски", "уведомлён прораб · подрядчику — замечание", "нарушение"); }),
                     At(21.5f, () => TourNotice("iKomek 109", "bell", "ok", "Освещение во дворе восстановлено", "житель получил ответ в приложении · 38 мин от обращения", "решено")) } });
-            steps.Add(new Step { Seg = 6, Zone = 1, Module = "overview", Year = TourEnergy.Y0, Dur = 28, Enter = () => { LS?.Select(null, false); TourFx.Instance?.ShowEnergy(); }, Title = () => "Прогноз: энергия 2034" });
-            steps.Add(new Step { Seg = 6, Zone = -1, Module = "ai", Year = 2034, Dur = 26, Enter = () => { LS?.Select(null, false); TwinState.SetDistrict(-1); TourFx.Instance?.ShowAi(); }, Title = () => "ИИ-ассистент" });
+            steps.Add(new Step { Seg = 6, Zone = 1, Module = "overview", Year = TourEnergy.Y0, Dur = 33, Enter = () => { LS?.Select(null, false); TourFx.Instance?.ShowEnergy(); }, Title = () => "Прогноз: энергия 2034" });
+            steps.Add(new Step { Seg = 6, Zone = -1, Module = "ai", Year = 2038, Dur = 28, Enter = () => { LS?.Select(null, false); TwinState.SetDistrict(-1); TourFx.Instance?.ShowAi(); }, Title = () => "ИИ-ассистент" });
 
             // ================= the economy of the city (segment 7): the year runs 2026 → 2050, GRP, construction, budget, the plants
             steps.Add(new Step { Seg = 7, Zone = -1, Module = "economy", Year = 2026, AnimFrom = 2026, AnimTo = 2050, Dur = 28, Enter = Overview, Title = () => "Экономика города: ВРП, стройка, бюджет",
@@ -380,6 +380,7 @@ namespace AlatauCity.DigitalTwin
             bPause.text = paused ? "Продолжить" : "Пауза";
             box.EnableInClassList("video", video);
             box.style.display = DisplayStyle.Flex; host?.AddToClassList("tour-on"); TwinUI.Instance?.Middle?.AddToClassList("tour-on");
+            PitchCaption();                                              // w26: a pitch names itself instead of the tour's parts
         }
 
         void Ensure()
@@ -439,6 +440,7 @@ namespace AlatauCity.DigitalTwin
             if (Input.GetKeyDown(KeyCode.F5) && !MapCamera.Typing) { Toggle(); return; }
             if (Input.GetKeyDown(KeyCode.F6) && !MapCamera.Typing) { ToggleVideo(); return; }
             NavTick();
+            PitchTick();                                                 // w26: the pitches' voice, subtitles and figures (TwinPitch.cs)
             if (!running) return;
             if (Input.GetKeyDown(KeyCode.Escape) && !Landmarks.IconicInterior.EscTaken && !TwinUI.EscTaken) { if (free) NavMap(Overview); else Stop(); return; }
             if (Input.GetKeyDown(KeyCode.Space)) { paused = !paused; Caption(); if (voice != null && video) { if (paused) voice.Pause(); else voice.UnPause(); } }

@@ -195,37 +195,52 @@ namespace AlatauCity.DigitalTwin.Landmarks
 
         VisualElement ctlDocsV, ctlChgV, chgFeed, chgMsg; int chgMode; bool msgMail;
         readonly List<Button> chgModeBtns = new List<Button>(), msgBtns = new List<Button>();
-        /// <summary>Контроль → Документы: the permits and acts with their statuses at the survey date, by stage.</summary>
+        /// <summary>Контроль → Документы, the one place of the documents of the object: on the left the documents the analytics cites
+        /// (by importance; a click opens the sheet scrolled to the place, the place marked), on the right the permits and acts with
+        /// their status at the survey date.</summary>
         void BuildCtlDocs(VisualElement v)
         {
             v = Scroll(v, "ctl-vscroll");
             float d = Report; int n0 = 0, n1 = 0, n2 = 0; foreach (var p in permits) { int s = PermitState(p, d); if (s == 0) n0++; else if (s == 1) n1++; else n2++; }
-            var vb = Box(v, "an-verdict " + (n2 > 0 ? "s-warn" : "s-ok"));
-            Txt(vb, $"Документы на {Day(d)}", "an-verdict-k");
-            Txt(vb, n2 > 0 ? $"Получено {n0} из {permits.Count}, ждём {n1}, просрочено {n2} — без них следующий этап или приёмку не подписать." : $"Получено {n0} из {permits.Count}, ждём {n1}, просроченных нет.", "an-verdict-t");
-            var kr = Box(v, "ctl-minik", false);
-            MiniK(kr, "Есть", n0.ToString(), "получены и подписаны", "ok");
-            MiniK(kr, "Ждём", n1.ToString(), "срок ещё не наступил", "");
-            MiniK(kr, "Просрочено", n2.ToString(), "срок прошёл, документа нет", n2 > 0 ? "bad" : "");
-            var c = Box(v, "mon-card an-card w7-docs");
-            var h = Box(c, "an-sec", false); h.Add(TwinUI.Icon("files", 16)); Txt(h, "Разрешения и акты", "mon-title");
-            Txt(c, "что нужно по порядку строительства в РК · статус, дата и кто отвечает", "mon-src");
-            var th = Box(c, "w7-dr w7-dh", false);
-            Txt(th, "Документ", "w7-dc n"); Txt(th, "Ответственный", "w7-dc w"); Txt(th, "Дата", "w7-dc t"); Txt(th, "Статус", "w7-dc s");
-            for (int st = 0; st < PermitStage.Length; st++)
+            var row = Box(v, "an-row w17-row");
+
+            // left: the documents of the project
+            var lc = Box(row, "an-colL ctl-col");
+            var dc = Box(lc, "w17-card");
+            CardHead(dc, "files", "Документы проекта");
+            Txt(dc, "Нажмите — документ откроется на нужном месте", "w17-sub");
+            var ds = new List<Doc>(docs); ds.Sort((a, b) => b.Score.CompareTo(a.Score));
+            foreach (var (name, lo, hi) in new[] { ("Ключевые", 85, 9999), ("Важные", 55, 84), ("Справочные", 0, 54) })
             {
-                Txt(c, PermitStage[st], "w7-dgroup");
-                foreach (var p in permits)
-                {
-                    if (p.Stage != st) continue; int s = PermitState(p, d);
-                    var r = Box(c, "w7-dr " + PermitCls[s], false);
-                    var nm = Box(r, "w7-dc n", false); Txt(nm, p.Name, "w7-dn"); Txt(nm, p.Note, "mon-src");
-                    Txt(r, p.Who, "w7-dc w");
-                    int late = Mathf.RoundToInt((d - p.Due) * 365f), left = -late;
-                    Txt(r, s == 0 ? $"получен {Day(p.Got)}" : s == 2 ? $"срок {Day(p.Due)} · просрочен на {late} дн." : left <= 60 ? $"срок {Day(p.Due)} · через {left} дн." : $"срок {IconicFloors.MonthYear(p.Due)}", "w7-dc t");
-                    var sc = Box(r, "w7-dc s", false); Txt(sc, PermitWord[s], "an-tag " + (s == 0 ? "s-ok" : s == 1 ? "s-info" : "s-bad"));
-                }
+                bool any = false;
+                foreach (var doc in ds) if (doc.Score >= lo && doc.Score <= hi) { if (!any) { Txt(dc, name, "w17-group"); any = true; } DocRow(dc, doc, true); }
             }
+            var dw = Widgets.Details(dc, "Как упорядочено");
+            Txt(dw, "Важность — вес документа и число выводов аналитики, которые на него ссылаются. Жёлтая метка — сколько мест документа цитирует аналитика.", "w17-note");
+            dc.Add(SourceTags.Line(SrcMon));
+
+            // right: the permits and acts
+            var rc = Box(row, "an-colR ctl-col");
+            var c = Box(rc, "w17-card");
+            CardHead(c, "file_text", "Разрешения и акты");
+            var ans = Txt(c, n2 > 0 ? string.Format("Просрочено {0} · ждём {1} · есть {2}", n2, n1, n0) : string.Format("Есть {0} из {1} · ждём {2}", n0, permits.Count, n1), "w17-answer");
+            ans.AddToClassList(n2 > 0 ? "warn" : "ok");
+            // what is missing first (overdue, then waited for); the documents already received one click away
+            void PRow(VisualElement parent, Permit p, int s)
+            {
+                var r = Box(parent, "w17-pr", false);
+                string pc = s == 1 ? "muted" : PermitCls[s];
+                r.Add(Widgets.Dot(ClsColor(pc), true));
+                var nm = Box(r, "w17-pr-tx", false); Txt(nm, p.Name, "w17-pr-n");
+                int late = Mathf.RoundToInt((d - p.Due) * 365f), left = -late;
+                Txt(nm, s == 0 ? $"получен {Day(p.Got)} · {p.Who}" : s == 2 ? $"просрочен на {late} дн. · {p.Who}" : left <= 60 ? $"срок через {left} дн. · {p.Who}" : $"срок {IconicFloors.MonthYear(p.Due)} · {p.Who}", "w17-pr-m");
+                var tg = Txt(r, PermitWord[s], "w17-pr-s"); tg.AddToClassList(pc);
+            }
+            foreach (int want in new[] { 2, 1 }) foreach (var p in permits) if (PermitState(p, d) == want) PRow(c, p, want);
+            var got = Widgets.Details(c, string.Format("Получено · {0}", n0));
+            foreach (var p in permits) if (PermitState(p, d) == 0) PRow(got, p, 0);
+            var pw = Widgets.Details(c, "Что это за документы");
+            foreach (var p in permits) Txt(pw, string.Format("{0} — {1}", p.Name, p.Note), "w17-note");
             c.Add(SourceTags.Line(SrcDocs));
         }
 

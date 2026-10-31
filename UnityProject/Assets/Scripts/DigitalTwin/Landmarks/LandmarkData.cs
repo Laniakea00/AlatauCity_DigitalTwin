@@ -235,7 +235,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 Id = "ps_arna", Name = "ПС «Арна» 220/110 кВ", Short = "ПС «Арна»", Company = "Фаза 1 инфраструктуры Алатау",
                 Purpose = "Главная понизительная подстанция первой очереди", Model = "substation",
                 District = 2, Status = LStatus.Construction, StatusNote = "строится; ещё 6 ПС в проектировании",
-                StartYear = 2026, EndYear = 2027, YearOfficial = false, X = 1721, Z = 620, Yaw = 10.9f, PadW = 180f, PadD = 140f, Height = 18f, Radius = 95f, ViewYaw = 210f, ViewPitch = 28f,
+                StartYear = 2026, EndYear = 2027, YearOfficial = false, X = 1721, Z = 360, Yaw = 280.9f, PadW = 244f, PadD = 164f, Height = 32f, Radius = 150f, ViewYaw = 210f, ViewPitch = 28f,
                 Source = "primeminister.kz, Qazinform", SourceDate = "15.01.2026 / 03.02.2026"
             }.F("Напряжение", "220/110 кВ").F("Фаза 1 (2026–2027/28)", "21 проект, 365,1 млрд ₸").F("Спрос", "2 064 МВт к 2030, 4 164 МВт к 2050")
              .F("Расположение", "в открытых данных не опубликовано"));

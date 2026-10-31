@@ -213,7 +213,7 @@ namespace AlatauCity.DigitalTwin
         // ------------------------------------------------------------------ the lamp model (metres; base at the origin, arm along +z)
         // vertex colour alpha 1 = the lamp head (glows); uv0 = the centre of the head the vertex belongs to (the head grows into a
         // visible point of light when the camera is far)
-        static Mesh MakeLamp(float h, float arm, bool twin, float pole)
+        internal static Mesh MakeLamp(float h, float arm, bool twin, float pole)
         {
             var V = new List<Vector3>(); var N = new List<Vector3>(); var C = new List<Color>(); var U = new List<Vector3>(); var T = new List<int>();
             var metal = new Color(0.30f, 0.31f, 0.33f, 0f);

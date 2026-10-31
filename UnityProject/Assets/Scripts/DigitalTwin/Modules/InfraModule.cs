@@ -28,8 +28,8 @@ namespace AlatauCity.DigitalTwin.Modules
         static bool showLrt = true, showPlanned = true;
         static string selectedFac;
 
-        Label eyebrow, summary; readonly Label[] kv = new Label[4], kl = new Label[4]; readonly VisualElement[] kb = new VisualElement[4];
-        VisualElement rows, card, next, scheme; SchemeView schemeView;
+        Label eyebrow, summary, summarySub; readonly Label[] kv = new Label[4], kl = new Label[4]; readonly VisualElement[] kb = new VisualElement[4];
+        VisualElement rows, rowsDetails, card, next, scheme; SchemeView schemeView;
         VisualElement netBox, netChips; static int netDistrict = 2, lastHeader = -1;
 
         public InfraModule() { InvestRegistry.Init(); }
@@ -127,7 +127,8 @@ namespace AlatauCity.DigitalTwin.Modules
         {
             var top = Widgets.Block(panel);
             eyebrow = Widgets.Eyebrow(top, "");
-            summary = new Label(); summary.AddToClassList("summary"); summary.style.marginBottom = 12; top.Add(summary);
+            summary = new Label(); summary.AddToClassList("w20-inf-ans"); top.Add(summary);
+            summarySub = new Label(); summarySub.AddToClassList("w20-inf-sub"); top.Add(summarySub);
             var grid = new VisualElement(); grid.AddToClassList("kpi-grid"); top.Add(grid); VisualElement row = null;
             for (int i = 0; i < 4; i++)
             {
@@ -140,17 +141,18 @@ namespace AlatauCity.DigitalTwin.Modules
             Chip(chips, Loc.T("i_chip_lrt"), () => showLrt, () => showLrt = !showLrt);
             Chip(chips, Loc.T("i_chip_planned"), () => showPlanned, () => showPlanned = !showPlanned);
 
-            BuildPublished();
-
-            var rb = Widgets.Block(panel, Loc.T("i_balance"), Loc.T("i_balance_sub"));
+            var rb = Widgets.Block(panel, Loc.T("i_balance"), "загрузка");
             rows = new VisualElement(); rb.Add(rows);
+            var rd = Widgets.Details(rb, "Спрос и мощность");
+            rowsDetails = new VisualElement(); rd.Add(rowsDetails);
+            var src = new Label(Loc.T("i_note")); src.AddToClassList("note"); src.style.marginTop = 6; rd.Add(src);
+
+            BuildPublished();
 
             Right();
             card = new VisualElement(); panel.Add(card);
 
-            var wb = Widgets.Block(panel, "Когда сети придут на участок", "по району и сценарию");
-            var wi = new Label("Для инвестора: с какого года мощности района хватит, чтобы подключить новый объект, — по каждому ресурсу.");
-            wi.AddToClassList("note"); wi.style.marginBottom = 6; wb.Add(wi);
+            var wb = Widgets.Block(panel, "Сети для участка");
             netChips = new VisualElement(); netChips.AddToClassList("chips"); netChips.AddToClassList("w2-chips"); wb.Add(netChips);
             for (int d = 0; d < CityStats.Districts; d++)
             {
@@ -162,11 +164,11 @@ namespace AlatauCity.DigitalTwin.Modules
             var sb = Widgets.Block(panel, Loc.T("i_scheme"), Loc.T("i_scheme_sub"));
             schemeView = new SchemeView(); sb.Add(schemeView);
             scheme = new VisualElement(); sb.Add(scheme);
+            var sd = Widgets.Details(sb, "Как читать"); var sn = new Label(Loc.T("i_scheme_note")); sn.AddToClassList("note"); sd.Add(sn);
 
             var nb = Widgets.Block(panel, Loc.T("i_next"), Loc.T("i_next_sub"));
             next = new VisualElement(); nb.Add(next);
 
-            var n = Widgets.Block(panel); var note = new Label(Loc.T("i_note")); note.AddToClassList("note"); n.Add(note);
             Widgets.SetCollapsed(nb, true);
         }
 
@@ -195,21 +197,33 @@ namespace AlatauCity.DigitalTwin.Modules
             }
             float km = 0; foreach (var k in LineLayers.NetKeys) km += LineLayers.KmBuilt(k, y, s);
             // deficits by resource (unserved load)
-            var deficits = new List<string>();
+            var deficits = new List<string>(); var deficitNames = new List<string>();
             for (int i = 0; i < Res.Length; i++)
             {
                 var b = TwinData.BalanceOf(s, Res[i].key, -1); if (b == null) continue;
-                float d = b.Deficit[TwinData.YI(y)]; if (d > 0.5f) deficits.Add(Loc.T(Res[i].name).ToLower() + " " + Fmt(Res[i].key, d) + " " + Res[i].unit);
+                float d = b.Deficit[TwinData.YI(y)]; if (d > 0.5f) { deficits.Add(string.Format("−{0}\u00A0{1}", Fmt(Res[i].key, d), Res[i].unit)); deficitNames.Add(Lower1(Loc.T(Res[i].name))); }
             }
-            if (deficits.Count == 0) summary.text = string.Format(Loc.T("i_sum_ok"), y, inService, total);
-            else summary.text = string.Format(Loc.T("i_sum_def"), y, string.Join(", ", deficits), worstName ?? "—");
+            summary.EnableInClassList("bad", deficits.Count > 0); summary.EnableInClassList("ok", deficits.Count == 0);
+            if (deficits.Count == 0)
+            {
+                summary.text = "Мощности хватает по всем сетям";
+                int ny = -1; string nr = null;
+                for (int yy = y + 1; yy <= TwinState.MaxYear && ny < 0; yy++)
+                    for (int i = 0; i < Res.Length; i++) { var bb = TwinData.BalanceOf(s, Res[i].key, -1); if (bb != null && bb.Deficit[TwinData.YI(yy)] > 0.5f) { ny = yy; nr = Lower1(Loc.T(Res[i].name)); break; } }
+                summarySub.text = ny < 0 ? "Дефицитов до 2050 года нет" : string.Format("Следующий дефицит: {0}, {1}", nr, ny);
+            }
+            else
+            {
+                summary.text = string.Format("Не хватает: {0}", string.Join(", ", deficitNames));
+                summarySub.text = worstName != null ? string.Format("Перегружена {0} · {1}", worstName, string.Join(", ", deficits)) : string.Join(", ", deficits);
+            }
             Set(0, inService + " / " + total, Loc.T("i_k_fac"), "");
             Set(1, Loc.N0(km), Loc.T("i_k_km"), "");
             Set(2, over.ToString(), Loc.T("i_k_over"), over > 0 ? "bad" : "ok");
             Set(3, warn.ToString(), Loc.T("i_k_warn"), warn > 0 ? "warn" : "ok");
 
             // balance rows: demand vs capacity per resource, click = focus that network
-            rows.Clear();
+            rows.Clear(); rowsDetails.Clear();
             for (int i = 0; i < Res.Length; i++)
             {
                 var b = TwinData.BalanceOf(s, Res[i].key, -1); if (b == null) continue;
@@ -220,18 +234,22 @@ namespace AlatauCity.DigitalTwin.Modules
                 var t = new VisualElement(); t.AddToClassList("top");
                 var sw = new VisualElement(); sw.AddToClassList("swatch"); sw.style.backgroundColor = Res[i].color; sw.style.alignSelf = Align.Center; t.Add(sw);
                 var n = new Label(Loc.T(Res[i].name)) { pickingMode = PickingMode.Ignore }; n.AddToClassList("n"); t.Add(n);
-                var v = new Label(Fmt(Res[i].key, dem) + " / " + Fmt(Res[i].key, cap) + " " + Res[i].unit) { pickingMode = PickingMode.Ignore }; v.AddToClassList("v"); t.Add(v);
+                // a deficit somewhere in the city shows as the missing amount, so the row agrees with the red answer above
+                var v = new Label(def > 0.5f ? string.Format("{0}\u00A0% · −{1}\u00A0{2}", Mathf.RoundToInt(u * 100), Fmt(Res[i].key, def), Res[i].unit)
+                    : string.Format("{0}\u00A0%", Mathf.RoundToInt(u * 100))) { pickingMode = PickingMode.Ignore };
+                v.AddToClassList("v"); v.AddToClassList("w20-row-v"); v.AddToClassList(def > 0.5f ? "bad" : u > 0.85f ? "warn" : "ok"); t.Add(v);
                 r.Add(t);
                 var bar = new VisualElement { pickingMode = PickingMode.Ignore }; bar.AddToClassList("bar");
                 var bf = new VisualElement { pickingMode = PickingMode.Ignore }; bf.AddToClassList("f"); bf.style.width = Length.Percent(Mathf.Clamp01(u) * 100);
                 bf.style.backgroundColor = def > 0.5f ? new Color(1f, 0.23f, 0.18f) : u > 0.85f ? new Color(0.96f, 0.65f, 0.14f) : new Color(0.20f, 0.78f, 0.35f); bar.Add(bf);
                 r.Add(bar);
-                var sub = new Label(def > 0.5f ? string.Format(Loc.T("i_row_def"), Fmt(Res[i].key, def), Res[i].unit) : string.Format(Loc.T("i_row_ok"), Mathf.RoundToInt(u * 100))) { pickingMode = PickingMode.Ignore };
-                sub.AddToClassList("note"); sub.style.marginTop = 3; if (def > 0.5f) sub.style.color = new Color(1f, 0.23f, 0.18f); r.Add(sub);
+                rowsDetails.Add(Widgets.Fact(Loc.T(Res[i].name), def > 0.5f
+                    ? string.Format("{0} / {1} {2} · не хватает {3}", Fmt(Res[i].key, dem), Fmt(Res[i].key, cap), Res[i].unit, Fmt(Res[i].key, def))
+                    : string.Format("{0} / {1} {2}", Fmt(Res[i].key, dem), Fmt(Res[i].key, cap), Res[i].unit)));
                 int idx = i; r.AddManipulator(new Clickable(() => { focus = focus == idx ? -1 : idx; ApplyLayers(); Refresh(); }));
                 rows.Add(r);
             }
-            var hint = new Label(Loc.T(focus < 0 ? "i_focus_hint" : "i_focus_all")); hint.AddToClassList("note"); hint.style.marginTop = 6; rows.Add(hint);
+            var hint = new Label(focus < 0 ? "Клик по строке — только эта сеть на карте" : "Клик по строке ещё раз — все сети"); hint.AddToClassList("w20-hint"); rows.Add(hint);
 
             // facility card
             card.Clear();
@@ -240,8 +258,6 @@ namespace AlatauCity.DigitalTwin.Modules
 
             // single-line power scheme 220 → 110 kV
             schemeView.Set(s, y);
-            scheme.Clear();
-            var sn = new Label(Loc.T("i_scheme_note")); sn.AddToClassList("note"); sn.style.marginTop = 4; scheme.Add(sn);
 
             // staging: what comes into service in the next 3 years
             next.Clear(); int cnt = 0;
@@ -263,28 +279,32 @@ namespace AlatauCity.DigitalTwin.Modules
         /// <summary>The published infrastructure items: of the 26 projects of the government summary only some are named in the press.</summary>
         void BuildPublished()
         {
-            var b = Widgets.Block(panel, "Инфраструктурные проекты", "что опубликовано в прессе");
+            var b = Widgets.Block(panel, "Проекты в прессе", "опубликовано");
             var grid = new VisualElement(); grid.AddToClassList("kpi-grid"); b.Add(grid);
             var r = new VisualElement(); r.AddToClassList("kpi-row"); grid.Add(r);
-            void K(string v, string l, string src) { var k = new VisualElement(); k.AddToClassList("kpi"); var a = new Label(l); a.AddToClassList("l"); k.Add(a); var c = new Label(v); c.AddToClassList("v"); c.AddToClassList("w2-kpi-long"); k.Add(c); SourceTags.Attach(k, src); r.Add(k); }
-            K("26", "проектов в программе", Sources.GovSummary);
-            K("365,1\u00A0млрд\u00A0₸", "этап 1, 2026–2027", InvestRegistry.KapInfra);
+            void K(string v, string l) { var k = new VisualElement(); k.AddToClassList("kpi"); var a = new Label(l); a.AddToClassList("l"); k.Add(a); var c = new Label(v); c.AddToClassList("v"); c.AddToClassList("w2-kpi-long"); k.Add(c); r.Add(k); }
+            K("26", "проектов в программе");
+            K("365,1\u00A0млрд\u00A0₸", "этап 1, 2026–2027");
+            // the 4 most important items first, the rest folded; the sources of all of them in one quiet line at the bottom
+            var srcs = new List<string> { Sources.GovSummary, InvestRegistry.KapInfra };
+            VisualElement more = null; int shown = 0;
             foreach (var it in InvestRegistry.Infra)
             {
                 var row = new VisualElement(); row.AddToClassList("w2-inf");
                 var top = new VisualElement(); top.AddToClassList("w2-inf-top");
                 var n = new Label(it.Name); n.AddToClassList("w2-inf-n"); top.Add(n);
                 top.Add(Widgets.Status(it.Status, it.StatusCls)); row.Add(top);
-                string meta = it.Amount != null ? string.Format("{0} · {1} · {2}", it.What, it.When, it.Amount) : string.Format("{0} · {1}", it.What, it.When);
-                var m = new Label(meta); m.AddToClassList("note"); row.Add(m);
-                var tagRow = new VisualElement(); tagRow.AddToClassList("w2-inf-tags");
-                var kind = new Label(it.Kind); kind.AddToClassList("w2-kind"); tagRow.Add(kind);
-                tagRow.Add(SourceTags.Tag(it.Src)); row.Add(tagRow);
-                b.Add(row);
+                string meta = it.Amount != null ? string.Format("{0} · {1}", it.When, it.Amount) : it.When;
+                var m = new Label(meta); m.AddToClassList("w20-meta"); row.Add(m);
+                if (shown++ < 4) b.Add(row);
+                else { if (more == null) more = Widgets.Details(b, string.Format("Ещё {0}", InvestRegistry.Infra.Count - 4)); more.Add(row); }
+                if (!srcs.Contains(it.Src)) srcs.Add(it.Src);
             }
             var honest = new Label(string.Format("Названо в прессе: {0} позиций (часть — пакеты проектов). Полный список 26 проектов не публиковался. Базовые сети финансирует государство, городу разрешены госзаймы.", InvestRegistry.Infra.Count));
-            honest.AddToClassList("note"); honest.style.marginTop = 6; b.Add(honest);
-            b.Add(SourceTags.Line(InvestRegistry.KapLoans));
+            honest.AddToClassList("note"); honest.style.marginTop = 6; (more ?? b).Add(honest);
+            srcs.Add(InvestRegistry.KapLoans);
+            b.Add(SourceTags.Line(srcs.ToArray()));
+            Widgets.SetCollapsed(b, true);
         }
 
         void RefreshNet()
@@ -294,9 +314,7 @@ namespace AlatauCity.DigitalTwin.Modules
             int d = netDistrict;
             int i = 0; foreach (var c in netChips.Children()) { c.EnableInClassList("active", i == d); i++; }
             netBox.Clear();
-            var h = new Label(string.Format("{0} District · {1} · отсчёт от октября 2026", CityStats.DistrictIds[d], TwinScenario.Name(TwinState.Scenario)));
-            h.AddToClassList("w2-h"); netBox.Add(h);
-            netBox.Add(InvestCalc.NetRows(d));
+            netBox.Add(NetForPlot.Build(d));
         }
 
         void BuildCard(TwinData.Facility f, int s, int y)
@@ -321,6 +339,7 @@ namespace AlatauCity.DigitalTwin.Modules
             close.style.alignSelf = Align.FlexEnd; close.style.marginTop = 4; b.Add(close);
         }
 
+        static string Lower1(string t) => string.IsNullOrEmpty(t) ? t : char.ToLowerInvariant(t[0]) + t.Substring(1);
         static string Fmt(string res, float v) => res == "water" || res == "sewer" || res == "gas" ? Loc.N1(v / 1000f) : Loc.N0(v);
 
         void Set(int i, string v, string l, string cls)

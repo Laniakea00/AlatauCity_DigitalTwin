@@ -8,6 +8,7 @@
 //        street lamps by FilmLamps.Rule (mode 1 median mast, 2 both sides, 3 right of a one-way carriageway, 4 one side of a street,
 //        5 = a junction patch; class 0 street, 1 main, 2 motorway): their light lies on the asphalt at night (_AlatauLampOn);
 //        zebra crossings (stripes 0.5 m, 4 m wide on streets, 5 m on main roads) with a stop line 3 m before them.
+// _AlatauBlackoutZone = (x, z, radius, strength) of a power outage (TourEnergy): no lamp light on the roads inside it.
 // _AlatauMaket = (x, z, radius, on): round Iconic Complex the lane lines are strips of cool light, as on its presentation model.
 Shader "AlatauCity/Road"
 {
@@ -19,7 +20,7 @@ Shader "AlatauCity/Road"
         #pragma surface surf Lambert fullforwardshadows vertex:vert
         #pragma target 3.5
         #include "Assets/Shaders/AlatauFilm.cginc"
-        float _AlatauYear, _AlatauYearF, _AlatauGrow, _AlatauScenIdx, _AlatauLampOn; float4 _AlatauMaket;
+        float _AlatauYear, _AlatauYearF, _AlatauGrow, _AlatauScenIdx, _AlatauLampOn; float4 _AlatauMaket, _AlatauBlackoutZone;
         struct Input { float4 road; float4 dims; float4 years; float4 lamp; float3 worldPos; };
         void vert(inout appdata_full v, out Input o) { UNITY_INITIALIZE_OUTPUT(Input, o); o.road = v.texcoord; o.dims = v.texcoord1; o.years = v.texcoord2; o.lamp = v.texcoord3; }
         float Line(float d, float halfW, float aa) { return saturate((halfW - abs(d)) / max(aa, 1e-4) + 0.5); }
@@ -134,8 +135,11 @@ Shader "AlatauCity/Road"
                 c = lerp(c, float3(0.80, 0.79, 0.76), Line(ax - (hw + 0.15), 0.15, xw) * saturate(1.5 - xw * 3.0));
             }
             // at night the lamps' light on the asphalt and the pavements, warm white (FilmLamps puts the posts by the same rule)
-            float pool = _AlatauLampOn > 0.01 ? LampPool(x, v, hw, len, IN.lamp) : 0.0;
-            em += c * float3(1.0, 0.80, 0.58) * pool * (IN.dims.y > 0.5 ? 1.5 : 0.8) * _AlatauLampOn;      // pale pavements take less: no glowing strips
+            // (out inside a power outage zone)
+            float bzR = max(_AlatauBlackoutZone.z, 1.0);
+            float lampOn = _AlatauLampOn * (1.0 - _AlatauBlackoutZone.w * (1.0 - smoothstep(bzR * 0.85, bzR, distance(IN.worldPos.xz, _AlatauBlackoutZone.xy))));
+            float pool = lampOn > 0.01 ? LampPool(x, v, hw, len, IN.lamp) : 0.0;
+            em += c * float3(1.0, 0.80, 0.58) * pool * (IN.dims.y > 0.5 ? 1.5 : 0.8) * lampOn;      // pale pavements take less: no glowing strips
             o.Albedo = c; o.Emission = em; o.Alpha = 1;
         }
         ENDCG

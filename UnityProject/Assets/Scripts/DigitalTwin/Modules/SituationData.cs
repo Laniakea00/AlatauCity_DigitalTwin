@@ -177,9 +177,10 @@ namespace AlatauCity.DigitalTwin.Modules
             public string Title, Text; public Phase[] Phases; public float Fixed, FixedAt, PerPersonUnit, NbLoad, Co2PerUnit, Restore;
             public float[] Affected, Damage, Co2; public float AffectedMax, Peak; public List<int> Bids = new List<int>();
         }
+        /// <summary>Todo = «что делать», one short imperative line; the cost of inaction is No.Peak − Yes.Peak.</summary>
         public class Incident
         {
-            public string Id, Title, Where, Src, Kind, Who, Sla, FeedText, Unit = "ч", Question; public int District, StartMin, MinYear, MaxYear = 2050;
+            public string Id, Title, Where, Src, Kind, Who, Sla, FeedText, Unit = "ч", Question, Todo; public int District, StartMin, MinYear, MaxYear = 2050;
             public Vector2 P; public float H; public Branch Yes, No; public bool Today, Avail, Decided; public int SuggestYear; public string[] History;
             public bool FloodTint, FixedCount;
         }
@@ -195,7 +196,7 @@ namespace AlatauCity.DigitalTwin.Modules
                 var p = RoadPoint(1, TwinData.RoadClass.Main, s, y, 0);
                 L.Add(new Incident
                 {
-                    Id = "leak", Title = "Утечка на магистральном водоводе", District = 1, P = p, Src = "iot", Kind = "active", Today = true, StartMin = 6 * 60 + 20, H = 24, MinYear = 2030,
+                    Id = "leak", Todo = "Перекрыть участок, пустить резервную нитку", Title = "Утечка на магистральном водоводе", District = 1, P = p, Src = "iot", Kind = "active", Today = true, StartMin = 6 * 60 + 20, H = 24, MinYear = 2030,
                     Where = "Golden, магистральный водовод Ду 800", Who = "Водоканал Alatau · дежурный диспетчер", Sla = "локализация 2 ч",
                     FeedText = "Датчики: падение давления 5,1 → 3,2 атм, расход +38 % · водовод Ду 800, Golden",
                     Question = "Перекрыть участок и пустить воду по резервной нитке?",
@@ -209,10 +210,11 @@ namespace AlatauCity.DigitalTwin.Modules
             // 2. Golden 220/110 kV substation overload in the winter evening peak (forecast for 18:00 today)
             {
                 var f = F("power_hv", 1); var p = f != null ? new Vector2(f.X, f.Z) : DistrictCenter(1);
-                float util = f != null && f.CapAt(s, y) > 0 ? f.DemandAt(s, y) / f.CapAt(s, y) : 0.9f; int pct = Mathf.Clamp(Mathf.RoundToInt(util * 100 * 1.14f), 96, 128);
-                L.Add(new Incident
+                float util = f != null && f.CapAt(s, y) > 0 ? f.DemandAt(s, y) / f.CapAt(s, y) : 0.9f; int pct = Mathf.Clamp(Mathf.RoundToInt(util * 100 * 1.14f), 0, 128);
+                // only when the twin's own balance brings the winter peak near the limit (as in the 2034 energy step)
+                if (pct >= 95) L.Add(new Incident
                 {
-                    Id = "ps", Title = "Перегрузка ПС «Golden» в вечерний пик", District = 1, P = p, Src = "iot", Kind = "forecast", Today = true, StartMin = 15 * 60 + 40, H = 12, MinYear = 2028,
+                    Id = "ps", Todo = "Перевести нагрузку на ПС «Gate»", Title = "Перегрузка ПС «Golden» в вечерний пик", District = 1, P = p, Src = "iot", Kind = "forecast", Today = true, StartMin = 15 * 60 + 40, H = 12, MinYear = 2028,
                     Where = f != null ? f.Name : "ПС 220/110 кВ Golden", Who = "KEGOC / РЭК Alatau · диспетчер", Sla = "решение до 17:30",
                     FeedText = $"Прогноз двойника: в 18:00 загрузка ПС «Golden» {pct} % (−14 °C, вечерний пик)",
                     Question = "Перевести часть нагрузки на ПС «Gate» и включить управление спросом?",
@@ -228,7 +230,7 @@ namespace AlatauCity.DigitalTwin.Modules
                 var p = RoadPoint(0, TwinData.RoadClass.Highway, s, y, 900);
                 L.Add(new Incident
                 {
-                    Id = "dtp", Title = "ДТП на трассе Алматы–Конаев", District = 0, P = p, Src = "112", Kind = "active", Today = true, StartMin = 7 * 60 + 48, H = 4, MinYear = TwinData.Y0, FixedCount = true,
+                    Id = "dtp", Todo = "Открыть объезд и «зелёную волну»", Title = "ДТП на трассе Алматы–Конаев", District = 0, P = p, Src = "112", Kind = "active", Today = true, StartMin = 7 * 60 + 48, H = 4, MinYear = TwinData.Y0, FixedCount = true,
                     Where = "трасса Алматы–Конаев, съезд на Gate", Who = "Полиция · ДЧС · Центр управления движением", Sla = "освободить полосу 40 мин",
                     FeedText = "112: ДТП, 3 автомобиля, перекрыты 2 полосы на Конаев · трасса у Gate",
                     Question = "Открыть объезд и переключить светофоры на «зелёную волну»?",
@@ -239,22 +241,26 @@ namespace AlatauCity.DigitalTwin.Modules
                         Phases = new[] { new Phase { N = 15000, T0 = 0, T1 = 2.6f } }, Fixed = 0, PerPersonUnit = 2500, NbLoad = 135, Co2PerUnit = 4.2f, Restore = 2.6f },
                 });
             }
-            // 4. spring flood on the Kaskelen (forecast / drill), affected = flood-zone residents of risk.json
+            // 4. high water on the Kapshagay reservoir: the flood is computed on the real relief (FloodModel), not drawn
             {
-                FloodSet(y, out var fp, out var fpeople, out var fdamage, out var fbids);
+                FloodModel.Register();
+                var fr = FloodModel.Compute(FloodModel.Level, y); var f0 = FloodModel.Compute(FloodModel.NowReal, y);
+                float days = Mathf.Max(1f, fr.Days), H = Mathf.Max(10f, Mathf.Ceil(days * 1.6f));
                 var inc = new Incident
                 {
-                    Id = "flood", Title = "Паводок на Каскелене", District = 2, P = fp, Src = "weather", Kind = "forecast", Today = false, H = 72, MinYear = TwinData.Y0, FixedCount = true, FloodTint = true,
-                    Where = "пойма р. Каскелен", Who = "ДЧС · акимат · Водоканал", Sla = "предупреждение за 24 ч", Unit = "ч",
-                    FeedText = "Гидропост: уровень Каскелена +0,9 м за сутки, прогноз +1,6 м через 30 ч",
-                    Question = "Эвакуировать пойму и поставить временную дамбу заранее?",
-                    History = new[] { "Весна · снеготаяние + ливни в горах", "Гидропосты: подъём +0,9 м за сутки", "Модель: пик через 30 ч, уровень +1,6 м (раз в 100 лет)" },
-                    Yes = new Branch { Title = "Дамба из мешков и эвакуация за 24 ч", Text = "Временная дамба 2,4 км и откачка; жители поймы вывезены заранее. Ущерб — в основном подвалы и благоустройство.",
-                        Phases = new[] { new Phase { N = fpeople * 0.35f, T0 = 6, T1 = 40 } }, Fixed = fdamage * 1000f * 0.3f, FixedAt = 30, PerPersonUnit = 300, NbLoad = 70, Co2PerUnit = 0.4f, Restore = 40 },
-                    No = new Branch { Title = "Реагировать по факту подтопления", Text = "Вода заходит в дома ночью, эвакуация под водой, отключение подстанций в пойме.",
-                        Phases = new[] { new Phase { N = fpeople, T0 = 30, T1 = 66 } }, Fixed = fdamage * 1000f, FixedAt = 32, PerPersonUnit = 600, NbLoad = 115, Co2PerUnit = 0.9f, Restore = 66 },
+                    Id = "flood", Title = "Паводок: подъём Капшагая", District = 3, P = fr.Center, Src = "weather", Kind = "forecast", Today = false, H = H, MinYear = TwinData.Y0, FixedCount = true, FloodTint = true,
+                    Where = "берег Капшагая, район Green", Who = "ДЧС · акимат · Капшагайская ГЭС", Sla = "решение за 10 сут. до пика", Unit = "сут.",
+                    Todo = "Сброс ГЭС заранее и эвакуация",
+                    FeedText = string.Format("Модель: приток Или {0} м³/с, Капшагай растёт на {1} см в сутки", Loc.N0(FloodModel.InflowM3s), Mathf.RoundToInt(FloodModel.RisePerDayCm)),
+                    Question = "Заранее поднять сброс ГЭС и вывезти жителей зоны?",
+                    History = new[] { "Весна · снеготаяние в горах, приток Или растёт", string.Format("Приток {0} м³/с при сбросе {1} м³/с", Loc.N0(FloodModel.InflowM3s), Loc.N0(FloodModel.ReleaseM3s)),
+                                      string.Format("Модель: отметка {0} м через {1} сут.", Loc.N0(FloodModel.Level), Mathf.RoundToInt(days)) },
+                    Yes = new Branch { Title = "Сброс ГЭС заранее + эвакуация", Text = string.Format("Сброс поднят за 10 суток до пика, уровень держится у {0} м; жителей зоны вывозят заранее, дамба из мешков у низких кварталов.", Loc.N0(FloodModel.NowReal)),
+                        Phases = new[] { new Phase { N = f0.People, T0 = days * 0.6f, T1 = days * 0.6f + 3f } }, Fixed = f0.DamageMln + FloodModel.MeasuresMln, FixedAt = days * 0.6f, PerPersonUnit = 0, NbLoad = 70, Co2PerUnit = 0.4f, Restore = 3 },
+                    No = new Branch { Title = "Ждать и реагировать по факту", Text = string.Format("Вода выходит на берег до отметки {0} м: дома в воде, эвакуация из воды, подстанции у берега отключены.", Loc.N0(FloodModel.Level)),
+                        Phases = new[] { new Phase { N = fr.People, T0 = days, T1 = H } }, Fixed = fr.DamageMln, FixedAt = days, PerPersonUnit = 0, NbLoad = 115, Co2PerUnit = 0.9f, Restore = Mathf.Max(3f, H - days) },
                 };
-                inc.Yes.Bids = fbids; inc.No.Bids = fbids; L.Add(inc);
+                inc.Yes.Bids = new List<int>(f0.Wet); inc.No.Bids = new List<int>(fr.Wet); L.Add(inc);
             }
             // 5. LRT phase 2 (Growing) delayed by 2 years — a planning decision, unit = months
             {
@@ -264,7 +270,7 @@ namespace AlatauCity.DigitalTwin.Modules
                 var p = st.Count > 0 ? st[st.Count / 2] : DistrictCenter(2);
                 L.Add(new Incident
                 {
-                    Id = "lrt", Title = $"Ввод ЛРТ в Growing сдвигается на 2 года", District = 2, P = p, Src = "transport", Kind = "plan", Today = false, H = 24, Unit = "мес.", MinYear = TwinData.Y0, MaxYear = ph2, FixedCount = true,
+                    Id = "lrt", Todo = "Запустить временный BRT по трассе ЛРТ", Title = $"Ввод ЛРТ в Growing сдвигается на 2 года", District = 2, P = p, Src = "transport", Kind = "plan", Today = false, H = 24, Unit = "мес.", MinYear = TwinData.Y0, MaxYear = ph2, FixedCount = true,
                     Where = $"ЛРТ, 2-я очередь · {TwinData.LrtPhaseNames.ElementAtOrDefault(1)}", Who = "Управление транспорта · подрядчик ЛРТ", Sla = "решение до утверждения бюджета",
                     FeedText = "Подрядчик ЛРТ: срыв поставки подвижного состава, сдвиг ввода 2-й очереди на 24 мес.",
                     Question = "Запустить временный BRT по трассе ЛРТ на 2 года?",
@@ -282,7 +288,7 @@ namespace AlatauCity.DigitalTwin.Modules
                 var p = f != null ? new Vector2(f.X, f.Z) : DistrictCenter(2); int minY = f != null ? f.Stages[s][0] : 2028;
                 L.Add(new Incident
                 {
-                    Id = "ses", Title = $"Облачность: выработка {(f != null ? f.Name.Split('·')[0].Trim() : "СЭС")} падает на 80 %", District = 2, P = p, Src = "weather", Kind = "forecast", Today = false, H = 10, MinYear = minY,
+                    Id = "ses", Todo = "Заранее включить ГТУ и накопители", Title = $"Облачность: выработка {(f != null ? f.Name.Split('·')[0].Trim() : "СЭС")} падает на 80 %", District = 2, P = p, Src = "weather", Kind = "forecast", Today = false, H = 10, MinYear = minY,
                     Where = f != null ? f.Name : "СЭС", Who = "Диспетчер энергосистемы", Sla = "за 6 ч до события",
                     FeedText = "Прогноз погоды: плотная облачность завтра 10:00–16:00",
                     Question = "Заранее включить газовые турбины и накопители?",
@@ -301,7 +307,7 @@ namespace AlatauCity.DigitalTwin.Modules
                 var p = wh != null ? new Vector2(wh.X, wh.Z) : DistrictCenter(2); int minY = wh != null && wh.Source != "existing_osm" ? Mathf.Max(TwinData.Y0, CityStats.EffectiveYearOf(wh.Bid)) : TwinData.Y0;
                 L.Add(new Incident
                 {
-                    Id = "fire", Title = "Пожар на складе в Growing", District = 2, P = p, Src = "112", Kind = "drill", Today = false, H = 8, MinYear = minY,
+                    Id = "fire", Todo = "Эвакуировать 500 м и перекрыть газ", Title = "Пожар на складе в Growing", District = 2, P = p, Src = "112", Kind = "drill", Today = false, H = 8, MinYear = minY,
                     Where = wh != null ? $"Growing, логистический склад {Loc.N0(wh.GfaM2)} м²" : "Growing, склад", Who = "ДЧС · газовая служба · акимат", Sla = "прибытие 10 мин",
                     FeedText = "112: дым над складом, срабатывание пожарной сигнализации · Growing",
                     Question = "Эвакуировать дома в радиусе 500 м и перекрыть газ?",
@@ -317,7 +323,7 @@ namespace AlatauCity.DigitalTwin.Modules
                 var bq = BimQuarter.Instance; var p = bq != null && BimQuarter.Loaded ? new Vector2(bq.Center.x, bq.Center.z) : RoadPoint(0, TwinData.RoadClass.Street, s, y);
                 L.Add(new Incident
                 {
-                    Id = "concrete", Title = "Срыв поставки бетона на Gate Q1", District = 0, P = p, Src = "iot", Kind = "active", Today = false, H = 30, Unit = "сут.", MinYear = 2031, MaxYear = 2031, FixedCount = true,
+                    Id = "concrete", Todo = "Перейти на резервный РБУ", Title = "Срыв поставки бетона на Gate Q1", District = 0, P = p, Src = "iot", Kind = "active", Today = false, H = 30, Unit = "сут.", MinYear = 2031, MaxYear = 2031, FixedCount = true,
                     Where = "Gate Q1, монолит 6–9 этажей", Who = "Генподрядчик · технадзор", Sla = "план поставки 180 м³/сут",
                     FeedText = "Поставщик РБУ «Капшагай»: остановка завода, бетона не будет 12 дней",
                     Question = "Переключиться на резервный РБУ с доплатой 18 %?",
@@ -357,27 +363,6 @@ namespace AlatauCity.DigitalTwin.Modules
                 b.Affected[k] = Mathf.Max(a, k > 0 ? b.Affected[k - 1] : 0); b.Damage[k] = dmg + (t >= b.FixedAt ? b.Fixed : 0); b.Co2[k] = co2;
             }
             b.AffectedMax = n.Length > 0 ? n.Max() : 0; b.Peak = b.Damage[NT - 1];
-        }
-
-        // ------------------------------------------------------------------ flood zone (same model as the "Прогноз" tab)
-        static int[] flood1;
-        static void FloodSet(int y, out Vector2 center, out float people, out float damageBln, out List<int> bids)
-        {
-            center = DistrictCenter(2); people = 0; damageBln = 0; bids = new List<int>();
-            if (flood1 == null)
-            {
-                try { var j = Parse(TwinFiles.Text("risk.json")); flood1 = Ints(G(G(G(j, "scenarios"), "flood_1pct"), "depth_cm")); }
-                catch (Exception e) { Debug.LogError("[Alatau] risk.json: " + e.Message); flood1 = new int[0]; }
-            }
-            var db = CityDatabase.Instance; if (db == null) return; double sx = 0, sz = 0, sw = 0;
-            foreach (var b in db.Buildings)
-            {
-                if (b == null || b.Bid >= flood1.Length || flood1[b.Bid] <= 0 || !Stands(b, y)) continue;
-                float r = ResidentsOf(b); people += r; bids.Add(b.Bid);
-                float share = Mathf.Clamp01(flood1[b.Bid] / 100f / Mathf.Max(3f, b.HeightM)) + 0.05f; damageBln += b.GfaM2 * 300000f * Mathf.Min(0.4f, share) / 1e9f;
-                sx += b.X * (r + 1); sz += b.Z * (r + 1); sw += r + 1;
-            }
-            if (sw > 0) center = new Vector2((float)(sx / sw), (float)(sz / sw));
         }
     }
 }

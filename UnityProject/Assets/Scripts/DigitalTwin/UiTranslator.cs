@@ -161,6 +161,9 @@ namespace AlatauCity.DigitalTwin
             while (b > a && Mark(s[b - 1])) b--;
             if (a == b) return s;
             string lead = s.Substring(0, a), trail = s.Substring(b), t = s.Substring(a, b - a);
+            // a template that starts with its own sign («+{0} дн. к прошлой съёмке», «• {0}: …»): matched with the sign kept
+            int sp = 0; while (sp < a && char.IsWhiteSpace(s[sp])) sp++;
+            if (sp < a && Whole(s.Substring(sp, b - sp), li, depth, out var ws, out _)) return s.Substring(0, sp) + ws + trail;
             // the choices below are made on the English result (Kazakh is Cyrillic too), the text is then given in the language asked
             if (Whole(t, li, depth, out var w, out var loose)) return lead + w + trail;
             if (depth > 6) return loose != null ? lead + loose + trail : s;

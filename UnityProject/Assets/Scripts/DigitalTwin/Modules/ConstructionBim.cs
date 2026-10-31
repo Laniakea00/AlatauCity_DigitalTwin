@@ -9,7 +9,7 @@ namespace AlatauCity.DigitalTwin.Modules
     public partial class ConstructionModule
     {
         static bool bimMode, ghost = true;
-        Label bEyebrow, bSummary, bDate, bNote; readonly Label[] bkv = new Label[4], bkl = new Label[4]; readonly VisualElement[] bkb = new VisualElement[4];
+        Label bEyebrow, bSummary, bDate, bNote; Glance.Hero bHero; readonly Label[] bkv = new Label[4], bkl = new Label[4]; readonly VisualElement[] bkb = new VisualElement[4];
         TwinSlider bSlider; Button bPlay; VisualElement bStages, bSafety; IVisualElementScheduledItem playTask;
 
         static string D(DateTime d) => d.ToString("dd.MM.yyyy", Loc.Ru);
@@ -45,7 +45,7 @@ namespace AlatauCity.DigitalTwin.Modules
             var back = new Button(() => LeaveBim(true)) { text = Loc.T("bim_back") }; back.AddToClassList("btn"); back.AddToClassList("small"); back.AddToClassList("ghost");
             back.style.alignSelf = Align.FlexStart; back.style.marginLeft = -8; back.style.marginBottom = 6; top.Add(back);
             bEyebrow = Widgets.Eyebrow(top, "");
-            bSummary = new Label(); bSummary.AddToClassList("summary"); bSummary.style.marginBottom = 10; top.Add(bSummary);
+            bHero = Glance.MakeHero(top);
             // date control: day slider with the drone-survey dates as ticks
             var dr = new VisualElement(); dr.AddToClassList("date-row"); top.Add(dr);
             bPlay = Widgets.Btn(Loc.T("play"), TogglePlay, "small"); dr.Add(bPlay);
@@ -62,6 +62,8 @@ namespace AlatauCity.DigitalTwin.Modules
             }
             var chips = new VisualElement(); chips.AddToClassList("chips"); chips.style.marginTop = 10; top.Add(chips);
             Chip(chips, Loc.T("bim_ghost"), () => ghost, () => { ghost = !ghost; q.SetGhost(ghost); });
+            var why = Widgets.Details(top, "Почему так");
+            bSummary = Glance.Prose(why); bNote = Glance.Prose(why, q.Note + " " + Loc.T("bim_click"));
             top.Add(SourceTags.Line(Data.TwinModels.Bim));
 
             Right();
@@ -71,7 +73,6 @@ namespace AlatauCity.DigitalTwin.Modules
             var cv = Widgets.Block(panel, Loc.T("bim_safety"), Loc.T("bim_safety_sub"));
             bSafety = new VisualElement(); cv.Add(bSafety); cv.Add(SourceTags.Line(Data.TwinModels.Bim));
 
-            var nb = Widgets.Block(panel); bNote = new Label(q.Note + " " + Loc.T("bim_click")); bNote.AddToClassList("note"); nb.Add(bNote);
         }
 
         void RefreshBim()
@@ -89,6 +90,9 @@ namespace AlatauCity.DigitalTwin.Modules
             if (st.Built == 0 && st.InWork == 0) bSummary.text = string.Format(Loc.T("bim_sum0"), D(q.DateOf(0)));
             else if (gap < 1.5f || worst < 0) bSummary.text = string.Format(Loc.T("bim_sum_ok"), D(date), Mathf.RoundToInt(st.FactPct));
             else bSummary.text = string.Format(Loc.T("bim_sum"), D(date), Mathf.RoundToInt(st.FactPct), Mathf.RoundToInt(st.PlanPct), q.stages[worst].Name, Mathf.RoundToInt(wg));
+            bHero.Set(Mathf.RoundToInt(st.FactPct) + "\u00A0%", "", string.Format("Готовность · план {0}\u00A0%", Mathf.RoundToInt(st.PlanPct)), gap > 8 ? "bad" : gap > 2 ? "warn" : "ok",
+                gap >= 1.5f && worst >= 0 ? string.Format("Отстаёт: {0} · −{1} п.п.", q.stages[worst].Name, Mathf.RoundToInt(wg)) : null);
+            bkb[0].style.display = DisplayStyle.None;
             SetB(0, Mathf.RoundToInt(st.FactPct) + " %", string.Format(Loc.T("bim_k_ready"), Mathf.RoundToInt(st.PlanPct)), gap > 8 ? "bad" : gap > 2 ? "warn" : "ok");
             SetB(1, st.Built.ToString("N0", Loc.Ru), string.Format(Loc.T("bim_k_built"), st.Behind.ToString("N0", Loc.Ru)), "");
             SetB(2, Loc.N1(st.Concrete / 1000f), Loc.T("bim_k_concrete"), "");

@@ -90,18 +90,23 @@ namespace AlatauCity.DigitalTwin
                 if (plan > TwinState.MaxYear) { visible[i] = 9999; continue; }
                 int dur = plan - start, delayM = Delay(i); visible[i] = start;
                 byte st = Context; float prog = 1f;
-                if (year >= start && year < fact)
+                // a site is "in work" in every year from its start up to and including the year it is handed over: a site due this year
+                // is still a site of this year, on plan or late. (Before: sites finishing on time this year were left out, so in 2050,
+                // the last year of the plan, only the late ones remained and "all 105 of 105" were behind.)
+                // Late = still being built although its own planned year has come (its forecast hand-over is later), or earlier
+                // when the works already lag the plan's pace; a site handed over this year no longer lags.
+                if (year >= start && year <= fact)
                 {
-                    // progress at the end of the year; delayed works crawl over the longer real duration
                     float real = dur + delayM / 12f;
-                    prog = Mathf.Clamp((year + 1 - start) / real, 0.06f, 0.97f);
-                    bool behind = delayM > 0 && (year >= plan || (year + 1 - start) / (float)dur > prog + 0.12f);
-                    st = behind ? Behind : OnPlan;
+                    bool handed = year == fact;
+                    // progress at the end of the year; delayed works crawl over the longer real duration
+                    prog = handed ? 1f : Mathf.Clamp((year + 1 - start) / real, 0.06f, 0.97f);
+                    bool behind = !handed && delayM > 0 && (year >= plan || (year + 1 - start) / (float)dur > prog + 0.12f);
+                    st = handed ? Done : behind ? Behind : OnPlan;
                     Sites++; GfaInWork += b.GfaM2; if (behind) SitesBehind++;
                     int c = ContractorOf(i); if (c < nc) { SitesByContractor[c]++; if (behind) BehindByContractor[c]++; }
                     if (behind) worst.Add(new Site { Bid = i, Gfa = b.GfaM2, DelayMonths = delayM, Progress = prog, PlanYear = plan, FactYear = fact });
                 }
-                else if (year == fact) st = Done;
                 if (plan == year) GfaDonePlan += b.GfaM2;
                 if (fact == year) GfaDoneFact += b.GfaM2;
                 if (hiddenArea.width > 0 && hiddenArea.Contains(new Vector2(b.X, b.Z))) st = Hidden;

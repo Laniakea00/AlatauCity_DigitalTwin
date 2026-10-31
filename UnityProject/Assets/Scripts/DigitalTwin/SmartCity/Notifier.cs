@@ -7,7 +7,10 @@ namespace AlatauCity.DigitalTwin.UI
 {
     /// <summary>Notifications of the platform: the bell in the header opens the list (Smart City video analytics, iKomek 109, 112,
     /// the twin's forecasts), new events slide in as a toast under the header. The events are the demo day of the year (SmartCity.Day)
-    /// played in real time: one event every ~35 s. In the presentation toasts appear only when a step asks for them.</summary>
+    /// played in real time: one event every ~35 s. In the presentation toasts appear only when a step asks for them.
+    /// The live toasts belong to «today» (the first year of the timeline): a future year shows a modelled day in the list, without
+    /// toasts; while the year animates and for a few seconds after it changes nothing pops up; an event at a place that does not
+    /// stand yet in the year (a campus, a station, the marina) is not toasted.</summary>
     public class Notifier : MonoBehaviour
     {
         public static Notifier Instance;
@@ -16,7 +19,7 @@ namespace AlatauCity.DigitalTwin.UI
         void Awake() { Instance = this; }
 
         readonly List<SmartCity.Notice> feed = new List<SmartCity.Notice>();   // delivered, newest first
-        int year = -1, next; float wait = 8f; public int Unread { get; private set; }
+        int year = -1, next; float wait = 8f, calm; public int Unread { get; private set; }
         VisualElement toastHost, toast, popup, list; string filter = "";
         float toastLeft; Label badge;
         /// <summary>The presentation lets toasts through (Smart City step).</summary>
@@ -27,11 +30,11 @@ namespace AlatauCity.DigitalTwin.UI
 
         void ResetDay(int y)
         {
-            year = y; feed.Clear(); next = 0;
+            year = y; feed.Clear(); next = 0; calm = 6f;
             var day = SmartCity.Day(y); if (day.Count == 0) { year = -1; return; }
             // the morning is already in the list when the platform opens: everything up to ~10:30
             while (next < day.Count && day[next].Minute < 10 * 60 + 30) feed.Insert(0, day[next++]);
-            Unread = Mathf.Min(3, feed.Count); Changed();
+            Unread = Live ? Mathf.Min(3, feed.Count) : 0; Changed();
         }
 
         /// <summary>Delivers the next event of the day now (the presentation calls it on its own beat).</summary>
@@ -42,8 +45,32 @@ namespace AlatauCity.DigitalTwin.UI
             if (next >= day.Count) next = 0;
             var n = day[next++]; feed.Insert(0, n); if (feed.Count > 40) feed.RemoveAt(feed.Count - 1);
             Unread++; Changed();
-            if (toastIt) Toast(n);
+            if (toastIt && Live && calm <= 0f && Exists(n))
+            {
+                // a live event happens now: it carries the clock of the header, not the minute of the modelled day
+                var now = System.DateTime.Now; var live = Copy(n); live.Minute = now.Hour * 60 + now.Minute;
+                feed[0] = live; Toast(live); return live;
+            }
             return n;
+        }
+        static SmartCity.Notice Copy(SmartCity.Notice n) => new SmartCity.Notice { Source = n.Source, Icon = n.Icon, Level = n.Level, Title = n.Title, Text = n.Text, Status = n.Status, Minute = n.Minute, Cam = n.Cam, World = n.World, HasPlace = n.HasPlace, District = n.District };
+        /// <summary>The toasts are live events: only in «today» (the first year of the timeline) and not while the year animates.</summary>
+        public static bool Live => TwinState.Year == TwinState.MinYear && !TwinState.Playing;
+        /// <summary>The place of the event stands in the year shown: places of the new city that open later are not toasted earlier.</summary>
+        static readonly (string word, string id)[] Places =
+            { ("KAIST", "kaist"), ("Медицинский кластер", "medcluster"), ("K-Park", "kpark"), ("Iconic", "iconic"), ("Марина", "marina"), ("Яхт-клуб", "marina"), ("ЛРТ", "lrt") };
+        static bool Exists(SmartCity.Notice n)
+        {
+            var ls = Landmarks.LandmarkSystem.Instance; string t = n.Title + " " + n.Text; int y = TwinState.Year;
+            // a forecast for a district where nobody lives yet in the year is not news
+            if (n.Cam < 0 && n.District >= 0 && CityStats.Ready && CityStats.Residents(n.District, y) < 500f) return false;
+            foreach (var (w, id) in Places)
+            {
+                if (t.IndexOf(w, System.StringComparison.Ordinal) < 0) continue;
+                var l = ls != null ? ls.Get(id) : null; if (l == null) return false;
+                if ((t.Contains("стройплощадка") ? l.Begin : l.Finish) > y + 0.999f) return false;
+            }
+            return true;
         }
         /// <summary>A scripted event (the presentation): shown as a toast and kept in the list.</summary>
         public void Push(SmartCity.Notice n, bool toastIt = true) { if (n == null) return; feed.Insert(0, n); Unread++; Changed(); if (toastIt) Toast(n); }
@@ -60,9 +87,12 @@ namespace AlatauCity.DigitalTwin.UI
             Attach();
             if (toast != null && toastLeft > 0f) { toastLeft -= TwinState.RealDelta; if (toastLeft <= 0f) { toast.RemoveFromClassList("show"); toast.style.opacity = 0f; } }
             if (TwinTour.Running) return;                 // the presentation decides when an event comes
+            if (calm > 0f) calm -= TwinState.RealDelta;
+            // a live toast that no longer fits the year shown (the year was changed or plays) goes away at once
+            if (!Live && toast != null && toastLeft > 0f) toastLeft = 0.01f;
             if (Modules.MonitoringModule.On || Landmarks.IconicMonitor.Open) { if (toast != null && toastLeft > 0f) toastLeft = 0.01f; return; }   // the monitoring keeps the screen to itself
             wait -= TwinState.RealDelta;
-            if (wait <= 0f) { wait = 30f + Random.value * 15f; Push(true); }
+            if (wait <= 0f) { wait = 30f + Random.value * 15f; if (Live) Push(true); }
         }
 
         void Attach()
@@ -123,6 +153,8 @@ namespace AlatauCity.DigitalTwin.UI
             var h = new VisualElement(); h.AddToClassList("row"); h.style.marginBottom = 8; popup.Add(h);
             var t = new Label("Уведомления"); t.AddToClassList("block-title"); h.Add(t);
             h.Add(Widgets.Btn("×", HidePanel, "small", "ghost"));
+            if (TwinState.Year != TwinState.MinYear)
+            { var fy = new Label(string.Format("Модель обычного дня {0} года", TwinState.Year)); fy.AddToClassList("note"); fy.style.marginBottom = 6; popup.Add(fy); }
             var chips = new VisualElement(); chips.AddToClassList("chips"); popup.Add(chips);
             foreach (var (k, name) in new[] { ("", "Все"), ("Smart City", "Smart City"), ("iKomek", "iKomek 109"), ("Стройка", "Стройка"), ("qTwin", "Прогнозы") })
             {
@@ -136,8 +168,9 @@ namespace AlatauCity.DigitalTwin.UI
                 sv.Add(Card(n, true)); if (++shown >= 25) break;
             }
             if (shown == 0) { var l = new Label("Событий нет."); l.AddToClassList("note"); sv.Add(l); }
-            var go = Widgets.Btn("Открыть Smart City: камеры и обращения", () => { HidePanel(); TwinState.SetModule("smartcity"); }, "primary", "wide"); popup.Add(go);
-            var note = new Label("Демо-сценарий: события смоделированы QTwin. Интеграция — API Smart City Alatau, iKomek 109 и 112 после подключения к системам заказчика."); note.AddToClassList("note"); note.style.marginTop = 6; popup.Add(note);
+            var go = Widgets.Btn("Открыть Smart City", () => { HidePanel(); TwinState.SetModule("smartcity"); }, "primary", "wide"); popup.Add(go);
+            var more = Widgets.Details(popup, "О данных");
+            var note = new Label("Демо-сценарий: события смоделированы QTwin. Интеграция — API Smart City Alatau, iKomek 109 и 112 после подключения к системам заказчика."); note.AddToClassList("note"); more.Add(note);
         }
     }
 }

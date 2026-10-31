@@ -5,25 +5,33 @@ using AlatauCity.DigitalTwin.Data;
 
 namespace AlatauCity.DigitalTwin
 {
-    /// <summary>Presentation step «Прогноз: энергия 2034» (Golden). The city grows 2028 → 2034 at dusk; energy runs as light pulses from the
-    /// 220/110 kV substation to the 110/10 kV substations and along the 110 kV cables in the streets. The load of ПС «Golden» rises with the
-    /// city; in 2034 the evening peak passes its capacity: the lines turn red and flicker, part of the district goes dark. Then the twin's
-    /// answer: the forecast was there 8 years ahead, the 2nd stage is built 3 years earlier, the energy runs blue again and the lights return.
+    /// <summary>Presentation step «Прогноз: энергия 2034» (Golden), one story played once:
+    /// 1) evening falls, the district is lit, energy runs as blue pulses from the 220/110 kV substation along the 110 kV cables;
+    /// 2) the city grows 2028 → 2034, the evening peak rises towards the substation's capacity (the lines warm to amber);
+    /// 3) 2034: the peak is above the capacity — one decisive outage: the lights go out over the part of Golden it feeds, the lines turn red
+    ///    and stall; 4) the consequence in plain words (residents, schools, hospitals in the dark, counted from the buildings);
+    /// 5) the twin's answer: QTwin saw it 8 years ahead, in 2026 — the 2nd stage of the substation is built in 2033 instead of 2036;
+    /// 6) the lights come back, the energy runs blue again. No flicker: every change is one smooth transition.
     /// Numbers come from the twin data (hv_golden capacity / demand, base scenario).</summary>
     public class TourEnergy
     {
         public const int Y0 = 2028, YBad = 2034, YFixFrom = 2033;
-        const float TGrowA = 2.0f, TGrowB = 11.5f, TWarn = 16.5f, TFix = 19.5f;
+        /// <summary>Story beats (step seconds): growth starts, growth ends (2034), the outage, its consequence, the twin's answer, the fix.</summary>
+        public const float TGrowA = 3.5f, TGrowB = 13f, TOut = 13.6f, TCons = 15.2f, TAnswer = 20.5f, TFix = 22.8f;
+        /// <summary>Phase of the story: 0 evening, 1 growth, 2 outage, 3 the twin's answer (still dark), 4 fixed (lights back).</summary>
+        public int Phase => t < TGrowA ? 0 : t < TOut ? 1 : t < TAnswer ? 2 : t < TFix ? 3 : 4;
         readonly TwinData.Facility hv; readonly List<TwinData.Facility> subs = new List<TwinData.Facility>();
         readonly int sc;
         GameObject go; Material cable, trunk; UI.EnergyPanel panel;
-        float t; int lastYear = -1, lastStage = -1; bool tinted, flewIn, flewOut;
+        float t, distC, distT; int lastYear = -1, lastStage = -1; bool tinted, flewIn, flewOut;
         /// <summary>Where ПС 220/110 кВ «Golden» stands (as networks.json hv_golden): the free plot of the plan in the middle of the district's
         /// load (Golden's floor area is centred about 400 m away), 0.9 km from the motorway and 1 km from the LRT; the 220 kV line comes
         /// in from the open land west of the city, the 110 kV side and the gate face the district.</summary>
         public static readonly Vector2 SitePos = new Vector2(SiteX, SiteZ); public const float SiteX = -2045f, SiteZ = -8325f, SiteYaw = 0f;
-        Vector2 site; float lookYaw;
-        static readonly int BlackoutId = Shader.PropertyToID("_AlatauBlackout");
+        Vector2 site, darkC; float lookYaw, darkYaw;
+        static readonly int BlackoutId = Shader.PropertyToID("_AlatauBlackout"), ZoneId = Shader.PropertyToID("_AlatauBlackoutZone");
+        /// <summary>Radius of the outage round the substation (m): the part of Golden its overloaded transformer feeds.</summary>
+        const float OutR = 2600f;
         public static readonly Color Blue = new Color(0.35f, 0.78f, 1f), Amber = new Color(1f, 0.70f, 0.20f), Red = new Color(1f, 0.22f, 0.16f), Green = new Color(0.30f, 0.85f, 0.45f);
 
         public float T => t;
@@ -41,10 +49,22 @@ namespace AlatauCity.DigitalTwin
             // the camera comes to the substation from outside the district: the yard in front, the district it feeds behind it
             Vector2 dc = Vector2.zero; foreach (var f in subs) dc += new Vector2(f.X, f.Z); dc = subs.Count > 0 ? dc / subs.Count - site : Vector2.up;
             lookYaw = dc.sqrMagnitude > 250000f ? Mathf.Atan2(dc.x, dc.y) * Mathf.Rad2Deg : SiteYaw + 35f;
+            // where the outage will be seen: the floor-area centre of the Golden buildings standing in 2034 within its radius
+            var db = CityDatabase.Instance; Vector2 acc = Vector2.zero; float wsum = 0f;
+            if (db != null)
+                foreach (var b in db.Buildings)
+                {
+                    if (b == null || b.District != "Golden") continue;
+                    if (b.Source != "existing_osm" && CityStats.EffectiveYearOf(b.Bid) > YBad) continue;
+                    var p = new Vector2(b.X, b.Z); if ((p - site).sqrMagnitude > OutR * OutR) continue;
+                    acc += p * b.GfaM2; wsum += b.GfaM2;
+                }
+            darkC = wsum > 0f ? acc / wsum : site + (Vector2)(Quaternion.Euler(0f, 0f, -lookYaw) * Vector2.up) * 800f;
+            var dd = darkC - site; if (dd.sqrMagnitude > 1f) darkYaw = Mathf.Atan2(dd.x, dd.y) * Mathf.Rad2Deg; else darkYaw = lookYaw;
             Build();
             var ui = UI.TwinUI.Instance;
             if (ui != null && ui.Scene != null) { panel = new UI.EnergyPanel(this); ui.Scene.Add(panel); }
-            TourFx.Instance?.Evening(19.3f, 6f);
+            TourFx.Instance?.Evening(19.4f, 3.2f);                 // evening falls in the first seconds, then the hour holds
         }
 
         // ------------------------------------------------------------------ geometry: cables along the streets + trunks to the substations
@@ -127,55 +147,75 @@ namespace AlatauCity.DigitalTwin
             else if (lastYear != YBad) { CityTimeline.StopGrowth(); TwinState.Year = YBad; y = YBad; }
             lastYear = y;
 
-            // load of the 220/110 kV substation (smooth with the fractional year)
-            float u = Util(yf);
-            Color c = u < 0.85f ? Blue : u <= 1f ? Color.Lerp(Amber, Blue, (1f - u) / 0.15f) : Red;
-            bool over = u > 1f && !Fixed;
-            float flick = over ? 0.55f + 0.45f * Mathf.PerlinNoise(Time.time * 9f, 0.3f) : 1f;
-            float fixA = Mathf.Clamp01((t - TFix) / 1.5f);
-            if (Fixed) c = Color.Lerp(c, Blue, fixA);
-            foreach (var m in new[] { cable, trunk })
+            // the story drives the look, not the noise of the load: blue → amber while the peak nears the capacity, red at the outage,
+            // blue again after the fix. Each change happens once and smoothly (the old version flickered the lines and the dark area
+            // with Perlin noise, which read as the lights going off and on again and again).
+            float u = Util(yf); int ph = Phase;
+            float outA = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01((t - TOut) / 1.1f));          // 0 → 1 at the outage
+            float fixA = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01((t - TFix) / 2.2f));           // 0 → 1 as the lights come back
+            Color c = Color.Lerp(Blue, Amber, Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.80f, 1.0f, u)));
+            c = Color.Lerp(c, Red, outA); c = Color.Lerp(c, Blue, fixA);
+            float run = Mathf.Lerp(0.6f, 1.6f, Mathf.Clamp01(u));                                  // the energy runs faster with the load
+            run = Mathf.Lerp(run, 0.12f, outA * (1f - fixA));                                       // and stalls while the power is off
+            if (ph == 4) run = Mathf.Lerp(run, 1.0f, fixA);
+            // the glow shader places its pulses at metres − _Time.y × _Speed: changing _Speed directly makes every pulse jump by
+            // (time since load × change), which strobed the lines whenever the load changed. The distance the energy has run is
+            // integrated here instead and handed over as the speed that gives exactly that distance at the current time.
+            distC += 700f * run * dt; distT += 1100f * run * dt;
+            float ty = Mathf.Max(Time.timeSinceLevelLoad, 0.5f);
+            for (int i = 0; i < 2; i++)
             {
-                if (m == null) continue;
+                var m = i == 0 ? cable : trunk; if (m == null) continue;
                 m.SetColor("_Color", c * (m == trunk ? 1.4f : 1.1f)); m.SetFloat("_Year", yf);
-                m.SetFloat("_Fade", Mathf.Clamp01(t / 1.2f) * flick);
-                m.SetFloat("_Speed", (m == trunk ? 1100f : 700f) * Mathf.Lerp(0.6f, 1.6f, Mathf.Clamp01(u)));
+                m.SetFloat("_Fade", Mathf.Clamp01(t / 1.2f));
+                m.SetFloat("_Speed", (m == trunk ? distT : distC) / ty);
             }
-            // outage: the overload trips the transformer, part of the district goes dark (from ~1 s after the peak), back after the fix
-            float dark = over ? Mathf.Clamp01((t - TGrowB - 0.8f) / 1.2f) * (0.75f + 0.25f * Mathf.PerlinNoise(Time.time * 5f, 7.1f)) : 0f;
-            if (Fixed) dark = Mathf.Max(0f, 1f - fixA) * (lastDark);
+            // one decisive outage: the overload trips the transformer, the part of the district it feeds goes dark and stays dark
+            // until the twin's fix is in
+            float dark = outA * (1f - fixA);
             if (dark > 0.001f && !tinted) MarkOutage();
-            Shader.SetGlobalFloat(BlackoutId, dark); lastDark = over ? dark : lastDark;
+            Shader.SetGlobalFloat(BlackoutId, dark);
+            Shader.SetGlobalVector(ZoneId, new Vector4(site.x, site.y, OutR, dark));            // the street lamps and their light on the roads go out inside it
 
-            // the camera: over the district while it grows, then down to the substation for the overload (the yard in front, the dark
+            // the camera: over the district while it grows, then down to the substation for the outage (the yard in front, the dark
             // district behind it), back up over the district once the 2nd stage is in
-            if (!flewIn && t >= TGrowB - 1.4f) { flewIn = true; TourFx.Instance?.GlideTo(site, 1050f, lookYaw, 28f, 6.4f); }
-            if (!flewOut && t >= TFix + 1.4f) { flewOut = true; var to = Quaternion.Euler(0f, lookYaw, 0f) * Vector3.forward * 900f; TourFx.Instance?.GlideTo(site + new Vector2(to.x, to.z), 3600f, lookYaw + 16f, 36f, 7f); }
+            // the outage frame: the substation in the foreground and the district that goes dark behind it, both in view
+            if (!flewIn && t >= TGrowB - 1.4f) { flewIn = true; TourFx.Instance?.GlideTo(Vector2.Lerp(site, darkC, 0.55f), 2300f, darkYaw, 33f, 4.2f); }
+            if (!flewOut && t >= TFix + 1.4f) { flewOut = true; TourFx.Instance?.GlideTo(Vector2.Lerp(site, darkC, 0.8f), 3400f, darkYaw + 16f, 38f, 7f); }
 
-            int stage = t < TGrowB ? 0 : !Fixed ? 1 : 2;
+            int stage = ph < 2 ? 0 : ph < 4 ? 1 : 2;
             if (stage != lastStage) { lastStage = stage; Pins(u); }
             panel?.Refresh();
         }
-        float lastDark;
+        /// <summary>Evening peak (MW) at a fractional year: it holds the year's value for most of the year and moves to the next one in
+        /// its last quarter, so the figure always belongs to the year shown next to it.</summary>
+        public float DemandF(float yf)
+        {
+            int a = Mathf.FloorToInt(yf), b = Mathf.Min(a + 1, 2050);
+            return Mathf.Lerp(Demand(a), Demand(b), Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.75f, 1f, yf - a)));
+        }
         public float Util(float yf)
         {
-            int a = Mathf.FloorToInt(yf), b = Mathf.Min(a + 1, 2050); float k = yf - a;
-            float d = Mathf.Lerp(Demand(a), Demand(b), k), cp = Cap(a); return cp > 0 ? d / cp : 0f;
+            float cp = Cap(Mathf.FloorToInt(yf)); return cp > 0 ? DemandF(yf) / cp : 0f;
         }
-        public int OutPeople;
+        /// <summary>In the dark area at the outage: residents (floor area / 30 m²), schools and kindergartens, hospitals and clinics.</summary>
+        public int OutPeople, OutSchools, OutHealth;
 
         void MarkOutage()
         {
             tinted = true; if (hv == null) return;
-            var c = site; const float R = 2600f; float people = 0;
+            var c = site; float people = 0; int sch = 0, hos = 0;
             TintLayer.Apply(b =>
             {
-                if (b.District != "Golden" || b.Year > YBad) return new Color(0, 0, 0, 0);
-                if ((new Vector2(b.X, b.Z) - c).sqrMagnitude > R * R) return new Color(0, 0, 0, 0);
-                if (b.Kind == "house" || b.Kind.StartsWith("res")) people += b.GfaM2 / 30f;
+                if (b.District != "Golden") return new Color(0, 0, 0, 0);
+                if (b.Source != "existing_osm" && CityStats.EffectiveYearOf(b.Bid) > YBad) return new Color(0, 0, 0, 0);
+                if ((new Vector2(b.X, b.Z) - c).sqrMagnitude > OutR * OutR) return new Color(0, 0, 0, 0);
+                if (b.Kind == "house" || b.Kind.StartsWith("res")) people += b.GfaM2 / CityStats.M2PerResident;
+                else if (b.Kind == "education") sch++;
+                else if (b.Kind == "health") hos++;
                 return new Color(0, 0, 0, 1);
             });
-            OutPeople = Mathf.RoundToInt(people);
+            OutPeople = Mathf.RoundToInt(people); OutSchools = sch; OutHealth = hos;
         }
 
         void Pins(float u)
@@ -198,7 +238,7 @@ namespace AlatauCity.DigitalTwin
         {
             if (go != null) Object.Destroy(go); go = null;
             if (cable != null) Object.Destroy(cable); if (trunk != null) Object.Destroy(trunk);
-            Shader.SetGlobalFloat(BlackoutId, 0f); CityTimeline.StopGrowth();
+            Shader.SetGlobalFloat(BlackoutId, 0f); Shader.SetGlobalVector(ZoneId, Vector4.zero); CityTimeline.StopGrowth();
             MapPins.Instance?.Clear();
             panel?.RemoveFromHierarchy(); panel = null;
         }

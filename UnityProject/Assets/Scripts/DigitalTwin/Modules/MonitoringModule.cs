@@ -119,8 +119,12 @@ namespace AlatauCity.DigitalTwin.Modules
             var sys = LandmarkSystem.Instance;
             var top = Widgets.Block(panel);
             Widgets.Eyebrow(top, "МОНИТОРИНГ СТРОИТЕЛЬСТВА");
-            var sum = new Label("Город по генплану. Выберите объект на карте: камера подлетит к нему и откроется паспорт. У Iconic Complex и KAIST из паспорта открывается мониторинг стройки.");
-            sum.AddToClassList("summary"); sum.style.marginBottom = 4; top.Add(sum);
+            // answer first: how many sites are watched; how to use the map is one quiet line, the long explanation is folded
+            var hero = Glance.MakeHero(top);
+            int watchedN = 0; if (sys != null) foreach (var id in Pinned) if (Watched(sys.Get(id))) watchedN++;
+            hero.Set(watchedN.ToString(), string.Format("из {0} на карте", Pinned.Length), "Стройки под мониторингом: съёмки, BIM, камеры", "", "Нажмите объект — камера подлетит к нему");
+            var det = Widgets.Details(top, "Подробнее"); det.parent.style.marginBottom = 6;
+            Glance.Prose(det, "Город по генплану. Выберите объект на карте: камера подлетит к нему и откроется паспорт. У Iconic Complex и KAIST из паспорта открывается мониторинг стройки.");
             if (sys != null)
             {
                 Group(top, sys, "С мониторингом стройки", true);
@@ -128,20 +132,22 @@ namespace AlatauCity.DigitalTwin.Modules
             }
 
             var gain = Widgets.Block(panel, "Что видно в мониторинге", "");
+            var gainList = new VisualElement(); gain.Add(gainList);
             foreach (var (ic, t) in new[] { ("scan", "Съёмки дроном с начала стройки до сдачи: ортофото 2D и модель 3D, сравнение двух дат шторкой"),
                                             ("eye", "«Что изменилось»: новое между съёмками синим, убранное красным"),
                                             ("layers", "BIM 4D: план и факт по этажам, отставание и опережение по каждому корпусу"),
                                             ("cctv", "Камеры на площадке: люди, техника, нарушения ТБ"),
                                             ("gantt_chart", "График работ и прогноз сдачи по фактическому темпу"),
-                                            ("trending_up", "Контроль для инвестора: готовность по видам работ, отставание и его тренд, освоенный объём (SPI, CPI, EAC), три главных действия, недельный отчёт"),
+                                            ("trending_up", "Контроль для инвестора: готовность, отставание, деньги, три главных действия, недельный отчёт"),
                                             ("triangle_alert", "Дефекты на 3D-модели: место, важность, срок и ответственный"),
                                             ("cloud_sun", "Люди и техника по дням, погода Алматы и простои по правилам площадки") })
             {
                 var r = new VisualElement(); r.AddToClassList("monmap-gain"); r.style.flexDirection = FlexDirection.Row; r.style.alignItems = Align.FlexStart; r.style.marginBottom = 7;
                 var i = TwinUI.Icon(ic, 15); i.style.marginRight = 8; i.style.marginTop = 1; i.style.flexShrink = 0; r.Add(i);
                 var l2 = new Label(t); l2.AddToClassList("small"); l2.style.flexShrink = 1; l2.style.whiteSpace = WhiteSpace.Normal; r.Add(l2);
-                gain.Add(r);
+                gainList.Add(r);
             }
+            Glance.More(gainList, 4);
             gain.Add(SourceTags.Line(IconicMonitor.SrcMon, IconicMonitor.SrcClimate));
         }
 
@@ -155,7 +161,7 @@ namespace AlatauCity.DigitalTwin.Modules
                 row.Add(Widgets.Dot(l.District >= 0 ? CityStats.DistrictColors[l.District] : Color.white, true));
                 var col = new VisualElement(); col.style.flexGrow = 1; col.style.flexShrink = 1; col.style.marginLeft = 8;
                 var n = new Label(l.Short); n.AddToClassList("fw-medium"); col.Add(n);
-                string sub = watched ? (l.Parts != null ? l.Parts.Count + " " + Corpus(l.Parts.Count) : "") + " · съёмки 2D/3D · BIM 4D · камеры"
+                string sub = watched ? (l.Parts != null ? l.Parts.Count + " " + Corpus(l.Parts.Count) : "") + (l.District >= 0 ? " · " + CityStats.DistrictIds[l.District] + " District" : "")
                                      : l.StartYear + "–" + l.EndYear + (l.YearOfficial ? "" : "*") + " · " + (l.District >= 0 ? CityStats.DistrictIds[l.District] + " District" : "");
                 var c = new Label(sub); c.AddToClassList("muted"); c.AddToClassList("small"); col.Add(c);
                 row.Add(col);

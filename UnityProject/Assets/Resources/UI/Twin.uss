@@ -1523,3 +1523,428 @@
 .time-cycle-name { font-size: 12px; color: var(--text); -unity-font-definition: url("Fonts/Geologica-Medium.ttf"); }
 .twin-root .time-cycle-desc { font-size: 11px; color: var(--muted); margin-top: 2px; white-space: normal; }
 /* ===== end w12 ===== */
+/* ===== shared: details (stage 4) ===== */
+.details { margin-top: 6px; }
+.details-head { flex-direction: row; align-items: center; align-self: flex-start; }
+.twin-root .details-title { font-size: 11px; color: #9fb8e8; }
+.details-head:hover .details-title { color: #ffffff; }
+.twin-root .details-chev { margin-left: 4px; }
+.details-body { padding-top: 6px; }
+/* ===== end shared ===== */
+/* ===== w17: construction monitoring — one summary, calm cards, defects on the model ===== */
+.twin-root .w17-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.twin-root .w17-kpis { flex-direction: row; flex-shrink: 0; margin: 0 0 16px 0; }
+.twin-root .w17-k { flex-grow: 1; flex-basis: 0; min-width: 0; margin: 0 12px 0 0; padding: 12px 16px 14px 16px; border-radius: 10px; background-color: #111111; background-image: none; border-width: 1px; border-color: rgba(255, 255, 255, 0.06); border-left-width: 3px; border-left-color: rgba(255, 255, 255, 0.12); align-items: stretch; justify-content: flex-start; }
+.twin-root .w17-k:hover { background-color: #171717; border-color: rgba(255, 255, 255, 0.14); }
+.twin-root .w17-k.s-ok { border-left-color: var(--ok); }
+.twin-root .w17-k.s-warn { border-left-color: var(--warn); }
+.twin-root .w17-k.s-bad { border-left-color: var(--bad); }
+.twin-root .w17-k Label { -unity-text-align: upper-left; white-space: nowrap; }
+.twin-root .w17-k-cap { font-size: 11px; color: var(--muted); }
+.twin-root .w17-k-vr { flex-direction: row; align-items: flex-end; margin: 4px 0 2px 0; }
+.twin-root .w17-k-v { font-size: 28px; color: var(--text); -unity-font-definition: url("Fonts/Geologica-Light.ttf"); }
+.twin-root .w17-k-v.ok { color: var(--ok); }
+.twin-root .w17-k-v.warn { color: var(--warn); }
+.twin-root .w17-k-v.bad { color: var(--bad); }
+.twin-root .w17-k-u { font-size: 13px; color: var(--muted); margin: 0 0 5px 4px; }
+.twin-root .w17-k-sub { font-size: 11px; color: var(--text2); overflow: hidden; text-overflow: ellipsis; }
+.twin-root .w17-row { flex-grow: 0; align-items: flex-start; }
+.twin-root .w17-card { padding: 14px 16px 12px 16px; margin: 0 0 12px 0; border-radius: 10px; background-color: #111111; border-width: 1px; border-color: rgba(255, 255, 255, 0.06); flex-shrink: 0; }
+.twin-root .w17-head { flex-direction: row; align-items: center; margin-bottom: 8px; }
+.twin-root .w17-head-ic { -unity-background-image-tint-color: var(--muted); margin-right: 8px; flex-shrink: 0; }
+.twin-root .w17-title { font-size: 15px; color: var(--text); -unity-font-definition: url("Fonts/Geologica-Medium.ttf"); }
+.twin-root .w17-answer { font-size: 15px; color: var(--text); margin: 0 0 8px 0; white-space: normal; -unity-font-definition: url("Fonts/Geologica-Medium.ttf"); }
+.twin-root .w17-answer.ok { color: var(--ok); }
+.twin-root .w17-answer.warn { color: var(--warn); }
+.twin-root .w17-answer.bad { color: var(--bad); }
+.twin-root .w17-legend { flex-direction: row; flex-wrap: wrap; margin: 2px 0 6px 0; }
+.twin-root .w17-legend .legend-item { margin: 0 14px 0 0; flex-shrink: 0; }
+.twin-root .w17-legend .legend-item Label { white-space: nowrap; font-size: 11px; }
+.twin-root .w17-wt { padding: 8px 0 8px 0; }
+.twin-root .w17-wt-top { flex-direction: row; align-items: center; }
+.twin-root .w17-wt-n { flex-grow: 1; flex-shrink: 1; min-width: 0; font-size: 13px; color: var(--text); }
+.twin-root .w17-wt-p { width: 56px; flex-shrink: 0; font-size: 13px; color: var(--text); -unity-text-align: middle-right; -unity-font-definition: url("Fonts/Geologica-Medium.ttf"); }
+.twin-root .w17-wt-d { width: 84px; flex-shrink: 0; font-size: 11px; color: var(--text2); -unity-text-align: middle-right; }
+.twin-root .w17-wt-d.ok { color: var(--ok); }
+.twin-root .w17-wt-d.warn { color: var(--warn); }
+.twin-root .w17-wt-d.bad { color: var(--bad); }
+.twin-root .w17-wt-d.muted { color: var(--muted); }
+.twin-root .w17-wt .ctl-wt-bar { margin-top: 6px; height: 4px; }
+.twin-root .w17-wt .ctl-wt-bar .mon-fill { height: 4px; background-color: #5b8def; }
+.twin-root .w17-note { font-size: 12px; color: var(--text2); white-space: normal; margin: 0 0 6px 0; }
+.twin-root .w17-go { align-self: flex-start; margin-top: 8px; }
+.twin-root .w17-count { font-size: 11px; margin-left: 10px; }
+.twin-root .w17-count.bad { color: var(--bad); }
+.twin-root .w17-count.warn { color: var(--warn); }
+.twin-root .w17-at { padding: 8px 0 8px 10px; border-left-width: 3px; border-left-color: rgba(255, 255, 255, 0.1); margin: 0 0 6px 0; }
+.twin-root .w17-at.s-bad { border-left-color: var(--bad); }
+.twin-root .w17-at.s-warn { border-left-color: var(--warn); }
+.twin-root .w17-at.s-info { border-left-color: var(--info); }
+.twin-root .w17-at-top { flex-direction: row; align-items: flex-start; }
+.twin-root .w17-at-t { flex-grow: 1; flex-shrink: 1; font-size: 13px; color: var(--text); white-space: normal; }
+.twin-root .w17-at-src { flex-direction: row; flex-wrap: wrap; align-items: center; margin-top: 4px; }
+.twin-root .w17-at .details { margin-top: 2px; }
+.twin-root .w17-act { flex-direction: row; align-items: center; padding: 8px 0 8px 0; }
+.twin-root .w17-act-tx { flex-grow: 1; flex-shrink: 1; min-width: 0; margin: 0 8px 0 10px; }
+.twin-root .w17-act-t { font-size: 13px; color: var(--text); white-space: normal; }
+.twin-root .w17-act-e { font-size: 11px; color: var(--text2); margin-top: 2px; }
+.twin-root .w17-act-e.ok { color: var(--ok); }
+.twin-root .w17-group { font-size: 11px; color: var(--muted); letter-spacing: 0.6px; margin: 12px 0 4px 0; }
+.twin-root .w17-pr { flex-direction: row; align-items: center; padding: 6px 0 6px 0; }
+.twin-root .w17-pr .dot { flex-shrink: 0; margin-right: 10px; }
+.twin-root .w17-pr-tx { flex-grow: 1; flex-shrink: 1; min-width: 0; }
+.twin-root .w17-pr-n { font-size: 12px; color: var(--text); white-space: normal; }
+.twin-root .w17-pr-m { font-size: 11px; color: var(--muted); white-space: normal; margin-top: 1px; }
+.twin-root .w17-pr-s { width: 84px; flex-shrink: 0; font-size: 11px; color: var(--text2); -unity-text-align: middle-right; }
+.twin-root .w17-pr-s.ok { color: var(--ok); }
+.twin-root .w17-pr-s.bad { color: var(--bad); }
+.twin-root .w17-ev { height: 180px; }
+.twin-root .w17-xrow { flex-direction: row; align-items: flex-start; padding: 6px 0 4px 0; }
+.twin-root .w17-xrow-tx { flex-grow: 1; flex-shrink: 1; min-width: 0; }
+.twin-root .w17-xrow-k { font-size: 12px; color: var(--text); margin-bottom: 2px; }
+.twin-root .w17-xrow-v { font-size: 13px; color: var(--text); margin-left: 12px; flex-shrink: 0; -unity-font-definition: url("Fonts/Geologica-Medium.ttf"); }
+.twin-root .w17-xrow-v.ok { color: var(--ok); }
+.twin-root .w17-xrow-v.warn { color: var(--warn); }
+.twin-root .w17-xrow-v.bad { color: var(--bad); }
+.twin-root .w17-def-w { font-size: 11px; color: var(--muted); margin-top: 1px; }
+.twin-root .def-row { border-left-width: 3px; border-left-color: rgba(0, 0, 0, 0); padding-left: 8px; }
+.twin-root .def-row.sel { background-color: rgba(91, 141, 239, 0.16); border-left-color: #5b8def; }
+.twin-root .def-row.sel .def-t { color: #ffffff; }
+.twin-root .w17-def-text { font-size: 13px; color: var(--text); white-space: normal; margin: 6px 0 8px 0; }
+.twin-root .w17-show { flex-direction: row; align-items: center; align-self: stretch; justify-content: center; margin: 12px 0 0 0; padding: 8px 12px 8px 12px; border-radius: 8px; border-width: 1px; border-color: rgba(91, 141, 239, 0.6); background-color: rgba(91, 141, 239, 0.18); background-image: none; }
+.twin-root .w17-show:hover { background-color: rgba(91, 141, 239, 0.32); border-color: #8fb0ff; }
+.twin-root .w17-show:active { background-color: rgba(91, 141, 239, 0.45); }
+.twin-root .w17-show Label { font-size: 13px; color: #dbe6ff; margin-left: 8px; }
+.twin-root .w17-show .icon { -unity-background-image-tint-color: #dbe6ff; }
+.twin-root .w17-dmark { position: absolute; width: 0; height: 0; overflow: visible; }
+.twin-root .w17-dmark-ring { position: absolute; left: -16px; top: -16px; width: 32px; height: 32px; border-radius: 16px; border-width: 3px; border-color: #f5a623; }
+.twin-root .w17-dmark-core { position: absolute; left: -6px; top: -6px; width: 12px; height: 12px; border-radius: 6px; border-width: 2px; border-color: #ffffff; background-color: #f5a623; }
+.twin-root .w17-at-go { flex-shrink: 0; margin: 0 0 0 10px; }
+.twin-root .w17-at .details-body .w17-at-src { margin-top: 2px; }
+.twin-root .w17-crows { flex-shrink: 0; }
+.twin-root .ctl-vscroll .an-ctab { flex-grow: 0; }
+/* ===== end w17 ===== */
+/* ===== w18: platform design system (stage 4): calm blocks, one focal point, quiet sources, sources panel, camera viewer ===== */
+/* type scale: 28 hero · 15–16 titles and answers · 13 body · 11 meta. Colour = status only (green / amber / red), blue = interactive. */
+.block { background-color: rgba(15, 15, 15, 0.93); border-color: #222222; border-radius: 12px; padding: 16px 16px 14px 16px; margin-bottom: 8px; }
+.block-head { margin-bottom: 12px; }
+.block-title { font-size: 15px; letter-spacing: -0.1px; }
+.twin-root .block-sub { font-size: 11px; color: #7a7a7a; }
+.block-head .chev { opacity: 0.6; }
+.block-head:hover .chev { opacity: 1; }
+.eyebrow { margin-bottom: 6px; }
+.twin-root .eyebrow Label { font-size: 11px; color: #8a8a8a; letter-spacing: 0.8px; }
+.eyebrow .pin { width: 5px; height: 5px; }
+.summary { font-size: 15px; -unity-font-definition: url("Fonts/Geologica-Regular.ttf"); letter-spacing: -0.1px; color: #ececec; }
+.twin-root .note { font-size: 11px; color: #858585; }
+.twin-root .muted { color: #858585; }
+/* the answer of a block: a big number, a small muted unit, a short caption */
+.hero { margin: 2px 0 10px 0; }
+.hero-row { flex-direction: row; align-items: flex-end; }
+.twin-root .hero-v { font-size: 28px; color: #fdfcfc; letter-spacing: -0.8px; -unity-font-definition: url("Fonts/Geologica-Medium.ttf"); }
+.twin-root .hero-u { font-size: 15px; color: #9a9a9a; margin-left: 5px; margin-bottom: 4px; }
+.twin-root .hero-c { font-size: 13px; color: #a6a6a6; margin-top: 2px; }
+.hero.warn .hero-v { color: #f5a623; }
+.hero.bad .hero-v { color: #ff5a4f; }
+/* a thin one-colour progress bar */
+.pbar { height: 4px; border-radius: 2px; background-color: #262626; margin: 0 0 14px 0; overflow: hidden; }
+.pbar-fill { height: 100%; border-radius: 2px; background-color: #cfcfcf; }
+.pbar.ok .pbar-fill { background-color: #34c759; }
+.pbar.warn .pbar-fill { background-color: #f5a623; }
+.pbar.bad .pbar-fill { background-color: #ff5a4f; }
+/* KPI cells: quiet tiles, the value clear, the unit small and muted */
+.kpi { background-color: rgba(255, 255, 255, 0.035); border-radius: 8px; padding: 10px 12px 11px 12px; }
+.twin-root .kpi .l { font-size: 11px; color: #8a8a8a; }
+.twin-root .kpi .v { font-size: 22px; letter-spacing: -0.5px; margin-top: 3px; }
+.kpi-vrow { flex-direction: row; align-items: flex-end; }
+.twin-root .kpi-u { font-size: 11px; color: #8a8a8a; margin-left: 4px; margin-bottom: 4px; }
+.kpi-quiet .kpi { background-color: rgba(0, 0, 0, 0); padding: 6px 4px 6px 0; }
+.twin-root .kpi-quiet .kpi .v { font-size: 20px; }
+/* facts: key muted left, value right; hairlines instead of lines */
+.fact { padding: 7px 0; border-bottom-color: rgba(255, 255, 255, 0.05); }
+.twin-root .fact .k { color: #8a8a8a; }
+/* status: a quiet pill, the colour is the text */
+.twin-root .status { padding: 2px 8px; border-radius: 10px; font-size: 11px; background-color: rgba(255, 255, 255, 0.05); }
+/* sources: one quiet line at the bottom of a block */
+.twin-root .src-line { margin-top: 12px; }
+.twin-root .src-cap { font-size: 11px; color: #6c6c6c; }
+.twin-root .src-tag { color: #8ea6d6; background-color: rgba(0, 0, 0, 0); border-color: rgba(122, 167, 255, 0.22); }
+.twin-root .src-tag.model { color: #cfae74; background-color: rgba(0, 0, 0, 0); border-color: rgba(245, 166, 35, 0.22); }
+/* journal cards and insights: neutral cards, status as a thin left bar only */
+.jcard { background-color: rgba(255, 255, 255, 0.035); border-left-width: 3px; }
+.jcard.bad, .jcard.warn, .jcard.ok, .jcard.info { background-color: rgba(255, 255, 255, 0.035); }
+.jcard .src { font-size: 13px; }
+.insight { background-color: rgba(255, 255, 255, 0.035); border-left-width: 3px; padding: 9px 12px; margin-bottom: 6px; }
+.twin-root .insight Label { font-size: 13px; color: #dedede; }
+/* districts: name left, progress right-aligned, the percent is the value */
+.status-row { padding: 8px 8px; }
+.twin-root .dist-row .s { font-size: 12px; color: #858585; }
+.twin-root .dist-pc { width: 52px; flex-shrink: 0; -unity-text-align: middle-right; font-size: 13px; color: #fdfcfc; -unity-font-definition: url("Fonts/Geologica-Medium.ttf"); margin-left: 6px; }
+.twin-root .dist-pc.warn { color: #f5a623; }
+/* the side columns scroll without a visible scrollbar */
+.col-scroll .unity-scroller--vertical { display: none; }
+/* building passport: the status next to the id */
+.pp-idrow { flex-direction: row; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.pp-idrow .id { margin-bottom: 0; flex-shrink: 1; }
+/* landmark passport */
+.lm-purpose { color: #b9b9b9; }
+.lm-cap { background-color: rgba(255, 255, 255, 0.035); }
+.twin-root .lm-src Label { font-size: 11px; color: #8a8a8a; margin-top: 2px; }
+/* the header: hover and pressed states for every icon */
+.hicon:active { background-color: #262626; }
+.twin-root .pcol .p2 { font-size: 11px; color: #858585; }
+
+/* ---------- the panel «Источники и допущения»: grouped, every open source a clickable card with its link ---------- */
+.srcp-panel { width: 680px; padding: 16px 18px 12px 18px; }
+.srcp-head { margin-bottom: 8px; }
+.srcp-hcol { flex-grow: 1; flex-direction: column; }
+.twin-root .srcp-count { font-size: 11px; color: #858585; margin-top: 2px; }
+.srcp-legend { flex-direction: row; align-items: center; margin: 2px 0 0 0; }
+.twin-root .srcp-legend .src-tag { margin: 0 6px 0 0; }
+.twin-root .srcp-intro { margin: 0 0 4px 0; }
+.srcp-scroll { margin-top: 10px; }
+.twin-root .srcp-group { margin: 14px 0 6px 0; }
+.twin-root .srcp-group .gt { font-size: 11px; letter-spacing: 0.6px; color: #b5b5b5; }
+.srcp-item { padding: 10px 12px 10px 12px; margin-bottom: 6px; background-color: rgba(255, 255, 255, 0.035); border-width: 1px; border-color: #232323; border-left-width: 3px; border-left-color: rgba(122, 167, 255, 0.55); border-radius: 8px; }
+.srcp-item.model { border-left-color: rgba(245, 166, 35, 0.55); }
+.srcp-item.link:hover { background-color: rgba(122, 167, 255, 0.08); border-color: rgba(122, 167, 255, 0.45); border-left-color: #7aa7ff; }
+.srcp-item.hl { background-color: rgba(122, 167, 255, 0.10); border-color: rgba(122, 167, 255, 0.75); }
+.srcp-row { flex-direction: row; align-items: flex-start; }
+.twin-root .srcp-title { flex-grow: 1; flex-shrink: 1; font-size: 13px; }
+.twin-root .srcp-go { flex-shrink: 0; margin-left: 12px; font-size: 11px; color: #9fb8e8; padding: 2px 9px; border-radius: 10px; background-color: rgba(122, 167, 255, 0.12); -unity-font-definition: url("Fonts/Geologica-Medium.ttf"); }
+.srcp-item.link:hover .srcp-go { color: #ffffff; background-color: rgba(122, 167, 255, 0.40); }
+.twin-root .srcp-meta { font-size: 11px; margin-top: 2px; }
+.twin-root .srcp-note { font-size: 12px; color: #a3a3a3; margin-top: 5px; }
+.twin-root .srcp-url { font-size: 11px; color: #7f9bd0; margin-top: 5px; }
+.srcp-item.link:hover .srcp-url { color: #c3d4f7; }
+
+/* ---------- Smart City camera viewer: big video, a clean overlay, one status row, clear navigation ---------- */
+.cam-block .feed { height: 214px; border-radius: 10px; border-color: #1f1f1f; }
+.compact .cam-block .feed { height: 188px; }
+.twin-root .feed-id { font-size: 10px; letter-spacing: 0.8px; padding: 1px 6px; background-color: rgba(0, 0, 0, 0.5); }
+.twin-root .feed-clock { font-size: 10px; padding: 1px 6px; background-color: rgba(0, 0, 0, 0.5); }
+.twin-root .feed-place { left: 10px; bottom: 8px; max-width: 68%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; padding: 2px 7px; background-color: rgba(0, 0, 0, 0.55); }
+.twin-root .feed-stub { right: 10px; bottom: 8px; font-size: 10px; letter-spacing: 0.2px; color: rgba(255, 255, 255, 0.6); padding: 2px 7px; background-color: rgba(0, 0, 0, 0.35); }
+.cam-meta { margin-top: 12px; }
+.cam-status { flex-direction: row; align-items: center; flex-wrap: wrap; }
+.twin-root .cam-st { font-size: 13px; -unity-font-definition: url("Fonts/Geologica-Medium.ttf"); margin-right: 14px; }
+.twin-root .cam-st.ok { color: #34c759; }
+.twin-root .cam-st.bad { color: #ff5a4f; }
+.twin-root .cam-chip { font-size: 12px; color: #c9c9c9; margin-right: 12px; }
+.twin-root .cam-chip.muted { color: #8a8a8a; }
+.twin-root .cam-what { font-size: 12px; color: #858585; margin-top: 6px; }
+.cam-nav { flex-direction: row; align-items: center; margin-top: 14px; }
+.twin-root .btn.small.cam-step { width: 30px; height: 28px; padding: 0; font-size: 16px; -unity-text-align: middle-center; border-radius: 8px; }
+.twin-root .cam-count { font-size: 11px; color: #8a8a8a; margin: 0 8px; min-width: 58px; -unity-text-align: middle-center; }
+.twin-root .cam-nav .btn.primary { padding: 5px 12px; border-radius: 8px; }
+/* notifications and toasts: neutral, a thin status bar */
+.toast-host .jcard.toast { background-color: rgb(20, 20, 20); }
+/* numbers never break inside a KPI; quiet KPI grids breathe */
+.kpi-vrow { flex-wrap: nowrap; }
+.twin-root .kpi-vrow .v { white-space: nowrap; flex-shrink: 0; }
+.twin-root .kpi-vrow .kpi-u { white-space: nowrap; flex-shrink: 1; }
+.kpi-quiet .kpi-row { margin-bottom: 4px; }
+/* landmark passport: one-line company and purpose, a quiet source line */
+.twin-root .lm-one { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.twin-root .lm-srcline { font-size: 11px; color: #6f6f6f; margin-top: 8px; }
+.twin-root .lm-src Label { white-space: normal; }
+/* ===== end w18 ===== */
+/* ===== w20: networks for a plot, infrastructure panel ===== */
+.twin-root .w20-net-ans { font-size: 16px; -unity-font-definition: url("Fonts/Geologica-Medium.ttf"); white-space: normal; margin-top: 2px; }
+.w20-net-ans.ok, .w20-inf-ans.ok { color: #34c759; }
+.w20-net-ans.warn { color: #f5a623; }
+.w20-net-ans.bad, .w20-inf-ans.bad { color: #ff5a4f; }
+.twin-root .w20-net-sub { font-size: 13px; color: var(--text2); margin-top: 2px; margin-bottom: 10px; white-space: normal; }
+.w20-net-row { flex-direction: row; align-items: center; height: 24px; }
+.twin-root .w20-net-n { width: 104px; flex-shrink: 0; font-size: 13px; color: var(--text2); white-space: nowrap; overflow: hidden; }
+.w20-net-strip { flex-grow: 1; height: 16px; margin-right: 10px; cursor: link; }
+.w20-net-v { width: 104px; flex-shrink: 0; flex-direction: row; justify-content: flex-end; align-items: center; }
+.twin-root .w20-net-num { font-size: 13px; -unity-font-definition: url("Fonts/Geologica-Medium.ttf"); -unity-text-align: middle-right; }
+.w20-net-num.ok { color: #34c759; }
+.w20-net-num.warn { color: #f5a623; }
+.w20-net-num.bad { color: #ff5a4f; }
+.twin-root .w20-net-unit { font-size: 11px; color: var(--muted); margin-left: 3px; }
+.w20-net-hdr { height: 16px; }
+.w20-net-span { flex-grow: 1; flex-direction: row; justify-content: space-between; margin-right: 10px; }
+.twin-root .w20-net-ax { font-size: 11px; color: var(--muted); }
+.twin-root .w20-net-vh { width: 104px; flex-shrink: 0; -unity-text-align: middle-right; }
+.twin-root .w20-net-leg { font-size: 11px; color: var(--muted); margin-top: 6px; }
+.twin-root .w20-net .fact .k { white-space: normal; }
+.twin-root .w20-inf-ans { font-size: 16px; -unity-font-definition: url("Fonts/Geologica-Medium.ttf"); white-space: normal; margin-top: 2px; }
+.twin-root .w20-inf-sub { font-size: 13px; color: var(--text2); white-space: normal; margin-top: 2px; margin-bottom: 12px; }
+.twin-root .w20-row-v { font-size: 13px; -unity-font-definition: url("Fonts/Geologica-Medium.ttf"); }
+.twin-root .w20-row-v.ok { color: var(--text2); }
+.twin-root .w20-row-v.warn { color: #f5a623; }
+.twin-root .w20-row-v.bad { color: #ff5a4f; }
+.twin-root .w20-hint { font-size: 11px; color: var(--muted); margin-top: 6px; }
+.twin-root .w20-meta { font-size: 11px; color: var(--muted); margin-top: 2px; white-space: normal; }
+/* ===== end w20 ===== */
+/* ===== w19: answer-first analysis panels ===== */
+.w19-hero { margin: 2px 0 8px 0; }
+.w19-hero-row { flex-direction: row; align-items: flex-end; flex-wrap: wrap; }
+.twin-root .w19-hero-v { font-size: 28px; color: var(--text); white-space: nowrap; -unity-font-definition: url("Fonts/Geologica-Medium.ttf"); }
+.twin-root .w19-hero-u { font-size: 15px; color: var(--muted); margin: 0 0 4px 6px; white-space: nowrap; }
+.twin-root .w19-hero-c { font-size: 15px; color: var(--text); margin-top: 2px; white-space: normal; -unity-font-definition: url("Fonts/Geologica-Medium.ttf"); }
+.twin-root .w19-hero-l { font-size: 13px; color: var(--text2); margin-top: 4px; white-space: normal; }
+.twin-root .w19-hero-v.w19-ok, .twin-root .w19-stat-v.w19-ok { color: #33c759; }
+.twin-root .w19-hero-v.w19-warn, .twin-root .w19-stat-v.w19-warn { color: #f5a623; }
+.twin-root .w19-hero-v.w19-bad, .twin-root .w19-stat-v.w19-bad { color: #ff4a3d; }
+.w19-strip { flex-direction: row; margin: 4px 0 4px 0; }
+.w19-stat { flex-grow: 1; flex-basis: 0; flex-shrink: 1; margin-right: 8px; min-width: 0; }
+.twin-root .w19-stat-v { font-size: 16px; color: var(--text); white-space: nowrap; -unity-font-definition: url("Fonts/Geologica-Medium.ttf"); }
+.twin-root .w19-stat-l { font-size: 11px; color: var(--muted); white-space: normal; margin-top: 2px; }
+.twin-root .w19-line { font-size: 13px; color: var(--text2); white-space: normal; margin-top: 6px; }
+.twin-root .w19-prose { font-size: 12px; color: var(--text2); white-space: normal; margin-bottom: 6px; }
+.twin-root .w19-num { white-space: nowrap; flex-shrink: 0; }
+.twin-root .w19-subh { font-size: 11px; color: var(--muted); letter-spacing: 1px; margin: 10px 0 2px 0; }
+/* ===== end w19 ===== */
+/* ===== w27: forecast 2026–2050 — scenario sliders, A and B side by side ===== */
+.w27-mode { flex-direction: row; margin: 0 0 10px 0; padding: 2px; border-radius: 8px; background-color: var(--panel2); }
+.twin-root .w27-mode-b { flex-grow: 1; flex-basis: 0; margin: 0; padding: 5px 8px; border-radius: 6px; border-width: 0; background-color: rgba(0, 0, 0, 0); color: var(--text2); font-size: 12px; -unity-text-align: middle-center; }
+.twin-root .w27-mode-b:hover { color: var(--text); background-color: var(--panel3); }
+.twin-root .w27-mode-b.active { color: #0a0a0a; background-color: var(--text); }
+.w27-pick { flex-direction: row; align-items: flex-start; margin-bottom: 2px; }
+.w27-pick-tag { flex-direction: row; align-items: center; width: 34px; flex-shrink: 0; margin-top: 5px; }
+.twin-root .w27-pick-l { font-size: 13px; color: var(--text); margin-left: 5px; -unity-font-definition: url("Fonts/Geologica-Medium.ttf"); }
+.w27-chips { flex-shrink: 1; flex-grow: 1; margin-bottom: 4px; }
+.twin-root .w27-chip { padding: 3px 9px; font-size: 12px; margin: 0 5px 5px 0; }
+.w27-sl-top { flex-direction: row; justify-content: space-between; align-items: flex-end; margin-top: 8px; }
+.twin-root .w27-sl-n { font-size: 13px; color: var(--text); }
+.twin-root .w27-sl-v { font-size: 15px; color: var(--text); -unity-font-definition: url("Fonts/Geologica-Medium.ttf"); -unity-text-align: middle-right; white-space: nowrap; }
+.slider.w27-slider { margin: 4px 2px 0 2px; flex-grow: 0; height: 30px; }
+.slider.w27-slider .fill { background-color: #7aa7ff; }
+.twin-root .w27-sl-sub { font-size: 11px; color: var(--muted); white-space: normal; margin-top: -2px; }
+.w27-reset-row { flex-direction: row; align-items: center; margin-top: 10px; }
+.twin-root .w27-meta { font-size: 11px; color: var(--muted); white-space: normal; margin-left: 8px; flex-shrink: 1; }
+.twin-root .w27-chart-t { font-size: 11px; color: var(--muted); margin: 4px 0 0 0; }
+.chart.w27-chart { height: 140px; margin: 4px 0 6px 0; }
+.w27-table { margin-top: 10px; }
+.w27-tr { flex-direction: row; align-items: center; padding: 4px 0; }
+.w27-th { padding: 0 0 2px 0; }
+.twin-root .w27-th Label { font-size: 11px; color: var(--muted); }
+.twin-root .w27-td-l { flex-grow: 1; flex-basis: 0; flex-shrink: 1; min-width: 0; font-size: 11px; color: var(--text2); white-space: normal; }
+.twin-root .w27-td { width: 72px; flex-shrink: 0; -unity-text-align: middle-right; align-items: flex-end; }
+.twin-root .w27-a { font-size: 11px; color: var(--muted); white-space: nowrap; -unity-text-align: middle-right; }
+.twin-root .w27-b { font-size: 13px; color: var(--text); white-space: nowrap; -unity-text-align: middle-right; -unity-font-definition: url("Fonts/Geologica-Medium.ttf"); }
+.twin-root .w27-b.w27-ok { color: #33c759; }
+.twin-root .w27-b.w27-warn { color: #f5a623; }
+.twin-root .w27-b.w27-bad { color: #ff4a3d; }
+/* ===== end w27 ===== */
+/* ===== w22: energy story card, construction legend ===== */
+.en-card.over { border-color: #2c3340; border-left-width: 3px; border-left-color: #ff3829; }
+.twin-root .w22-en .en-h { margin-bottom: 4px; }
+.twin-root .w22-en-status { font-size: 16px; margin-top: 10px; white-space: normal; -unity-font-definition: url("Fonts/Geologica-Medium.ttf"); }
+.twin-root .w22-en-sub { font-size: 13px; color: #9a9ea5; margin-top: 2px; white-space: normal; }
+.w22-en-box { height: 96px; margin-top: 8px; justify-content: flex-end; }
+.w22-en .en-chart { margin-top: 0; height: 78px; }
+.w22-en-cons { flex-direction: row; align-items: flex-end; height: 96px; padding-bottom: 6px; }
+.w22-en-fig { flex-grow: 1; flex-basis: 0; }
+.twin-root .w22-en-fv { font-size: 28px; color: #ffffff; -unity-font-definition: url("Fonts/Geologica-Light.ttf"); white-space: nowrap; }
+.twin-root .w22-en-fl { font-size: 11px; color: #9a9ea5; margin-top: 0; }
+.twin-root .w22-en-src { margin-top: 8px; }
+.w22-leg { position: absolute; top: 16px; right: 16px; width: 300px; padding: 12px 14px 10px 14px; border-radius: 14px;
+    background-color: rgba(10, 12, 16, 0.88); border-width: 1px; border-color: #2c3340; }
+.tnav-on .w22-leg { top: 62px; }
+.twin-root .w22-leg-h { font-size: 11px; letter-spacing: 1.4px; color: #a9adb3; -unity-font-definition: url("Fonts/Geologica-Medium.ttf"); margin-bottom: 6px; }
+.twin-root .w22-leg-h2 { font-size: 11px; letter-spacing: 1.4px; color: #a9adb3; -unity-font-definition: url("Fonts/Geologica-Medium.ttf"); margin: 8px 0 4px 0; }
+.w22-leg-pat { flex-direction: column; padding-bottom: 6px; margin-bottom: 6px; border-bottom-width: 1px; border-bottom-color: #262a31; }
+.w22-leg-pat .w22-leg-it { width: 100%; }
+.w22-leg-wide .w22-leg-it { width: 100%; }
+.w22-leg-grid { flex-direction: row; flex-wrap: wrap; }
+.w22-leg-it { flex-direction: row; align-items: center; width: 50%; margin-bottom: 4px; }
+.w22-leg-sw { width: 26px; height: 10px; justify-content: center; margin-right: 8px; flex-shrink: 0; }
+.twin-root .w22-leg-t { font-size: 12px; color: #d4d7dc; white-space: normal; flex-shrink: 1; flex-grow: 1; flex-basis: 0; min-width: 0; padding-right: 6px; }
+.w22-leg-dash { flex-direction: row; height: 4px; }
+.w22-leg-seg { width: 6px; height: 4px; border-radius: 1px; margin-right: 3px; }
+.w22-leg-thin { width: 24px; height: 2px; border-radius: 1px; }
+.w22-leg-box { width: 10px; height: 10px; border-radius: 2px; margin-left: 6px; }
+.w22-net-key { flex-direction: row; margin: 2px 0 2px 0; padding-bottom: 4px; border-bottom-width: 0; }
+.w22-net-key .w22-leg-it { width: 50%; }
+.w22-net-key .w22-leg-t { color: #9a9ea5; font-size: 11px; }
+.w22-net-sw { width: 26px; height: 10px; justify-content: center; margin-right: 8px; flex-shrink: 0; }
+/* ===== end w22 ===== */
+/* ===== w23: AI school step (answer card with 3 variants, map key) ===== */
+.twin-root .w23-card { top: 196px; width: 320px; padding: 14px 18px 12px 18px; }
+.w23-head { flex-direction: row; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.twin-root .w23-eyebrow { margin-bottom: 0; }
+.w23-nav { flex-direction: row; align-items: center; }
+.w23-arrow { width: 28px; height: 28px; border-radius: 14px; background-color: #2a2342; border-width: 1px; border-color: #4b3f7a; align-items: center; justify-content: center; }
+.w23-arrow:hover { background-color: #3d3263; border-color: #a98cff; }
+.w23-arrow:active { background-color: #5a49a0; }
+.twin-root .w23-step { font-size: 13px; color: #ffffff; margin: 0 8px; min-width: 52px; -unity-text-align: middle-center; -unity-font-definition: url("Fonts/Geologica-Medium.ttf"); }
+.w23-body { transition-property: opacity; transition-duration: 0.12s; }
+.twin-root .w23-card .aiw-big { font-size: 40px; }
+.twin-root .w23-card .aiw-sub { margin-bottom: 4px; }
+.twin-root .w23-why { font-size: 13px; color: #d9d3f5; margin-bottom: 10px; white-space: normal; }
+.twin-root .w23-why.best { color: #6fe39a; }
+.twin-root .w23-how { font-size: 11px; color: #9a96b0; white-space: normal; }
+.w23-legend { flex-direction: row; flex-wrap: wrap; margin-top: 10px; }
+.w23-key { flex-direction: row; align-items: center; margin-right: 16px; }
+.w23-kdot { width: 9px; height: 9px; border-radius: 5px; margin-right: 6px; }
+.twin-root .w23-key > Label { font-size: 12px; color: #c8ccd2; }
+.twin-root .w23-vrow { margin-top: 10px; margin-bottom: 0; }
+.twin-root .w23-vline { font-size: 12px; color: var(--text2); white-space: normal; margin-top: 2px; }
+/* ===== end w23 ===== */
+/* ===== w26: pitches (subtitles, scene figure, presentation choice) ===== */
+.w26-wrap { position: absolute; left: 16px; right: 400px; bottom: 22px; flex-direction: column; align-items: center; }
+.compact .w26-wrap { right: 356px; }
+.twin-root .w26-sub { max-width: 100%; font-size: 21px; color: #f4f4f4; -unity-text-align: middle-center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    background-color: rgba(8, 8, 8, 0.78); border-radius: 8px; padding: 8px 18px 9px 18px; -unity-font-definition: url("Fonts/Geologica-Light.ttf"); }
+.w26-fig { flex-direction: row; align-items: center; margin-bottom: 12px; padding: 10px 18px 10px 16px; border-radius: 12px;
+    background-color: rgba(14, 14, 14, 0.94); border-width: 1px; border-color: #343434; border-left-width: 3px; border-left-color: #7aa8ff; }
+.w26-fig-hero { flex-direction: row; align-items: flex-end; margin-right: 14px; }
+.twin-root .w26-fig-v { font-size: 28px; color: #fdfcfc; -unity-font-definition: url("Fonts/Geologica-Medium.ttf"); letter-spacing: -0.5px; white-space: nowrap; }
+.twin-root .w26-fig-u { font-size: 15px; color: #a9a9a9; margin: 0 5px 4px 5px; white-space: nowrap; }
+.w26-fig-col { flex-direction: column; align-items: flex-start; }
+.twin-root .w26-fig-l { font-size: 13px; color: #c9c9c9; margin-bottom: 4px; }
+.w26-fig-src { flex-direction: row; }
+.w26-cols.tour-on .col-right { display: flex; }
+.w26-cols .tour.tour2 { display: none; }
+.w26-on .dock { display: none; }
+.w26-nocallout .tour-callout { display: none; }
+.w26-menu { position: absolute; left: 50%; top: 22%; translate: -50% 0; width: 400px; padding: 14px 16px 12px 16px; border-radius: 12px;
+    background-color: rgba(14, 14, 14, 0.96); border-width: 1px; border-color: #343434; }
+.w26-menu-top { flex-direction: row; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.twin-root .w26-menu-h { font-size: 16px; color: #fdfcfc; -unity-font-definition: url("Fonts/Geologica-Medium.ttf"); }
+.w26-menu-item { flex-direction: row; align-items: center; padding: 10px 10px; margin-top: 6px; border-radius: 8px; background-color: #1b1b1b; border-width: 1px; border-color: #262626; }
+.w26-menu-item:hover { background-color: #232a38; border-color: #7aa8ff; }
+.twin-root .w26-menu-key { width: 26px; height: 26px; border-radius: 6px; background-color: #2a2a2a; color: #c9c9c9; font-size: 13px; -unity-text-align: middle-center; margin-right: 12px; }
+.w26-menu-item:hover .w26-menu-key { background-color: #7aa8ff; color: #0a0a0a; }
+.w26-menu-col { flex-direction: column; flex-grow: 1; flex-shrink: 1; }
+.twin-root .w26-menu-name { font-size: 15px; color: #fdfcfc; -unity-font-definition: url("Fonts/Geologica-Medium.ttf"); }
+.twin-root .w26-menu-sub { font-size: 11px; color: #8f8f8f; margin-top: 2px; }
+.twin-root .w26-menu-hint { font-size: 11px; color: #8f8f8f; margin-top: 10px; }
+/* ===== end w26 ===== */
+/* ===== w21: monitoring pages (Съёмки, 4D, Видео, Инвестору, defect card) ===== */
+.twin-root .w21-hero-r { flex-direction: row; align-items: flex-end; margin: 4px 0 2px 0; }
+.twin-root .w21-hero { font-size: 28px; color: var(--text); margin: 4px 0 2px 0; -unity-font-definition: url("Fonts/Geologica-Light.ttf"); }
+.twin-root .w21-hero.ok { color: var(--ok); }
+.twin-root .w21-hero-r .w21-hero { margin: 0; }
+.twin-root .w21-hero-d { font-size: 15px; color: var(--text2); margin: 0 0 5px 10px; -unity-font-definition: url("Fonts/Geologica-Medium.ttf"); }
+.twin-root .w21-hero-d.ok { color: var(--ok); }
+.twin-root .w21-hero-d.warn { color: var(--warn); }
+.twin-root .w21-hero-d.bad { color: var(--bad); }
+.twin-root .w21-line { font-size: 11px; color: var(--muted); margin: 0 0 6px 0; white-space: normal; }
+.twin-root .w21-more { align-self: flex-start; margin: 6px 0 0 0; }
+.twin-root .w21-kt { width: 32%; }
+.twin-root .w21-kt .mon-kt-v { font-size: 20px; }
+.twin-root .w21-vid-h { align-items: center; margin-bottom: 4px; }
+.twin-root .w21-vid-h .dot { margin-right: 8px; }
+.twin-root .w21-answer { font-size: 15px; color: var(--text); -unity-font-definition: url("Fonts/Geologica-Medium.ttf"); }
+.twin-root .w21-meta { font-size: 11px; color: var(--muted); flex-shrink: 0; margin-left: 10px; }
+.twin-root .w21-ev-t { font-size: 11px; color: var(--muted); width: 42px; flex-shrink: 0; margin-top: 1px; }
+.twin-root .w21-ev-x { font-size: 13px; color: var(--text); flex-grow: 1; }
+.twin-root .mon-ai { margin-top: 6px; }
+.twin-root .w21-deal { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.twin-root .w21-inv-hero { flex-grow: 1.3; border-left-width: 3px; border-left-color: var(--ok); }
+.twin-root .w21-inv-hero .mon-inv-val { font-size: 28px; }
+.twin-root .w21-inv-hero.w21-s-warn { border-left-color: var(--warn); }
+.twin-root .w21-inv-hero.w21-s-bad { border-left-color: var(--bad); }
+.twin-root .mon-inv-val.ok { color: var(--ok); }
+.twin-root .mon-inv-cap { font-size: 11px; }
+.twin-root .mon-inv-sub { font-size: 11px; }
+.twin-root .mon-fact .v.ok { color: var(--ok); }
+.twin-root .def-row .def-tx Label { -unity-text-align: upper-left; }
+.twin-root .def-card .mon-title { white-space: nowrap; flex-shrink: 0; }
+.twin-root .mon-stg-n { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* ===== end w21 ===== */

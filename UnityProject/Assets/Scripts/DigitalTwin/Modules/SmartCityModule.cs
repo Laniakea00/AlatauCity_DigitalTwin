@@ -17,8 +17,8 @@ namespace AlatauCity.DigitalTwin.Modules
         public SmartCityModule() { Instance = this; }
 
         static int sel = -1; static readonly bool[] typeOn = { true, true, true, true };
-        Label eyebrow, summary, camTitle; readonly Label[] kv = new Label[4], kl = new Label[4]; readonly VisualElement[] kb = new VisualElement[4];
-        VisualElement typeRows, reqRows, feedList, camFacts; CameraFeed feed;
+        Label eyebrow, camTitle, camCount, camWhat; readonly Label[] kv = new Label[4], kl = new Label[4]; readonly VisualElement[] kb = new VisualElement[4];
+        VisualElement typeRows, reqRows, feedList, camFacts, hero; CameraFeed feed; Label why;
         static VisualElement tourBox; static CameraFeed tourFeed; static Label tourCap;
 
         public override (Color, string)[] Legend => new[]
@@ -67,38 +67,40 @@ namespace AlatauCity.DigitalTwin.Modules
         // ------------------------------------------------------------------ panel
         protected override void Build()
         {
+            // the answer: how many cameras and how many of them are on line; three figures; the rest folded
             var top = Widgets.Block(panel);
             eyebrow = Widgets.Eyebrow(top, "");
-            summary = new Label(); summary.AddToClassList("summary"); summary.style.marginBottom = 10; top.Add(summary);
-            var grid = new VisualElement(); grid.AddToClassList("kpi-grid"); top.Add(grid); VisualElement row = null;
+            hero = Widgets.Hero(top, "—", "камер", "");
+            var grid = new VisualElement(); grid.AddToClassList("kpi-grid"); grid.AddToClassList("kpi-quiet"); top.Add(grid); VisualElement row = null;
             for (int i = 0; i < 4; i++)
             {
                 if (i % 2 == 0) { row = new VisualElement(); row.AddToClassList("kpi-row"); grid.Add(row); }
-                var k = new VisualElement(); k.AddToClassList("kpi");
-                kl[i] = new Label(); kl[i].AddToClassList("l"); k.Add(kl[i]); kv[i] = new Label("—"); kv[i].AddToClassList("v"); k.Add(kv[i]);
-                kb[i] = k; row.Add(k);
+                var k = Widgets.Kpi(row, "", "—"); kl[i] = k.Q<Label>(className: "l"); kv[i] = k.Q<Label>(className: "v"); kb[i] = k;
             }
+            var more = Widgets.Details(top, "Подробнее");
+            why = new Label { pickingMode = PickingMode.Ignore }; why.AddToClassList("note"); more.Add(why);
+            var note = new Label("Демо-данные: видео — вид из цифрового двойника с места камеры, события и обращения смоделированы QTwin. Интерфейс готов к подключению Smart City Alatau, iKomek 109 и 112 — живые потоки встанут на место модели без переделки экранов.") { pickingMode = PickingMode.Ignore };
+            note.AddToClassList("note"); note.style.marginTop = 6; more.Add(note);
             top.Add(SourceTags.Line(Data.TwinModels.SmartCity));
 
             var tb = Widgets.Block(panel, "Камеры по назначению", "клик — фильтр");
             typeRows = new VisualElement(); tb.Add(typeRows);
 
-            var rb = Widgets.Block(panel, "Обращения iKomek 109", "темы за сутки");
-            reqRows = new VisualElement(); rb.Add(reqRows); rb.Add(SourceTags.Line(Data.TwinModels.SmartCity));
-
-            var n = Widgets.Block(panel);
-            var note = new Label("Демо-данные: видео — вид из цифрового двойника с места камеры, события и обращения смоделированы QTwin. Интерфейс готов к подключению Smart City Alatau, iKomek 109 и 112 — живые потоки встанут на место модели без переделки экранов.");
-            note.AddToClassList("note"); n.Add(note);
+            var rb = Widgets.Block(panel, "Обращения iKomek 109", "за сутки");
+            reqRows = new VisualElement(); rb.Add(reqRows);
 
             Right();
-            var fb = Widgets.Block(panel, "Камера · прямой эфир", "демо-поток");
+            // the camera viewer: the video first and large, one quiet status row, clear navigation
+            var fb = Widgets.Block(panel, "Камера", ""); fb.AddToClassList("cam-block");
             camTitle = fb.Q<Label>(className: "block-title");
             feed = new CameraFeed(); fb.Add(feed);
-            camFacts = new VisualElement(); camFacts.style.marginTop = 8; fb.Add(camFacts);
-            var br = new VisualElement(); br.AddToClassList("lm-btns"); fb.Add(br);
-            br.Add(Widgets.Btn("← Предыдущая", () => Step(-1), "small", "ghost"));
-            br.Add(Widgets.Btn("Следующая →", () => Step(1), "small", "ghost"));
-            br.Add(Widgets.Btn("На карте", () => { var cs = Cams; if (sel >= 0 && sel < cs.Count) FlyTo(cs[sel].World); }, "small"));
+            camFacts = new VisualElement(); camFacts.AddToClassList("cam-meta"); fb.Add(camFacts);
+            var br = new VisualElement(); br.AddToClassList("cam-nav"); fb.Add(br);
+            var pb = Widgets.Btn("‹", () => Step(-1), "small", "cam-step"); pb.tooltip = "Предыдущая камера"; br.Add(pb);
+            camCount = new Label { pickingMode = PickingMode.Ignore }; camCount.AddToClassList("cam-count"); br.Add(camCount);
+            var nb = Widgets.Btn("›", () => Step(1), "small", "cam-step"); nb.tooltip = "Следующая камера"; br.Add(nb);
+            var sp = new VisualElement { pickingMode = PickingMode.Ignore }; sp.style.flexGrow = 1; br.Add(sp);
+            br.Add(Widgets.Btn("Показать на карте", () => { var cs = Cams; if (sel >= 0 && sel < cs.Count) FlyTo(cs[sel].World); }, "small", "primary"));
 
             var eb = Widgets.Block(panel, "Лента событий", "за сутки");
             feedList = new VisualElement(); eb.Add(feedList); eb.Add(SourceTags.Line(Data.TwinModels.SmartCity, Data.TwinModels.Ops));
@@ -121,14 +123,15 @@ namespace AlatauCity.DigitalTwin.Modules
 
         public override void Refresh()
         {
-            if (panel == null || summary == null || !CityStats.Ready) return;
+            if (panel == null || hero == null || !CityStats.Ready) return;
             int y = TwinState.Year; var cs = Cams;
             int total = SmartCity.CameraCount(y), ev = SmartCity.EventsPerDay(y), req = SmartCity.RequestsPerDay(y);
             float on = SmartCity.OnlineShare(y), solved = SmartCity.SolvedInTime(y);
             eyebrow.text = ("Smart City · " + y + " · " + TwinScenario.Name(TwinState.Scenario)).ToUpperInvariant();
-            summary.text = $"В {y} году в городе {Loc.N0(total)} камер, на связи {Mathf.RoundToInt(on * 100)} %. Видеоаналитика даёт ≈ {Loc.N0(ev)} событий в сутки, жители подают ≈ {Loc.N0(req)} обращений в iKomek 109; {Mathf.RoundToInt(solved * 100)} % решаются в срок, реакция — {SmartCity.ReactionMin(y)} мин.";
-            Set(0, Loc.N0(total), "камер в сети", ""); Set(1, Mathf.RoundToInt(on * 100) + " %", "на связи", on < 0.95f ? "warn" : "ok");
-            Set(2, Loc.N0(req), "обращений iKomek 109 в сутки", ""); Set(3, Mathf.RoundToInt(solved * 100) + " %", "решено в срок", solved < 0.85f ? "warn" : "ok");
+            Widgets.SetHero(hero, Loc.N0(total), "камер", string.Format("на связи {0}\u00A0%", Mathf.RoundToInt(on * 100)), on < 0.95f ? "warn" : null);
+            why.text = string.Format("Видеоаналитика даёт ≈ {0} событий в сутки, жители подают ≈ {1} обращений в iKomek 109; {2} % решаются в срок, реакция — {3} мин.", Loc.N0(ev), Loc.N0(req), Mathf.RoundToInt(solved * 100), SmartCity.ReactionMin(y));
+            Set(0, Loc.N0(ev), "событий в сутки", ""); Set(1, SmartCity.ReactionMin(y) + "\u00A0мин", "реакция", "");
+            Set(2, Loc.N0(req), "обращений в сутки", ""); Set(3, Mathf.RoundToInt(solved * 100) + "\u00A0%", "решено в срок", solved < 0.85f ? "warn" : "ok");
 
             float[] share = { 0.46f, 0.30f, 0.09f, 0.15f };
             typeRows.Clear();
@@ -138,22 +141,25 @@ namespace AlatauCity.DigitalTwin.Modules
                 var dot = Widgets.Dot(SmartCity.CamTypeColor[t], true); dot.style.flexShrink = 0; dot.style.marginRight = 8; r.Add(dot);
                 var nm = new Label(SmartCity.CamTypeName[t]) { pickingMode = PickingMode.Ignore }; nm.AddToClassList("n");
                 nm.style.flexShrink = 1; nm.style.minWidth = 0; nm.style.marginRight = 12; nm.style.whiteSpace = WhiteSpace.Normal; r.Add(nm);
-                var st = new Label(Loc.N0(total * share[t]) + " · на карте " + cs.Count(c => (int)c.Type == t)) { pickingMode = PickingMode.Ignore }; st.AddToClassList("s"); st.style.flexShrink = 0; r.Add(st);
+                var st = new Label(Loc.N0(total * share[t])) { pickingMode = PickingMode.Ignore }; st.AddToClassList("s"); st.style.flexShrink = 0; r.Add(st);
+                r.tooltip = string.Format("На карте {0}", cs.Count(c => (int)c.Type == t));
                 r.AddManipulator(new Clickable(() => { typeOn[tt] = !typeOn[tt]; Pins(); Refresh(); }));
                 typeRows.Add(r);
             }
 
-            reqRows.Clear();
-            foreach (var (nmR, sh) in SmartCity.RequestTypes)
+            reqRows.Clear(); int ri = 0; VisualElement reqMore = null;
+            foreach (var (nmR, sh) in SmartCity.RequestTypes.OrderByDescending(x => x.share))
             {
+                if (ri++ == 4) reqMore = Widgets.Details(reqRows, string.Format("Ещё {0}", SmartCity.RequestTypes.Length - 4));
                 var r = new VisualElement(); r.AddToClassList("story-row");
                 var rt = new VisualElement(); rt.AddToClassList("story-rtop"); r.Add(rt);
                 var chip = new VisualElement(); chip.AddToClassList("story-chip"); chip.style.backgroundColor = new Color(0.80f, 0.60f, 1f); rt.Add(chip);
                 var l = new Label(nmR); l.AddToClassList("story-rn"); rt.Add(l);
                 var v = new Label(Loc.N0(req * sh)); v.AddToClassList("story-rv"); rt.Add(v);
                 var bar = new VisualElement(); bar.AddToClassList("story-bar"); var fill = new VisualElement(); fill.AddToClassList("story-fill"); fill.style.backgroundColor = new Color(0.80f, 0.60f, 1f); fill.style.width = Length.Percent(sh / 0.22f * 100f); bar.Add(fill); r.Add(bar);
-                reqRows.Add(r);
+                (reqMore ?? reqRows).Add(r);
             }
+            reqRows.Add(SourceTags.Line(Data.TwinModels.SmartCity));
 
             if (sel < 0 || sel >= cs.Count) sel = cs.FindIndex(c => c.Online && c.Type == SmartCity.CamType.Traffic);
             ShowCam(); FillFeed(); Pins();
@@ -164,19 +170,24 @@ namespace AlatauCity.DigitalTwin.Modules
         {
             if (feed == null || camFacts == null) return;
             var cs = Cams; camFacts.Clear();
-            if (sel < 0 || sel >= cs.Count) { var l = new Label("В этом году камер ещё нет: город только начинает строиться."); l.AddToClassList("note"); camFacts.Add(l); return; }
+            if (sel < 0 || sel >= cs.Count) { var l = new Label("В этом году камер ещё нет"); l.AddToClassList("note"); camFacts.Add(l); if (camCount != null) camCount.text = ""; return; }
             var c = cs[sel]; feed.Show(c);
             if (camTitle != null) camTitle.text = "Камера " + c.Id;
-            camFacts.Add(Widgets.Fact("Назначение", SmartCity.CamTypeName[(int)c.Type]));
-            camFacts.Add(Widgets.Fact("Место", c.Place + " · " + CityStats.DistrictIds[c.District]));
-            camFacts.Add(Widgets.Fact("Видеоаналитика", c.Analytics));
-            var st = Widgets.Fact("Статус", ""); st.RemoveAt(1); st.Add(Widgets.Status(c.Online ? "на связи" : "нет сигнала · заявка в сервис", c.Online ? "ok" : "bad")); st.style.borderBottomWidth = 0; camFacts.Add(st);
+            if (camCount != null) camCount.text = string.Format("{0} из {1}", sel + 1, cs.Count);
+            // one status row: on line / no signal · district · purpose
+            var row = new VisualElement { pickingMode = PickingMode.Ignore }; row.AddToClassList("cam-status"); camFacts.Add(row);
+            var sd = Widgets.Dot(c.Online ? new Color(0.20f, 0.78f, 0.35f) : new Color(1f, 0.36f, 0.31f), true); row.Add(sd);
+            var sl = new Label(c.Online ? "На связи" : "Нет сигнала · заявка в сервис") { pickingMode = PickingMode.Ignore }; sl.AddToClassList("cam-st"); sl.AddToClassList(c.Online ? "ok" : "bad"); row.Add(sl);
+            var dd = Widgets.Dot(CityStats.DistrictColors[c.District], true); dd.AddToClassList("cam-ddot"); row.Add(dd);
+            var dl = new Label(CityStats.DistrictIds[c.District]) { pickingMode = PickingMode.Ignore }; dl.AddToClassList("cam-chip"); row.Add(dl);
+            var tl = new Label(SmartCity.CamTypeName[(int)c.Type]) { pickingMode = PickingMode.Ignore }; tl.AddToClassList("cam-chip"); tl.AddToClassList("muted"); row.Add(tl);
+            camWhat = new Label(string.Format("Видит: {0}", c.Analytics)) { pickingMode = PickingMode.Ignore }; camWhat.AddToClassList("cam-what"); camFacts.Add(camWhat);
         }
 
         void FillFeed()
         {
             feedList.Clear(); var nf = Notifier.Instance;
-            var items = nf != null && nf.Feed.Count > 0 ? nf.Feed.Take(6).ToList() : SmartCity.Day(TwinState.Year).Take(6).ToList();
+            var items = nf != null && nf.Feed.Count > 0 ? nf.Feed.Take(4).ToList() : SmartCity.Day(TwinState.Year).Take(4).ToList();
             if (items.Count == 0) { var l = new Label("Событий нет."); l.AddToClassList("note"); feedList.Add(l); return; }
             foreach (var n in items)
             {

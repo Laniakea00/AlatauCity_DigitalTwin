@@ -106,6 +106,11 @@ float4 ARoofUnits(float2 p, float2 c, float dens, float2 sz, float2 sh, float aa
 AFacade AlatauFacade(float2 wall, float hy, float H, float floorsN, float style, float seed, float3 tint, float3 n, float3 view, float3 wpos, float part, float3 roofRot)
 {
     AFacade o;
+    // walls that came without their wall coordinates (uv = 0) were drawn as roof: no floors, no windows, and a whole dark block
+    // at night. They get coordinates of their own: metres along the wall's direction (a seam only every 400 m)
+    float2 wdir2 = normalize(float2(-n.z, n.x) + float2(1e-5, 0.0));
+    bool noUV = wall.y > -0.5 && wall.y < 0.05 && abs(n.y) < 0.45;
+    wall = noUV ? float2(300.0 + 400.0 * frac(dot(wpos.xz, wdir2) / 400.0), 1000.0) : wall;
     float r1 = AHash1(seed * 255.0 + 1.0), r2 = AHash1(seed * 255.0 + 7.0), r3 = AHash1(seed * 255.0 + 13.0), r4 = AHash1(seed * 255.0 + 19.0);
     bool maket = style > 9.5;
     bool tallM = maket && H >= 42.0;
@@ -147,7 +152,13 @@ AFacade AlatauFacade(float2 wall, float hy, float H, float floorsN, float style,
     float grainFade = saturate(1.25 - (pw.x + pw.y) * 1.1);          // surface grain only where a pixel is smaller than about a metre
     float2 rl = float2(dot(wpos.xz, roofRot.xy), dot(wpos.xz, float2(-roofRot.y, roofRot.x)));     // metres in the building's own frame
     float mpp = max(length(fwidth(wpos.xz)) * 0.75, 1e-3);           // metres per pixel on a roof
-    float fh = H / max(floorsN, 1.0);
+    // the floor count of the data is often 1 for a whole hall, a podium or a two-storey house (the generator stores the height only):
+    // one storey of 7-27 m gave a single row of huge windows, and at night a wall with one lit strip at the bottom and dark above it,
+    // so whole quarters of podiums, sheds and houses went dark. A storey is never taller than its kind allows (houses 3.4 m,
+    // halls 6 m, podiums 5 m, the rest 4.4 m) nor lower than 2.8 m
+    float fhMax = (style > 0.5 && style < 1.5) || style > 8.5 ? 3.4 : (style > 4.5 && style < 5.5) ? 6.0 : (style > 5.5 && style < 6.5) ? 5.0 : 4.4;
+    float floorsE = clamp(max(floorsN, floor(H / fhMax + 0.25)), 1.0, max(floor(H / 2.8), 1.0));
+    float fh = H / floorsE;
     float L = wall.y, m = min(0.55, L * 0.12);
     float nb = max(1.0, floor((L - 2.0 * m) / bw + 0.5));
     float ub = (wall.x - m) / max(L - 2.0 * m, 0.01) * nb;            // bay coordinate: integer = a bay line
@@ -381,10 +392,10 @@ AFacade AlatauFacade(float2 wall, float hy, float H, float floorsN, float style,
     float3 rowA = lerp(wallS, lerp(wallS, glassC * (0.85 + 0.3 * h), hsh), bandY);
     // from afar the lit windows of a floor merge: a glow per floor that varies from floor to floor (and is brighter at street level)
     float floorGlow = (0.55 + 0.9 * AHash2(float2(id.y * 1.7, seed * 37.0))) * lerp(1.0, 2.0 * floorOn, office) * (ground > 0.5 ? 2.2 : 1.0);
-    float3 glowE = avgGlass - glassC + lerp(float3(1.0, 0.80, 0.55), float3(0.92, 0.94, 1.0), office * 0.6) * 0.55 * _AlatauNight * bOcc * 1.3 * saturate(_AlatauNight * 1.6);
+    float3 glowE = avgGlass - glassC + lerp(float3(1.0, 0.80, 0.55), float3(0.92, 0.94, 1.0), office * 0.6) * 0.55 * _AlatauNight * bOcc * 1.9 * saturate(_AlatauNight * 1.6);     // (from afar a lit block must still read as lit)
     float3 glowRow = avgGlass - glassC + (glowE - (avgGlass - glassC)) * floorGlow;
     o.albedo = lerp(lerp(farA, rowA, rowDetail), nearA, detail);
-    o.emit = lerp(lerp(share * glowE, bandY * hsh * glowRow, rowDetail), win * (refl + lamp), detail);
+    o.emit = lerp(lerp((share * glowE + max(0.22 * inWall - share, 0.0) * (glowE - (avgGlass - glassC))), bandY * hsh * glowRow, rowDetail), win * (refl + lamp), detail);     // (small windows still glow from afar at night; only the lamp light is lifted)
     o.emit += avE * step(H - avR * 1.3, hy) * step(hy, H + 0.5) * step(H - 2.0 * fh, hy);      // only the top corners, never down a wall
     o.spec = lerp(share, win, detail) * (1.0 - blind * detail);
     o.ao = lerp(0.58, 1.0, smoothstep(0.0, 1.0, saturate(hy / 8.0)));                                   // walls darken towards the ground

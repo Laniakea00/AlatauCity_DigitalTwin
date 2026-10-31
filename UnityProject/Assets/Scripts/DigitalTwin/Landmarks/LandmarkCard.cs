@@ -19,7 +19,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             var t = new Label(l.Name); t.AddToClassList("t"); head.Add(t);
             head.Add(Widgets.Btn("×", () => sys?.Select(null, false), "small", "ghost"));
             card.Add(head);
-            var co = new Label(l.Company); co.AddToClassList("id"); card.Add(co);
+            var co = new Label(l.Company); co.AddToClassList("id"); co.AddToClassList("lm-one"); co.tooltip = l.Company; card.Add(co);
 
             var chips = new VisualElement(); chips.AddToClassList("lm-chips");
             if (l.District >= 0)
@@ -30,7 +30,8 @@ namespace AlatauCity.DigitalTwin.Landmarks
             int sNow = Modules.MonitoringModule.On ? LandmarkCatalog.NowIdx(l) : LandmarkCatalog.StatusIdx(l);
             var stc = Widgets.Status(LandmarkCatalog.StatusText[sNow], LandmarkCatalog.StatusCls[sNow]); chips.Add(stc);
             card.Add(chips);
-            var pu = new Label(l.Purpose); pu.AddToClassList("lm-purpose"); card.Add(pu);
+            // one line of what it is; the full description sits in «Подробнее» below
+            var pu = new Label(l.Purpose); pu.AddToClassList("lm-purpose"); pu.AddToClassList("lm-one"); pu.tooltip = l.Purpose; card.Add(pu);
 
             if (l.IsLrt) LrtBody(card, l);
             else
@@ -51,24 +52,24 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 card.Add(tl);
                 // the 5 figures an investor asks about first; the rest (and the sources) stay behind "Источники"
                 var facts = new VisualElement(); facts.AddToClassList("lm-facts"); card.Add(facts);
-                foreach (var (k, v) in KeyFacts(l)) facts.Add(Widgets.Fact(k, v));
+                // short values on screen (the number before a dash or a bracket); the full wording in «Подробнее»
+                bool areaInCap = !mon && LandmarkCapacity.Of(l.Id) != null && LandmarkCapacity.Of(l.Id).Unit.Contains("м²");
+                foreach (var (k, v) in KeyFacts(l)) { if (areaInCap && k.StartsWith("Площадь")) continue; facts.Add(Widgets.Fact(k, Short(v))); }
                 if (!mon) Capacity(card, l, y);
                 if (mon) MonitorNote(card, l);
             }
             if (!TwinTour.Running)
             {
-                var more = new VisualElement(); more.AddToClassList("lm-src");
-                var mb = Widgets.Btn(srcOpen ? "Скрыть источники" : "Источники и статус ›", () => { srcOpen = !srcOpen; Fill(card, l); }, "small", "ghost"); mb.style.alignSelf = Align.FlexStart; mb.style.marginLeft = -8;
-                card.Add(mb);
-                if (srcOpen)
-                {
-                    more.Add(new Label("Статус: " + l.StatusNote));
-                    more.Add(new Label("Источник: " + l.Source + " · " + l.SourceDate));
-                    if (!l.IsLrt) more.Add(new Label("Расположение условное — по функции района в генплане."));
-                    if (!l.IsLrt && !l.YearOfficial) more.Add(new Label("Срок ввода не опубликован — в демо принят ориентир."));
-                    card.Add(more);
-                }
+                // the full description, facts and honest notes: one quiet line, open on click
+                var more = Widgets.Details(card, "Подробнее"); more.AddToClassList("lm-src");
+                more.Add(new Label(l.Purpose));
+                if (!l.IsLrt) foreach (var (k, v) in KeyFacts(l)) if (Short(v) != v) more.Add(new Label(k + ": " + v));
+                more.Add(new Label("Статус: " + l.StatusNote));
+                if (!l.IsLrt) more.Add(new Label("Расположение условное — по функции района в генплане."));
+                if (!l.IsLrt && !l.YearOfficial) more.Add(new Label("Срок ввода не опубликован — в демо принят ориентир."));
             }
+            // the source: one quiet line at the bottom
+            var srcl = new Label(string.Format("Источник: {0} · {1}", l.Source, l.SourceDate)) { pickingMode = PickingMode.Ignore }; srcl.AddToClassList("lm-srcline"); card.Add(srcl);
 
             var btns = new VisualElement(); btns.AddToClassList("lm-btns");
             var tp = TowerProfile.For(l.Id);
@@ -133,20 +134,21 @@ namespace AlatauCity.DigitalTwin.Landmarks
             var sp = new VisualElement { pickingMode = PickingMode.Ignore }; sp.style.flexGrow = 1; h.Add(sp);
             var tag = new Label(c.Official ? "официально" : "оценка") { pickingMode = PickingMode.Ignore }; tag.AddToClassList("lm-cap-tag"); tag.EnableInClassList("est", !c.Official); h.Add(tag);
             var v = new Label(LandmarkCapacity.Fmt(cap, c.Unit)) { pickingMode = PickingMode.Ignore }; v.AddToClassList("lm-cap-v"); box.Add(v);
-            var p = new Label(c.Product + (string.IsNullOrEmpty(c.Plain) ? "" : " · " + c.Plain)) { pickingMode = PickingMode.Ignore }; p.AddToClassList("note"); box.Add(p);
+            var p = new Label(c.Product) { pickingMode = PickingMode.Ignore }; p.AddToClassList("note"); box.Add(p);
             var bar = new VisualElement(); bar.AddToClassList("lm-bar"); bar.style.marginTop = 8; var fill = new VisualElement(); fill.AddToClassList("lm-fill");
             fill.style.width = Length.Percent(load * 100f); fill.EnableInClassList("done", load >= 0.8f); bar.Add(fill); box.Add(bar);
             var ly = new Label(load > 0f ? $"{y}: загрузка {Mathf.RoundToInt(load * 100f)} % · выпуск {LandmarkCapacity.Fmt(cap * load, c.Unit)}" : $"{y}: ещё не работает · запуск в {l.EndYear}") { pickingMode = PickingMode.Ignore };
             ly.AddToClassList("note"); ly.style.marginTop = 4; box.Add(ly);
+            var det = Widgets.Details(box, "При полной загрузке");
+            if (!string.IsNullOrEmpty(c.Plain)) { var pl = new Label(c.Plain) { pickingMode = PickingMode.Ignore }; pl.AddToClassList("note"); det.Add(pl); }
             var parts = new System.Collections.Generic.List<string>();
             if (c.Jobs > 0) parts.Add(Loc.N0(c.Jobs) + " рабочих мест");
             if (c.RevenueUsdM > 0) parts.Add("выручка ≈ $" + Loc.N0(c.RevenueUsdM) + " млн в год");
             if (c.Export > 0) parts.Add("экспорт " + Mathf.RoundToInt(c.Export * 100f) + " %");
-            if (parts.Count > 0) { var f = new Label("При полной загрузке: " + string.Join(" · ", parts)) { pickingMode = PickingMode.Ignore }; f.AddToClassList("note"); f.style.marginTop = 2; box.Add(f); }
-            if (l.S2End > 0 && c.Stage2Gain > 0) { var s2 = new Label($"2-я очередь ({l.S2End}): +{Mathf.RoundToInt(c.Stage2Gain * 100f)} % мощности") { pickingMode = PickingMode.Ignore }; s2.AddToClassList("note"); box.Add(s2); }
+            if (parts.Count > 0) { var f = new Label(string.Join(" · ", parts)) { pickingMode = PickingMode.Ignore }; f.AddToClassList("note"); f.style.marginTop = 2; det.Add(f); }
+            if (l.S2End > 0 && c.Stage2Gain > 0) { var s2 = new Label(string.Format("2-я очередь ({0}): +{1} % мощности", l.S2End, Mathf.RoundToInt(c.Stage2Gain * 100f))) { pickingMode = PickingMode.Ignore }; s2.AddToClassList("note"); det.Add(s2); }
         }
 
-        static bool srcOpen;
         static readonly string[] Skip = { "Расположение", "Примечание" };
         static readonly string[] Order = { "Инвестиции", "Рабочие места", "Площадь", "Главная башня", "Мощность", "Студенты", "Номера", "Склады", "Параметры", "Сроки" };
         /// <summary>Up to five facts, the ones that matter to an investor first.</summary>
@@ -157,6 +159,14 @@ namespace AlatauCity.DigitalTwin.Landmarks
             all.Sort((a, b) => Rank(a.Item1).CompareTo(Rank(b.Item1)));
             if (all.Count > 5) all.RemoveRange(5, all.Count - 5);
             return all;
+        }
+        /// <summary>The short form of a fact for the card: the part before " — ", " (" or "; " (the number), full text otherwise.</summary>
+        static string Short(string v)
+        {
+            if (string.IsNullOrEmpty(v)) return v;
+            int i = v.Length;
+            foreach (var sep in new[] { " — ", " (", "; ", ", без" }) { int j = v.IndexOf(sep, System.StringComparison.Ordinal); if (j > 3 && j < i) i = j; }
+            return i < v.Length ? v.Substring(0, i) : v;
         }
         static int Rank(string k) { for (int i = 0; i < Order.Length; i++) if (k.StartsWith(Order[i])) return i; return Order.Length; }
 

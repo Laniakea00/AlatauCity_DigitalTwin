@@ -8,7 +8,7 @@ namespace AlatauCity.DigitalTwin
     /// breakers and disconnectors on their insulator columns, the bus portals and busbars), two power transformers T1 / T2 with their
     /// radiators, conservators and bushings behind a fire wall, the 110 kV switchyard, the control building, lightning and floodlight masts,
     /// and the 220 kV overhead line coming in on lattice towers. One mesh of the landmark material, local x along the yard (220 kV at −x,
-    /// 110 kV at +x), the line leaves at −x. Used by the presentation step «Прогноз: энергия 2034».</summary>
+    /// 110 kV at +x), the line leaves at −x. Used by the presentation step «Прогноз: энергия 2034» and by the landmark ПС «Арна».</summary>
     public static class SubstationModel
     {
         public const float HalfX = 115f, HalfZ = 75f, TowerH = 42f;
@@ -22,20 +22,72 @@ namespace AlatauCity.DigitalTwin
         /// an access road runs from the gate (+x side) to the nearest street.</summary>
         public static GameObject Build(Vector2 site, float yawDeg, out Vector2 lineEnd)
         {
-            var rot = Quaternion.Euler(0f, yawDeg, 0f); bSite = site; bRot = rot;
-            baseY = float.MinValue;
-            foreach (var c in new[] { new Vector2(-1f, -1f), new Vector2(1f, -1f), new Vector2(1f, 1f), new Vector2(-1f, 1f), Vector2.zero })
-                baseY = Mathf.Max(baseY, Ground(c.x * (HalfX + 6f), c.y * (HalfZ + 6f)));
+            Begin(site, yawDeg, float.NaN);
             var k = new LandmarkKit();
             Yard(k); Switchyard220(k); Transformers(k); Switchyard110(k); Building(k); Masts(k);
             var line = Line(k); Access(k);
-            var le = rot * line; lineEnd = site + new Vector2(le.x, le.z);
+            var le = bRot * line; lineEnd = site + new Vector2(le.x, le.z);
             FilmTrees.KeepClear(site, site, Mathf.Sqrt(HalfX * HalfX + HalfZ * HalfZ) + 14f);          // no trees in the yard, under the line
             FilmTrees.KeepClear(World(-HalfX, 0f), World(line.x + 240f, 0f), 12f);
+            return Object(k, "Substation 220/110 kV", new Vector3(site.x, baseY, site.y));
+        }
+
+        /// <summary>The yard alone (fence, switchyards, transformers, building, masts) into a landmark's kit: local frame of the landmark
+        /// (y = 0 at 'level', the levelled plot). Used by the landmark ПС «Арна» (LandmarkModels.Substation), so it looks exactly like
+        /// the substation of the presentation step.</summary>
+        public static void FillYard(LandmarkKit k, Vector2 site, float yawDeg, float level)
+        {
+            Begin(site, yawDeg, level);
+            Yard(k); Switchyard220(k); Transformers(k); Switchyard110(k); Building(k); Masts(k);
+            FilmTrees.KeepClear(site, site, Mathf.Sqrt(HalfX * HalfX + HalfZ * HalfZ) + 14f);
+        }
+
+        /// <summary>What a landmark substation has outside its plot: the 220 kV line on its towers (out along −x) and the access road from
+        /// the gate to the nearest street. A separate object (the landmark's mesh stays the yard, so its label and pick stay on the yard),
+        /// built once the road graph is loaded and shown once the substation is finished in the shown year.</summary>
+        public static void AttachOutside(string landmarkId, Vector2 site, float yawDeg, float level)
+        {
+            if (outside.Contains(landmarkId)) return; outside.Add(landmarkId);
+            var go = new GameObject("Substation outside · " + landmarkId);
+            var o = go.AddComponent<Outside>(); o.Id = landmarkId; o.Site = site; o.Yaw = yawDeg; o.Level = level;
+        }
+        static readonly HashSet<string> outside = new HashSet<string>();
+
+        class Outside : MonoBehaviour
+        {
+            public string Id; public Vector2 Site; public float Yaw, Level;
+            GameObject built; Landmark l; float next;
+            void Update()
+            {
+                if (Time.unscaledTime < next) return; next = Time.unscaledTime + 0.25f;
+                if (built == null)
+                {
+                    if (!Data.TwinData.Ready || Data.TwinData.Roads.Length == 0) return;
+                    Begin(Site, Yaw, Level);
+                    var k = new LandmarkKit(); var line = Line(k); Access(k);
+                    FilmTrees.KeepClear(World(-HalfX, 0f), World(line.x + 240f, 0f), 12f);
+                    built = Object(k, "Substation line and road · " + Id, new Vector3(Site.x, baseY, Site.y)); built.transform.SetParent(transform, true);
+                }
+                if (l == null) l = LandmarkSystem.Instance != null ? LandmarkSystem.Instance.Get(Id) : null;
+                bool on = l == null || LandmarkSystem.Progress(l, LandmarkSystem.YearNow) >= 0.75f;
+                if (built.activeSelf != on) built.SetActive(on);
+            }
+        }
+
+        static void Begin(Vector2 site, float yawDeg, float level)
+        {
+            var rot = Quaternion.Euler(0f, yawDeg, 0f); bSite = site; bRot = rot;
+            if (!float.IsNaN(level)) { baseY = level; return; }
+            baseY = float.MinValue;
+            foreach (var c in new[] { new Vector2(-1f, -1f), new Vector2(1f, -1f), new Vector2(1f, 1f), new Vector2(-1f, 1f), Vector2.zero })
+                baseY = Mathf.Max(baseY, Ground(c.x * (HalfX + 6f), c.y * (HalfZ + 6f)));
+        }
+        static GameObject Object(LandmarkKit k, string name, Vector3 at)
+        {
             var sh = Shader.Find("AlatauCity/Landmark");
-            var go = new GameObject("Substation 220/110 kV");
-            go.transform.SetPositionAndRotation(new Vector3(site.x, baseY, site.y), rot);
-            go.AddComponent<MeshFilter>().sharedMesh = k.ToMesh("Substation 220/110 kV");
+            var go = new GameObject(name);
+            go.transform.SetPositionAndRotation(at, bRot);
+            go.AddComponent<MeshFilter>().sharedMesh = k.ToMesh(name);
             var mr = go.AddComponent<MeshRenderer>();
             if (sh != null) mr.sharedMaterial = new Material(sh) { name = "Substation" };
             var pb = new MaterialPropertyBlock();

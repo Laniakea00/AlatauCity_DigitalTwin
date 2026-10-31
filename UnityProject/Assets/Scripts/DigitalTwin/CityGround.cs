@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using UnityEngine;
 namespace AlatauCity.DigitalTwin
 {
-    /// <summary>Terrain height lookup (50 m grid from the QTwin Blender model). X = east, Z = north, Y = metres a.s.l.</summary>
+    /// <summary>Terrain height lookup (50 m grid from the QTwin Blender model; real relief: checked against Copernicus GLO-30, r = 0.9998). X = east, Z = north, Y = metres a.s.l.</summary>
     public class CityGround : MonoBehaviour
     {
         public TextAsset heights;      // terrain_heights.bytes, float32, row 0 = south, col 0 = west
@@ -35,6 +35,9 @@ namespace AlatauCity.DigitalTwin
             }
             return touched;
         }
+        /// <summary>The height grid itself (for models that work on cells, e.g. the flood): size, cell size and the south-west corner.</summary>
+        public static bool GridReady => h != null;
+        public static int GridNX => NX; public static int GridNY => NY; public static float GridStep => S; public static float GridX0 => X0; public static float GridZ0 => Z0;
         public static float RawHeight(int i) => h != null && i >= 0 && i < h.Length ? h[i] : 0f;
 
         public static float HeightAt(float x, float z)

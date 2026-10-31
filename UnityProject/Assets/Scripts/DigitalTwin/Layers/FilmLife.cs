@@ -24,7 +24,7 @@ namespace AlatauCity.DigitalTwin
         class Run { public Vector3[] P; public float Len; public Vector4 Years; public bool Main; }
         struct Person { public int Run; public float S0, Speed, Lat, Rank, Scale, Phase, Yaw; public bool Rev; public Vector3 Pos; public int Mesh; public Vector4 Top, Bot; }
         class Crowd { public Run[] Runs; public Person[] People; public Vector3 Centre; public float Radius; public int ActYear = -1, ActSc = -1; public float Act; public List<BuildingInfo> Blds; }
-        class Site { public string Id; public Landmark L; public bool Gate, Tried; public Crowd C; public Vector3 Centre; public float Radius; public Matrix4x4[] Poles, Cloth; public Vector4[] ClothA, ClothB, ClothC; public int Kz = -1; }
+        class Site { public string Id; public Landmark L; public bool Gate, Tried; public Crowd C; public Vector3 Centre; public float Radius; public Matrix4x4[] Poles, Cloth; public Vector4[] ClothA, ClothB, ClothC; public int[] Tex; }
 
         readonly Dictionary<long, Crowd> cells = new Dictionary<long, Crowd>();
         readonly Dictionary<long, List<Vector2Int>> waySegs = new Dictionary<long, List<Vector2Int>>();      // (way, segment index ≥ 1)
@@ -85,8 +85,8 @@ namespace AlatauCity.DigitalTwin
             ready = true;
             mainCam = Camera.main; mc = mainCam != null ? mainCam.GetComponent<MapCamera>() : null;
             Material M(int kind, string name) { var m = new Material(sh) { name = name, enableInstancing = true }; m.SetFloat("_LifeKind", kind); return m; }
-            matPerson = M(0, "Film people"); matFlag = M(1, "Film flag (Kazakhstan)"); matBird = M(2, "Film birds"); matPole = M(3, "Film flag poles"); matBanner = M(4, "Film banners");
-            matFlag.SetTexture("_MainTex", KzFlag());
+            matPerson = M(0, "Film people"); matFlag = M(1, "Film flags"); matBird = M(2, "Film birds"); matPole = M(3, "Film flag poles"); matBanner = M(4, "Film banners");
+            matFlag.SetTexture("_MainTex", FlagAtlas());
             people[0] = PersonMesh(0); people[1] = PersonMesh(1); people[2] = PersonMesh(2);
             cloth = ClothMesh(); pole = PoleMesh(); bird = BirdMesh();
             int nb = High ? 3 : 1; batches = new Batch[3][];
@@ -357,30 +357,44 @@ namespace AlatauCity.DigitalTwin
         void Flags(Site s, Transform fr, bool[] ok, float[] hy, int gw, int gd, float step, float halfW, float halfD, System.Func<int, int, bool> inner)
         {
             if (s.Id != "iconic" && s.Id != "kaist" && s.Id != "medcluster") return;
+            // Iconic Complex flies the flags of the countries behind it: China, Kazakhstan in the middle (the host), the Republic of Korea,
+            // and a little apart at the end of the row the qTwin logo (an easter egg); the others Kazakhstan between two banners
+            int[] tex = s.Id == "iconic" ? new[] { FlagCn, FlagKz, FlagKr, FlagLogo } : new[] { -1, FlagKz, -1 };
+            int n = tex.Length; var off = new float[n]; var reach = new int[n];
             // the free paved spot nearest to the middle of the near side of the plot (where the hoarding had its gate)
             int bi = -1, bj = -1; float best = float.MaxValue; var want = new Vector2(0f, -halfD + 14f);
-            float gap = 7.0f;                                                               // between the poles: room for the cloth
-            for (int reach = 3; reach >= 2 && bi < 0; reach--)
+            for (int pass = 0; pass < 2 && bi < 0; pass++)
             {
-                gap = reach == 3 ? 7.0f : 5.2f;
-                for (int j = 0; j < gd; j++) for (int i = reach; i < gw - reach; i++)
+                float gap = pass == 0 ? 7.0f : n > 3 ? 6.0f : 5.2f;                        // between the poles: room for the cloth
+                for (int k = 0; k < n; k++)
                 {
-                    if (!inner(i, j) || !inner(i - reach, j) || !inner(i + reach, j)) continue;
+                    off[k] = (k - 1) * gap + (k == 3 ? 0.4f * gap : 0f);
+                    reach[k] = (int)Mathf.Sign(off[k]) * Mathf.CeilToInt(Mathf.Abs(off[k]) / step - 1e-3f);     // grid cells to the pole, free round it
+                }
+                for (int j = 0; j < gd; j++) for (int i = 0; i < gw; i++)
+                {
+                    bool fits = true; for (int k = 0; k < n && fits; k++) fits = inner(i + reach[k], j);
+                    if (!fits) continue;
                     float dd = (new Vector2(-halfW + (i + 0.5f) * step, -halfD + (j + 0.5f) * step) - want).sqrMagnitude; if (dd < best) { best = dd; bi = i; bj = j; }
                 }
             }
             if (bi < 0) return;
-            s.Poles = new Matrix4x4[3]; s.Cloth = new Matrix4x4[3]; s.ClothA = new Vector4[3]; s.ClothB = new Vector4[3]; s.ClothC = new Vector4[3];
-            float yaw = Mathf.Atan2(Wind.x, Wind.z) * Mathf.Rad2Deg - 90f;      // cloth runs along local +x
-            for (int k = 0; k < 3; k++)
+            s.Poles = new Matrix4x4[n]; s.Cloth = new Matrix4x4[n]; s.ClothA = new Vector4[n]; s.ClothB = new Vector4[n]; s.ClothC = new Vector4[n]; s.Tex = tex;
+            // the cloth runs along local +x. At Iconic the wind blows along the front of the plot, so the four cloths fly along the row
+            // side by side, each readable face on from the entrance and the usual view of the plaza (hoist on the left)
+            var wind = s.Id == "iconic" ? fr.TransformDirection(Vector3.right) : Wind;
+            float yaw = Mathf.Atan2(wind.x, wind.z) * Mathf.Rad2Deg - 90f;
+            for (int k = 0; k < n; k++)
             {
-                var lp = fr.TransformPoint(new Vector3(-halfW + (bi + 0.5f) * step + (k - 1) * gap, 0f, -halfD + (bj + 0.5f) * step));
+                var lp = fr.TransformPoint(new Vector3(-halfW + (bi + 0.5f) * step + off[k], 0f, -halfD + (bj + 0.5f) * step));
                 lp.y = hy[bj * gw + bi] - 0.05f;
                 s.Poles[k] = Matrix4x4.TRS(lp, Quaternion.identity, Vector3.one);
-                s.Cloth[k] = Matrix4x4.TRS(lp + Vector3.up * 11.75f + Wind * 0.10f, Quaternion.Euler(0f, yaw, 0f), new Vector3(5.2f, 2.6f, 2.8f));     // 2:1 cloth, as the flag of Kazakhstan
-                s.ClothA[k] = new Vector4(1f, k * 1.7f, 0.55f, 0f);
+                // each cloth in its own proportions, its top 0.3 m under the finial: Kazakhstan and the banners 2:1, China, Korea and the
+                // logo 3:2 of the same area
+                bool wide = tex[k] < 0 || tex[k] == FlagKz; float cw = wide ? 5.2f : 4.5f, ch = wide ? 2.6f : 3.0f;
+                s.Cloth[k] = Matrix4x4.TRS(lp + Vector3.up * (14.35f - ch) + wind * 0.10f, Quaternion.Euler(0f, yaw, 0f), new Vector3(cw, ch, 2.8f));
+                s.ClothA[k] = new Vector4(1f, k * 1.7f, 0.55f, tex[k] == FlagLogo ? 1f : 0f);    // w 1: a two-ply cloth, the logo reads from both sides
             }
-            s.Kz = 1;                                                                       // the national flag in the middle
             Color a, b;
             switch (s.Id)
             {
@@ -388,7 +402,7 @@ namespace AlatauCity.DigitalTwin
                 case "medcluster": a = new Color(0.94f, 0.94f, 0.93f); b = new Color(0.10f, 0.52f, 0.50f); break;
                 default: a = new Color(0.78f, 0.64f, 0.36f); b = new Color(0.16f, 0.16f, 0.17f); break;
             }
-            for (int k = 0; k < 3; k++) { s.ClothB[k] = a; s.ClothC[k] = b; }
+            for (int k = 0; k < n; k++) { s.ClothB[k] = a; s.ClothC[k] = b; }
         }
 
         // ------------------------------------------------------------------ drawing (for whichever main camera renders: the map view and the capture renders)
@@ -473,10 +487,10 @@ namespace AlatauCity.DigitalTwin
             foreach (var s in sites)
             {
                 if (s.Poles == null || !Done(s) || Flat(s.Centre - cp) > 2500f) continue;
-                for (int k = 0; k < 3; k++)
+                for (int k = 0; k < s.Poles.Length; k++)
                 {
                     poleBatch.M[np] = s.Poles[k]; poleBatch.B[np] = new Vector4(0.80f, 0.81f, 0.82f, 0f); poleBatch.A[np] = Vector4.zero; poleBatch.C[np] = Vector4.zero; np++;
-                    if (k == s.Kz) { flagBatch.M[nf] = s.Cloth[k]; flagBatch.A[nf] = s.ClothA[k]; flagBatch.B[nf] = Vector4.zero; flagBatch.C[nf] = Vector4.zero; nf++; }
+                    if (s.Tex[k] >= 0) { flagBatch.M[nf] = s.Cloth[k]; flagBatch.A[nf] = s.ClothA[k]; flagBatch.B[nf] = FlagRect[s.Tex[k]]; flagBatch.C[nf] = Vector4.zero; nf++; }     // B: its cell of the atlas
                     else { bannerBatch.M[nb] = s.Cloth[k]; bannerBatch.A[nb] = s.ClothA[k]; bannerBatch.B[nb] = s.ClothB[k]; bannerBatch.C[nb] = s.ClothC[k]; nb++; }
                 }
             }
@@ -658,39 +672,165 @@ namespace AlatauCity.DigitalTwin
             var bb = new Bounds(Vector3.zero, new Vector3(1.4f, 1.0f, 1.0f)); m.bounds = bb; return m;
         }
 
-        /// <summary>The flag of Kazakhstan, drawn: sky blue, the golden sun with its rays and the steppe eagle under it, the national
-        /// ornament along the hoist. 256 × 128.</summary>
-        static Texture2D KzFlag()
+        // ------------------------------------------------------------------ the cloths of the flags: one atlas, one instanced draw
+        /// <summary>The flags of the atlas: Kazakhstan, China, the Republic of Korea, the qTwin logo.</summary>
+        const int FlagKz = 0, FlagCn = 1, FlagKr = 2, FlagLogo = 3, AtlasW = 1024, AtlasH = 512;
+        /// <summary>Where each flag lies in the atlas: uv offset (xy) and size (zw), the _LifeB of its cloth (AlatauLife, kind 1).</summary>
+        static readonly Vector4[] FlagRect = new Vector4[4];
+
+        /// <summary>The cloths of the flags in one atlas of 1024 × 512, a cell of 512 × 256 each with the flag in its middle and its edge
+        /// colours carried out to the border of the cell (nothing of a neighbour bleeds in at a distance): Kazakhstan 2:1 (480 × 240),
+        /// China, the Republic of Korea and the qTwin logo 3:2 (360 × 240). Drawn with 2 × 2 samples a pixel.</summary>
+        static Texture2D FlagAtlas()
         {
-            const int W = 256, H = 128; var px = new Color32[W * H];
-            Color32 blue = new Color32(0, 175, 202, 255), gold = new Color32(254, 197, 0, 255);
-            for (int y = 0; y < H; y++) for (int x = 0; x < W; x++)
+            var px = new Color32[AtlasW * AtlasH];
+            for (int f = 0; f < 4; f++)
             {
-                float u = (x + 0.5f) / H, v = (y + 0.5f) / H;           // in flag heights
-                bool g = false;
-                // the sun and its 32 rays
-                float dx = u - 1.0f, dy = v - 0.60f, r = Mathf.Sqrt(dx * dx + dy * dy), a = Mathf.Atan2(dy, dx);
-                if (r < 0.125f) g = true;
-                else if (r > 0.145f && r < 0.245f && Mathf.Repeat(a / (Mathf.PI * 2f) * 32f, 1f) < 0.42f * (1f - (r - 0.145f) / 0.13f) + 0.12f) g = true;
-                // the eagle: spread wings in an arc under the sun, thinner towards the tips, a small body and head in the middle
-                float ex = u - 1.0f, ax = Mathf.Abs(ex);
-                if (ax < 0.36f)
+                int w = f == FlagKz ? 480 : 360, h = 240, cx = (f & 1) * 512, cy = (f >> 1) * 256, x0 = cx + (512 - w) / 2, y0 = cy + (256 - h) / 2;
+                FlagRect[f] = new Vector4(x0 / (float)AtlasW, y0 / (float)AtlasH, w / (float)AtlasW, h / (float)AtlasH);
+                if (f == FlagLogo) Logo(px, x0, y0, w, h);
+                else
+                    for (int y = 0; y < h; y++) for (int x = 0; x < w; x++)
+                    {
+                        int r = 0, g = 0, b = 0;
+                        for (int q = 0; q < 4; q++)
+                        {
+                            float u = (x + 0.25f + 0.5f * (q & 1)) / h, v = (y + 0.25f + 0.5f * (q >> 1)) / h;      // in heights of the flag
+                            var c = f == FlagKz ? Kz(u, v) : f == FlagCn ? Cn(u, v) : Kr(u, v);
+                            r += c.r; g += c.g; b += c.b;
+                        }
+                        px[(y0 + y) * AtlasW + x0 + x] = new Color32((byte)((r + 2) >> 2), (byte)((g + 2) >> 2), (byte)((b + 2) >> 2), 255);
+                    }
+                for (int y = cy; y < cy + 256; y++) for (int x = cx; x < cx + 512; x++)
                 {
-                    float wy = 0.30f + 0.32f * ax - 0.55f * ax * ax, th = 0.055f * (1f - ax / 0.40f) + 0.012f;
-                    if (Mathf.Abs(v - wy) < th && ax > 0.02f) g = true;
-                    if (ax < 0.03f && v > 0.25f && v < 0.36f) g = true;
+                    int qx = Mathf.Clamp(x, x0, x0 + w - 1), qy = Mathf.Clamp(y, y0, y0 + h - 1);
+                    if (qx != x || qy != y) px[y * AtlasW + x] = px[qy * AtlasW + qx];
                 }
-                // the ornament along the hoist: a column of linked curls
-                if (u > 0.05f && u < 0.16f)
-                {
-                    float cy = Mathf.Repeat(v * 5f, 1f) - 0.5f, cx = (u - 0.105f) / 0.055f;
-                    float rr = Mathf.Sqrt(cx * cx + cy * cy * 4f);
-                    if ((rr > 0.55f && rr < 0.85f && Mathf.Abs(cx) > 0.15f) || Mathf.Abs(cx) < 0.12f) g = true;
-                }
-                px[y * W + x] = g ? gold : blue;
             }
-            var t = new Texture2D(W, H, TextureFormat.RGBA32, true) { name = "Flag of Kazakhstan", wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Trilinear, anisoLevel = 2 };
+            var t = new Texture2D(AtlasW, AtlasH, TextureFormat.RGBA32, true) { name = "Flags", wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Trilinear, anisoLevel = 2 };
             t.SetPixels32(px); t.Apply(true, true); return t;
+        }
+
+        static readonly Color32 KzBlue = new Color32(0, 175, 202, 255), KzGold = new Color32(254, 197, 0, 255);
+        /// <summary>The flag of Kazakhstan (2:1) at (u, v) in heights of the flag from the lower hoist corner: sky blue, the golden sun
+        /// with its 32 rays and the steppe eagle under it, the national ornament along the hoist.</summary>
+        static Color32 Kz(float u, float v)
+        {
+            // the sun and its 32 rays
+            float dx = u - 1.0f, dy = v - 0.60f, r2 = dx * dx + dy * dy;
+            if (r2 < 0.125f * 0.125f) return KzGold;
+            if (r2 > 0.145f * 0.145f && r2 < 0.245f * 0.245f)
+            {
+                float r = Mathf.Sqrt(r2), a = Mathf.Atan2(dy, dx);
+                if (Mathf.Repeat(a / (Mathf.PI * 2f) * 32f, 1f) < 0.42f * (1f - (r - 0.145f) / 0.13f) + 0.12f) return KzGold;
+            }
+            // the eagle: spread wings in an arc under the sun, thinner towards the tips, a small body and head in the middle
+            float ax = Mathf.Abs(dx);
+            if (ax < 0.36f)
+            {
+                float wy = 0.30f + 0.32f * ax - 0.55f * ax * ax, th = 0.055f * (1f - ax / 0.40f) + 0.012f;
+                if (Mathf.Abs(v - wy) < th && ax > 0.02f) return KzGold;
+                if (ax < 0.03f && v > 0.25f && v < 0.36f) return KzGold;
+            }
+            // the ornament along the hoist: a column of linked curls
+            if (u > 0.05f && u < 0.16f)
+            {
+                float cy = Mathf.Repeat(v * 5f, 1f) - 0.5f, cx = (u - 0.105f) / 0.055f;
+                float rr = Mathf.Sqrt(cx * cx + cy * cy * 4f);
+                if ((rr > 0.55f && rr < 0.85f && Mathf.Abs(cx) > 0.15f) || Mathf.Abs(cx) < 0.12f) return KzGold;
+            }
+            return KzBlue;
+        }
+
+        static readonly Color32 CnRed = new Color32(238, 28, 37, 255), CnYellow = new Color32(255, 255, 0, 255);
+        static readonly Vector2[] CnSmall = { new Vector2(10f, 2f), new Vector2(12f, 4f), new Vector2(12f, 7f), new Vector2(10f, 9f) };
+        /// <summary>The flag of the People's Republic of China (3:2, GB 12982-2004) at (u, v): red, in the upper hoist quarter (a grid of
+        /// 15 × 10 cells from the upper hoist corner) the large yellow star at (5, 5), radius 3, a point straight up, and the four small
+        /// stars, radius 1, at (10, 2), (12, 4), (12, 7), (10, 9), each with a point towards the centre of the large one.</summary>
+        static Color32 Cn(float u, float v)
+        {
+            float gx = u * 20f, gy = (1f - v) * 20f;                  // cells of the standard's grid (30 × 20 on the whole flag), y down
+            if (gx > 13.5f || gy > 10.5f) return CnRed;
+            if (Star(gx, gy, 5f, 5f, 3f, -90f)) return CnYellow;
+            foreach (var c in CnSmall) if (Star(gx, gy, c.x, c.y, 1f, Mathf.Atan2(5f - c.y, 5f - c.x) * Mathf.Rad2Deg)) return CnYellow;
+            return CnRed;
+        }
+        /// <summary>Whether (x, y) is inside the regular five-pointed star at (cx, cy) of outer radius R with a point at angle a0 (degrees).</summary>
+        static bool Star(float x, float y, float cx, float cy, float R, float a0)
+        {
+            float dx = x - cx, dy = y - cy, r2 = dx * dx + dy * dy; if (r2 > R * R) return false;
+            float ri = R * 0.381966f;                                 // the inner corners (1/φ² of the points)
+            if (r2 < ri * ri * 0.65f) return true;
+            float f = Mathf.Repeat(Mathf.Atan2(dy, dx) * Mathf.Rad2Deg - a0, 72f); f = Mathf.Min(f, 72f - f) * Mathf.Deg2Rad;     // from the nearest point
+            float rb = R * ri * 0.5877853f / (ri * Mathf.Sin(0.6283185f - f) + R * Mathf.Sin(f));                               // the edge from the point to the inner corner
+            return r2 <= rb * rb;
+        }
+
+        static readonly Color32 KrRed = new Color32(205, 46, 58, 255), KrBlue = new Color32(0, 71, 160, 255), KrBlack = new Color32(0, 0, 0, 255), FlagWhite = new Color32(255, 255, 255, 255);
+        /// <summary>The flag of the Republic of Korea (3:2) at (u, v), in the units of its standard (the flag 72 × 48, the taegeuk of
+        /// diameter 24 in the middle): white; the taegeuk red above and blue below the diagonal from the upper hoist corner, divided by an S
+        /// of two half circles on that diagonal (the red one on the hoist half); the four black trigrams on the diagonals, 6 from the
+        /// taegeuk, bars 12 × 2 one apart, broken by a gap of 1: ☰ geon upper hoist, ☵ gam upper fly, ☲ ri lower hoist, ☷ gon lower fly.</summary>
+        static Color32 Kr(float u, float v)
+        {
+            float x = (u - 0.75f) * 48f, y = (v - 0.5f) * 48f;
+            const float ex = 0.8320503f, ey = 0.5547002f;             // (3, 2) / √13: along the diagonals
+            float r2 = x * x + y * y;
+            if (r2 <= 144f)
+            {
+                float ux = x + 6f * ex, uy = y - 6f * ey, lx = x - 6f * ex, ly = y + 6f * ey;      // from the middles of the two half circles
+                if (ux * ux + uy * uy <= 36f) return KrRed;
+                if (lx * lx + ly * ly <= 36f) return KrBlue;
+                return x * ey + y * ex > 0f ? KrRed : KrBlue;
+            }
+            for (int k = 0; k < 2; k++)
+            {
+                float ax = k == 0 ? -ex : ex, t = x * ax + y * ey, sd = Mathf.Abs(-x * ey + y * ax), at = Mathf.Abs(t);
+                if (at < 18f || at > 26f || sd > 6f) continue;
+                int bar = at <= 20f ? 0 : at < 21f ? -1 : at <= 23f ? 1 : at < 24f ? -1 : 2;          // inner, middle, outer
+                if (bar < 0) return FlagWhite;
+                int broken = k == 0 ? (t > 0f ? 0 : 7) : (t > 0f ? 5 : 2);                          // bit per bar: ☰ none, ☷ all, ☵ inner and outer, ☲ middle
+                return ((broken >> bar) & 1) != 0 && sd < 0.5f ? FlagWhite : KrBlack;
+            }
+            return FlagWhite;
+        }
+
+        static readonly Color32 LogoCloth = new Color32(24, 26, 31, 255);
+        /// <summary>The easter egg: the qTwin logo of the header (Resources UI/qtwin_logo) in the middle of a dark cloth, as on the header.
+        /// The logo is not readable on the CPU: it is drawn into a small render texture once and read back. A drawn gear if it is missing.</summary>
+        static void Logo(Color32[] px, int x0, int y0, int w, int h)
+        {
+            var src = Resources.Load<Texture2D>("UI/qtwin_logo");
+            int lh = Mathf.RoundToInt(h * 0.70f), lw = src != null ? Mathf.RoundToInt(lh * src.width / (float)src.height) : lh;
+            Color32[] lp = null;
+            if (src != null)
+            {
+                var rt = RenderTexture.GetTemporary(lw, lh, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Default); var was = RenderTexture.active;
+                Graphics.Blit(src, rt); RenderTexture.active = rt;
+                var rd = new Texture2D(lw, lh, TextureFormat.RGBA32, false); rd.ReadPixels(new Rect(0, 0, lw, lh), 0, 0); rd.Apply(false);
+                RenderTexture.active = was; RenderTexture.ReleaseTemporary(rt);
+                lp = rd.GetPixels32(); Destroy(rd);
+            }
+            int ox = (w - lw) / 2, oy = (h - lh) / 2;
+            for (int y = 0; y < h; y++) for (int x = 0; x < w; x++)
+            {
+                int lx = x - ox, ly = y - oy; Color32 c = LogoCloth; float a = 0f;
+                if (lx >= 0 && ly >= 0 && lx < lw && ly < lh)
+                {
+                    if (lp != null) { c = lp[ly * lw + lx]; a = c.a / 255f; }
+                    else
+                    {
+                        // a white gear round a red and a green arc open to the right, as the logo
+                        float fx = (lx + 0.5f) / lh - 0.5f, fy = (ly + 0.5f) / lh - 0.5f, r = Mathf.Sqrt(fx * fx + fy * fy), an = Mathf.Atan2(fy, fx) * Mathf.Rad2Deg;
+                        bool open = Mathf.Abs(an) < 40f, tooth = Mathf.Repeat(an + 11.25f, 45f) < 22.5f;
+                        if ((r > 0.36f && r < 0.43f) || (r >= 0.43f && r < 0.5f && tooth)) { c = FlagWhite; a = 1f; }
+                        else if (!open && r > 0.24f && r < 0.31f) { c = new Color32(226, 36, 41, 255); a = 1f; }
+                        else if (!open && r > 0.14f && r < 0.20f) { c = new Color32(48, 214, 64, 255); a = 1f; }
+                    }
+                }
+                var o = Color32.Lerp(LogoCloth, c, a); o.a = 255;
+                px[(y0 + y) * AtlasW + x0 + x] = o;
+            }
         }
 
         static float Dist(Vector2 p, Vector2 a, Vector2 b)

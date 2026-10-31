@@ -525,7 +525,7 @@ namespace AlatauCity.DigitalTwin.UI
             var sp = new VisualElement { pickingMode = PickingMode.Ignore }; sp.style.flexGrow = 1; top.Add(sp);
             lClock = new Label { pickingMode = PickingMode.Ignore }; lClock.AddToClassList("feed-clock"); top.Add(lClock);
             lPlace = new Label { pickingMode = PickingMode.Ignore }; lPlace.AddToClassList("feed-place"); overlay.Add(lPlace);
-            lStub = new Label("ДЕМО-ПОТОК · МОДЕЛЬ QTWIN") { pickingMode = PickingMode.Ignore }; lStub.AddToClassList("feed-stub"); overlay.Add(lStub);
+            lStub = new Label("демо-поток") { pickingMode = PickingMode.Ignore }; lStub.AddToClassList("feed-stub"); overlay.Add(lStub);
             RegisterCallback<AttachToPanelEvent>(_ => { if (!attached) { attached = true; FeedRig.Ensure().Use(true); if (cam != null) FeedRig.Instance.Look(cam); } });
             RegisterCallback<DetachFromPanelEvent>(_ => { if (attached) { attached = false; FeedRig.Instance?.Use(false); } });
             schedule.Execute(Tick).Every(100);
@@ -535,7 +535,8 @@ namespace AlatauCity.DigitalTwin.UI
         public void Show(SmartCity.Cctv c)
         {
             cam = c; if (c == null) return;
-            lId.text = c.Id + " · " + SmartCity.CamTypeShort[(int)c.Type].ToUpperInvariant();
+            // the id is in the card's title: the frame shows only what a CCTV frame shows — the kind, the time and the place
+            lId.text = SmartCity.CamTypeShort[(int)c.Type].ToUpperInvariant();
             lPlace.text = c.Place + (c.Online ? "" : " · нет сигнала");
             EnableInClassList("offline", !c.Online);
             FeedRig.Ensure().Look(c);
