@@ -16,8 +16,8 @@ import struct
 
 import numpy as np
 
-TWIN = "/mnt/user-data/uploads/AlatauCity_DigitalTwin/UnityProject/Assets"
-OUT = "/mnt/project-files/alatau_stage7/out"
+TWIN = os.environ.get("ALATAU_TWIN", "/mnt/user-data/uploads/AlatauCity_DigitalTwin/UnityProject/Assets")
+OUT = os.environ.get("ALATAU_OUT", "/mnt/project-files/alatau_stage7/out")
 REPO = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", ".."))
 SPEC = os.path.join(REPO, "tools", "map", "spec")
 TWIN_GEN = os.path.join(REPO, "UnityProject", "Tools", "twin_gen")

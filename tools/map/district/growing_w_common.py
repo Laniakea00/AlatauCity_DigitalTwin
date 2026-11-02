@@ -27,7 +27,7 @@ OUT = os.environ.get("ALATAU_MAP_OUT", "/mnt/project-files/alatau_stage7/out")
 MODEL = "модель qTwin"
 ATTRIBUTION = "© OpenStreetMap contributors, Overture Maps Foundation"
 EXISTING = [2025, 2025, 2025, 2025]
-W35_INFRA = "/mnt/project-files/alatau_stage7/level0/w35/overture/infrastructure.parquet"
+W35_INFRA = os.environ.get("ALATAU_W35_INFRA", "/mnt/project-files/alatau_stage7/level0/w35/overture/infrastructure.parquet")
 
 
 def spec(name):

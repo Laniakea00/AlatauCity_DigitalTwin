@@ -74,7 +74,7 @@ F_PLAN = "Resources/Map/map_plan.png"
 F_DEV = "Resources/Map/map_dev.png"
 F_WALKS = "Resources/Map/map_walks.json"
 F_NATURE = "Resources/Map/map_nature.png"
-PICTURE = "/mnt/project-files/alatau_stage7/out/_fixtures/w48/ground_types.png"
+PICTURE = os.environ.get("ALATAU_GROUND_TYPES", "/mnt/project-files/alatau_stage7/out/_fixtures/w48/ground_types.png")
 
 # ------------------------------------------------------------------ yard types (the shader's switch, AlatauGround.shader)
 TYPES = {
