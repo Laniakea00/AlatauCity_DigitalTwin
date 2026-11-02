@@ -564,7 +564,10 @@ NETHA = {z["id"]: net_ha(z) for z in ZONES}
 # jobs: shops, services and offices in the residential zones (schools and kindergartens count as jobs, gen_buildings
 # subtracts them); logistics, industry, medical and sport keep the scheme density; business and mixed_centre scaled (FJ).
 # m² per job of the twin (land_util.twin_m2): business 90, social 50, industry 100 — the floor area has to fit the zone.
-JOBS_RES = {"residential_high": 60.0, "residential_mid": 25.0, "residential_low": 5.0, "waterfront": 20.0}
+# residential_mid 40 (was 25): its zones fill their floor area in full, while the office zones b_ne_1/2, c_admin and b_datahub
+# cannot hold theirs (buildings over 50 m without a fire ring and over 28 m without a fire band are lowered; Gate r5: jobs
+# −8 %), so the street-floor shops and services of the mid-rise quarters take the part FJ moves out of the office zones
+JOBS_RES = {"residential_high": 60.0, "residential_mid": 40.0, "residential_low": 5.0, "waterfront": 20.0}
 H_SCALED = {"residential_high", "residential_mid", "waterfront"}
 J_SCALED = {"business", "mixed_centre"}
 J_KEEP = {"b_tpu"}                 # the 3,6 ha of the scheme's ТПУ quarter outside the trial area keep the scheme's 200 jobs/ha

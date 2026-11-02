@@ -131,7 +131,7 @@ def aql_bytes(objs):
 
 
 # ------------------------------------------------------------------ the buildings layer in parts (the laptop file channel takes ≤ 25 MB a file)
-PART_LIMIT = 24_000_000          # bytes: no file the merge writes may be larger (merge_districts.put refuses it)
+PART_LIMIT = int(os.environ.get("ALATAU_PART_LIMIT", 24_000_000))   # bytes: no file the merge writes may be larger (merge_districts.put refuses it)
 
 
 def part_path(path, k):

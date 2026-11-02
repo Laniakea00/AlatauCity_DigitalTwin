@@ -361,11 +361,16 @@ class Social:
 
     def site_plot(self, kind, rest, split_params_fn, home_m2, m2_res):
         if kind == "fire_station":
-            # norms.json has no depot plot: the smallest lot of the zone's lot split (model qTwin)
-            if rest["village"] or rest["split"] not in ("perimeter", "towers", "industrial"):
-                return None, "-"
-            _, _, mn = split_params_fn(rest["split"], rest["rules"], self.N, home_m2, m2_res)
-            return (mn if mn > 0 else None), "не найдено в norms.json (участок депо): минимальный участок зоны, модель qTwin"
+            # norms.json has no depot plot: the smallest lot of the zone's lot split (model qTwin); a village, a zone of rows
+            # or houses and the reserve land at a village's edge take FIRE_DEPOT_PLOT_M2 — without it no depot stood in
+            # a village and every house of a large village was out of fire.depot_radius_km (growing_e: 2,682 houses at
+            # (8316, 9016); golden: the farmsteads of the far west, B0037 16 km from a depot)
+            mn = 0.0
+            if not rest["village"] and rest["split"] in ("perimeter", "towers", "industrial"):
+                _, _, mn = split_params_fn(rest["split"], rest["rules"], self.N, home_m2, m2_res)
+            if mn > 0:
+                return mn, "не найдено в norms.json (участок депо): минимальный участок зоны, модель qTwin"
+            return FIRE_DEPOT_PLOT_M2, "не найдено в norms.json (участок депо): FIRE_DEPOT_PLOT_M2, модель qTwin"
         if kind == "playground":
             return self.N.v("parks.square_or_playground", "min_area_m2"), "parks.square_or_playground"
         return self.plot(kind, 0)
@@ -1753,6 +1758,8 @@ SITE_STOP_MARGIN = 3.0   # the greedy loop of a kind stops after this × (land w
                          # and the places short over the smallest facility — far more than a cover of the district needs (model qTwin)
 SITE_SAFETY_CAP = 5000   # sites of one kind per district: a pure safety cap of the loop, far above the stop above
 SITE_EDGE_USES = {"reserve"}   # land next to a village that may take a site its houses reach no other way (model qTwin)
+FIRE_DEPOT_PLOT_M2 = 3600.0    # m² of a fire depot's lot where the zone's split gives none (village, rows, houses, reserve):
+#                               the 60 × 60 m lot of the perimeter zones (block side 120 m / 2); norms.json has none (модель qTwin)
 SITE_BATCH = 30          # candidate sites checked on foot per batch after the first 30 (model qTwin)
 GROUP_LINK = 100.0       # m: homes outside the radius closer than this to each other are one group in the log (model qTwin)
 

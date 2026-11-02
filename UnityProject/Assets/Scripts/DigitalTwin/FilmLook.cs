@@ -56,7 +56,9 @@ namespace AlatauCity.DigitalTwin
             var perLot = new System.Collections.Generic.Dictionary<string, int>(); var near = new System.Collections.Generic.List<float>();
             foreach (var b in bs)
             {
-                if (b == null || b.Bid < 0 || b.Bid >= n) continue;
+                // removed rows have no mesh; the merge also fills its bid gaps with them, all at (0, 0) (37 832 on the stage-7 map):
+                // as neighbours of each other they made this loop quadratic and Play hung on start
+                if (b == null || b.Bid < 0 || b.Bid >= n || b.Kind == "removed") continue;
                 uint h0;
                 if (!string.IsNullOrEmpty(b.Parcel))
                 {

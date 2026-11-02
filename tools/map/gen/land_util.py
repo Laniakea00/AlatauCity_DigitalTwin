@@ -357,6 +357,37 @@ DECK_STEP_M = 1.0          # m between the points a deck's clearance is sampled 
 DECK_CLEAR_MARGIN_M = 0.3  # m over fire_access.arches.height_min_m: a drive's surface stands a little over the terrain (модель qTwin)
 
 
+def _low_pieces(ax, under, half, T, clear):
+    """Plan pieces of a deck (axis LineString, underside heights at its vertices, half width) with less than clear between
+    the underside and the ground (the highest of the terrain at the axis and at both deck edges, sampled every
+    DECK_STEP_M). [Polygon]."""
+    out = []
+    L = ax.length
+    if L < 0.5:
+        return out
+    n = max(2, int(math.ceil(L / DECK_STEP_M)) + 1)
+    t = np.linspace(0.0, L, n)
+    P = np.array([[ax.interpolate(v).x, ax.interpolate(v).y] for v in t])
+    S = np.r_[0.0, np.cumsum(np.hypot(*np.diff(np.array(ax.coords)[:, :2], axis=0).T))]
+    u = np.interp(t, S, under)
+    d = np.gradient(P, axis=0)
+    nrm = np.c_[-d[:, 1], d[:, 0]] / np.maximum(np.hypot(d[:, 0], d[:, 1]), 1e-9)[:, None]
+    g = np.max([np.asarray(T.height(P[:, 0] + k * half * nrm[:, 0], P[:, 1] + k * half * nrm[:, 1]), float) for k in (-1.0, 0.0, 1.0)], axis=0)
+    low = u - g < clear
+    i = 0
+    while i < n:
+        if not low[i]:
+            i += 1
+            continue
+        j = i
+        while j + 1 < n and low[j + 1]:
+            j += 1
+        a, b = max(0.0, t[i] - DECK_STEP_M), min(L, t[j] + DECK_STEP_M)
+        out.append(shapely.ops.substring(ax, a, b).buffer(half, cap_style="flat"))
+        i = j + 1
+    return out
+
+
 def rail_low_decks(spec, norms, T=None):
     """Plan pieces of the spec railway's viaduct with less than fire_access.arches.height_min_m (+ DECK_CLEAR_MARGIN_M)
     between its underside and the ground (the highest of the terrain at the axis and at both deck edges): no drive or
@@ -366,27 +397,37 @@ def rail_low_decks(spec, norms, T=None):
     clear = norms.v("fire_access.arches", "height_min_m") + DECK_CLEAR_MARGIN_M
     out = []
     for ax, top, half, below in rail_decks(spec):
-        L = ax.length
-        n = max(2, int(math.ceil(L / DECK_STEP_M)) + 1)
-        t = np.linspace(0.0, L, n)
-        P = np.array([[ax.interpolate(v).x, ax.interpolate(v).y] for v in t])
-        S = np.r_[0.0, np.cumsum(np.hypot(*np.diff(np.array(ax.coords)[:, :2], axis=0).T))]
-        under = np.interp(t, S, top) - below
-        d = np.gradient(P, axis=0)
-        nrm = np.c_[-d[:, 1], d[:, 0]] / np.maximum(np.hypot(d[:, 0], d[:, 1]), 1e-9)[:, None]
-        g = np.max([np.asarray(T.height(P[:, 0] + k * half * nrm[:, 0], P[:, 1] + k * half * nrm[:, 1]), float) for k in (-1.0, 0.0, 1.0)], axis=0)
-        low = under - g < clear
-        i = 0
-        while i < n:
-            if not low[i]:
-                i += 1
+        out += _low_pieces(ax, np.asarray(top, float) - below, half, T, clear)
+    return out
+
+
+def lrt_low_decks(lrt, norms, T=None):
+    """Plan pieces of the LRT viaduct (sections of kind elevated, as rule 25 takes them: the rail heights of lrt.json less
+    lib.model lrt_rail_over_deck_m, lib.model lrt_viaduct_w_m wide) with less than fire_access.arches.height_min_m
+    (+ DECK_CLEAR_MARGIN_M) over the ground, where the viaduct comes down to its ramps: no drive or turnaround passes under
+    them (rule 25 under_decks). [Polygon]."""
+    try:
+        if MAP not in sys.path:
+            sys.path.insert(0, MAP)
+        from lib import model as _model
+        deck, half = float(_model("lrt_rail_over_deck_m")), float(_model("lrt_viaduct_w_m")) / 2.0
+    except Exception:
+        return []
+    T = T or terrain()
+    clear = norms.v("fire_access.arches", "height_min_m") + DECK_CLEAR_MARGIN_M
+    out = []
+    for Ln in (lrt or {}).get("lines", []):
+        P = np.asarray(Ln.get("pts") or [], float)
+        if len(P) < 2 or P.shape[1] < 3:
+            continue
+        S = np.r_[0.0, np.cumsum(np.hypot(*np.diff(P[:, :2], axis=0).T))]
+        for r in Ln.get("sections", []):
+            a, b = max(0.0, float(r["from_m"])), min(float(S[-1]), float(r["to_m"]))
+            if r["kind"] != "elevated" or b - a < 0.5:
                 continue
-            j = i
-            while j + 1 < n and low[j + 1]:
-                j += 1
-            a, b = max(0.0, t[i] - DECK_STEP_M), min(L, t[j] + DECK_STEP_M)
-            out.append(shapely.ops.substring(ax, a, b).buffer(half, cap_style="flat"))
-            i = j + 1
+            ch = np.r_[a, S[(S > a + 1e-9) & (S < b - 1e-9)], b]
+            ax = LineString(np.c_[np.interp(ch, S, P[:, 0]), np.interp(ch, S, P[:, 1])])
+            out += _low_pieces(ax, np.interp(ch, S, P[:, 2]) - deck, half, T, clear)
     return out
 
 

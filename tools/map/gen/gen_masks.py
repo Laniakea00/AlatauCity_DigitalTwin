@@ -11,8 +11,9 @@ Parking   cars per lot = new homes × zone parking.per_home (+ office / retail n
           multi-storey in the free land of the lot (floors by parking.garage_area_by_floors_m2), surface in the free land
           (parking.area_m2_per_space open). Rule 17 is kept here: no surface field over parking.ground_lot_max_in_centre places
           in a district centre, nothing above ground in a landmark view sector — the rest goes underground.
-Stops     bus stops on the sidewalk of streets of the transit classes, greedy ≥ stops.spacing_m bus min apart, first where most
-          new homes lie within stops.walk_max_m; LRT stations from lrt.json; rail stations = registry lots of use transit.
+Stops     bus stops on the sidewalk of streets of the transit classes, first where most homes lie within stops.walk_max_m on foot
+          (≥ stops.spacing_m bus min apart along one street), then by density (≥ that from every stop); LRT stations from lrt.json; rail stations = registry lots
+          of use transit.
 Greens    park / square / playground / sport lots; no-build park lots are buffers; yards = residential lots minus buildings and
           parking (split so no polygon has holes).
 Plazas    free land of transit lots (station forecourts).
@@ -39,6 +40,52 @@ import land_util as U  # noqa: E402
 VILLAGE_BUS = {"village_main", "village_secondary"}    # village streets a bus runs on (model: the lanes are too narrow)
 STOP_PAD_W = 2.0          # width of a stop pad where the street has no sidewalk (m): a model parameter
 STOP_STEP_M = 25.0        # candidate stop points along a bus street this far apart (m): модель qTwin
+STREET_ON_DEG = 35.0      # a bus street goes on through a junction into the segment within this many degrees of straight
+#                           ahead (its stops.spacing_m run on along it): модель qTwin
+
+
+def bus_streets(net, classes):
+    """Street of every segment of the bus classes, as stops.spacing_m takes it (the distance between the stops of one route,
+    not between stops of two streets): {segment id: street key}. Segments of one network street id are one street, and at a
+    node a segment goes on into the one most nearly straight ahead (within STREET_ON_DEG) — two bus streets crossing or
+    meeting at a T stay two streets."""
+    segs = [s for s in net["segments"] if s["class"] in classes and len(s.get("pts") or []) >= 2]
+    par = {s["id"]: s["id"] for s in segs}
+
+    def root(a):
+        while par[a] != a:
+            par[a] = par[par[a]]
+            a = par[a]
+        return a
+
+    def join(a, b):
+        ra, rb = root(a), root(b)
+        if ra != rb:
+            par[ra] = rb
+    by_street = {}
+    ends = defaultdict(list)
+    for s in segs:
+        if s.get("street"):
+            if s["street"] in by_street:
+                join(s["id"], by_street[s["street"]])
+            else:
+                by_street[s["street"]] = s["id"]
+        P = s["pts"]
+        for nd, p0, p1 in ((s["a"], P[0], P[1]), (s["b"], P[-1], P[-2])):
+            ends[nd].append((math.atan2(p1[1] - p0[1], p1[0] - p0[0]), s["id"]))
+    for nd, es in ends.items():
+        pairs = []
+        for i in range(len(es)):
+            for j in range(i + 1, len(es)):
+                dev = abs((es[i][0] - es[j][0]) % (2 * math.pi) - math.pi)      # 0: straight on
+                if dev <= math.radians(STREET_ON_DEG) and es[i][1] != es[j][1]:
+                    pairs.append((dev, i, j))
+        used = set()
+        for _, i, j in sorted(pairs):
+            if i not in used and j not in used:
+                used |= {i, j}
+                join(es[i][1], es[j][1])
+    return {k: root(k) for k in par}
 HARD_GAP_M = 0.1          # a green keeps this far off hard ground (m), past the overlap tolerance at the edge: модель qTwin
 NOPLANT_MIN_M2 = 0.5      # m²: no-plant parts kept down to this, under rule 19's tolerance (a 2 m² end of an HV zone was lost at 5) — модель qTwin
 
@@ -291,9 +338,17 @@ def run(d, out, spec_path=None):
         return ii[d <= walk]
 
     chosen = []
+    # the stops that bring houses within the walk keep stops.spacing_m between the stops of one street (bus_streets), not
+    # across streets: a stop on a parallel street 300 m off barred the one that brought the houses of the next street within
+    # the walk (Gate r4: 13,651 residents not reached, 43 blocks of rule 14, houses 11–300 m from a bus street and
+    # 500–1,300 m from a stop); the fill by density keeps it from every stop, as before (per street it put 813 stops on
+    # Gate's streets, five times as many)
+    street = bus_streets(net, U.TRANSIT_CLASSES | VILLAGE_BUS)
 
-    def spaced(x, z):
-        return not any(math.hypot(x - a, z - b) < spacing for a, b, _ in chosen)
+    def spaced(x, z, s, own_street=False):
+        k = street.get(s["id"], s["id"])
+        return not any((not own_street or street.get(t["id"], t["id"]) == k) and math.hypot(x - a, z - b) < spacing
+                       for a, b, t in chosen)
     covered = np.zeros(len(wt), dtype=bool)
     exact = {}
     taken = set()
@@ -301,7 +356,7 @@ def run(d, out, spec_path=None):
     heapq.heapify(heap)
     while heap:
         nw, x, z, k = heapq.heappop(heap)
-        if not spaced(x, z):
+        if not spaced(x, z, cand[k][3], own_street=True):
             continue                # the stops chosen only grow: this point stays too near one
         if k not in exact:
             exact[k] = walk_cover(k)
@@ -320,10 +375,11 @@ def run(d, out, spec_path=None):
         w, x, z, s, _ = cand[k]
         if w <= 0:
             break
-        if k not in taken and spaced(x, z):
+        if k not in taken and spaced(x, z, s):
             chosen.append((x, z, s))
     log(f"остановки: сначала те, что приводят пешком в {walk:g} м (stops.walk_max_m, по сети, как правило 14) больше жителей без "
-        f"остановки, затем остальная улица по плотности, не ближе {spacing:g} м друг к другу (stops.spacing_m)", [],
+        f"остановки (на одной улице не ближе {spacing:g} м друг к другу, stops.spacing_m), затем остальная улица по плотности, "
+        f"не ближе {spacing:g} м от любой остановки", [],
         cover=n_cover, total=len(chosen), residents=round(float(wt.sum())), residents_not_reached=round(float(wt[~covered].sum())))
     for i, (x, z, s) in enumerate(chosen):
         stops.append({"id": f"st{i:03d}", "kind": "bus", "x": round(x, 1), "z": round(z, 1), "segment": s["id"], "years": list(s["years"])})

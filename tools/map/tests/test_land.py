@@ -375,6 +375,16 @@ def rail_deck_case(norms, check):
           len(low) == 1 and low[0].area > 400 and not high and len(bands) == 1 and bands[0].area > 400,
           f"low {[round(q.area) for q in low]}, high {len(high)}, bands {len(bands)}")
 
+    # the LRT viaduct (lrt.json elevated sections: rail less lrt_rail_over_deck_m): a 100 m span down to its ramp, low at
+    # the far end only — the low end is a drive obstacle, the high part is not
+    deck = float(model("lrt_rail_over_deck_m"))
+    lrt = {"lines": [{"id": "l", "pts": [[x0, z0 + 50.0, g + deck + clear + 3.0], [x0 + 100.0, z0 + 50.0, g + deck + clear - 2.0]],
+                      "sections": [{"from_m": 0.0, "to_m": 100.0, "kind": "elevated"}]}]}
+    lo = U.lrt_low_decks(lrt, norms)
+    end = lo[0].bounds if len(lo) == 1 else None
+    check("the low end of an LRT viaduct (its ramp) is a drive obstacle, the high part is not",
+          end is not None and end[2] > x0 + 99.0 and end[0] > x0 + 40.0, f"pieces {[q.bounds for q in lo]}")
+
 
 def main():
     import argparse

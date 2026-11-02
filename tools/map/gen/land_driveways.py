@@ -389,8 +389,10 @@ def run(d, out, spec_path=None, og=None):
     # street pieces off grade (landings, ramps, embankments, cuts, low spans): no drive crosses or roots on them; a drive may
     # pass under a span with the fire clearance (land_util.offgrade)
     og = U.offgrade(net, norms, T) if og is None else og
-    # and the spec railway's viaduct where a fire engine does not pass under it (fire_access.arches.height_min_m, rule 25)
-    og_polys = [p["poly"] for p in og] + U.rail_low_decks(spec, norms, T)
+    # and the spec railway's viaduct and the LRT viaduct where a fire engine does not pass under them
+    # (fire_access.arches.height_min_m, rule 25 under_decks)
+    lrt = U.read_json(os.path.join(od, "lrt.json")) or {}
+    og_polys = [p["poly"] for p in og] + U.rail_low_decks(spec, norms, T) + U.lrt_low_decks(lrt, norms, T)
     og_tree = U.strtree(og_polys) if og_polys else None
     og_by_seg = defaultdict(list)
     for p in og:
@@ -440,7 +442,6 @@ def run(d, out, spec_path=None, og=None):
         b["_p"] = U.from_coords(b["footprint"])
     btree = U.strtree([b["_p"] for b in B])
     # the LRT ground corridor is no place for a drive (crossings are the streets' business)
-    lrt = U.read_json(os.path.join(od, "lrt.json")) or {}
     w_lrt = norms.v("lrt.corridor_width_m", "double_track")
     lrt_polys = []
     for Ln in lrt.get("lines", []):
