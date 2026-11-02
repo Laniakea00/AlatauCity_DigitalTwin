@@ -392,13 +392,20 @@ namespace AlatauCity.DigitalTwin
             for (int s = 0; s < Species; s++) { tmpM[s].Clear(); tmpY[s].Clear(); tmpT[s].Clear(); }
             corridors.TryGetValue(key, out var segs);
             noplant.TryGetValue(key, out var np);
+            // the cell's road pieces and no-planting polygons by sub-cell: a point is tested against those round it only (the redrawn
+            // map puts hundreds of each in a cell, and a cell took 4–9 ms)
+            float sx0 = cx * Cell, sz0 = cz * Cell;
+            var segSub = segs != null ? Sub(segs, sx0, sz0, sg => { float r = Mathf.Max(sg.half, sg.carr); return Rect.MinMaxRect(Mathf.Min(sg.a.x, sg.b.x) - r, Mathf.Min(sg.a.y, sg.b.y) - r, Mathf.Max(sg.a.x, sg.b.x) + r, Mathf.Max(sg.a.y, sg.b.y) + r); }) : null;
+            var npSub = np != null ? Sub(np, sx0, sz0, g => g.b) : null;
+            List<Seg> SegsAt(float x, float z) => segSub != null ? At(segSub, x, z, sx0, sz0) : null;
+            bool NoPlantAt(float x, float z) { var l = npSub != null ? At(npSub, x, z, sx0, sz0) : null; return l != null && InNoPlant(l, x, z); }
             float ymin = float.MaxValue, ymax = float.MinValue;
             void Try(float x, float z, int sp, float year, float size)
             {
                 if (tmpM[sp].Count >= 1023) return;
                 if (Landmarks.LandmarkSystem.OnPlot(x, z)) return;                        // a landmark's plot (airfield, campus…): its own planting
                 if (clearings.Count > 0 && Cleared(x, z)) return;
-                if (np != null && InNoPlant(np, x, z)) return;                           // a square, plaza, parking or future asphalt of the new data
+                if (NoPlantAt(x, z)) return;                                               // a square, plaza, parking or future asphalt of the new data
                 // hard ground of the map data under the trunk or the crown (the yard cell the ground draws there, GroundTypes.CellKindAt)
                 if (gtI != null && gtI.HardNear(x, z, sp == 1 ? 1.6f * size : 3.0f * size)) { refused++; return; }
                 // what the film roads draw: carriageway, pavement, pedestrian street or alley, pad, truck yard (with a little room for the trunk)
@@ -422,7 +429,8 @@ namespace AlatauCity.DigitalTwin
                 {
                     int land = Land(p.x, p.y, out float yr); if (land == 3) continue;
                     float sz = 0.8f + 0.3f * (float)rng.NextDouble();
-                    if (segs != null && OnCarriage(segs, p.x, p.y)) continue;                  // never on a carriageway (of this or a crossing road)
+                    var sl0 = SegsAt(p.x, p.y);
+                    if (sl0 != null && OnCarriage(sl0, p.x, p.y)) continue;                    // never on a carriageway (of this or a crossing road)
                     if (rd && FilmRoads.NearCrossing(new Vector2(p.x, p.y), 2f)) { refused++; paved++; continue; }   // nor at a crossing or the corner
                     Try(p.x, p.y, (int)p.z, yr, sz);
                 }
@@ -433,9 +441,10 @@ namespace AlatauCity.DigitalTwin
                     if (tmpM[3].Count >= 1023) break;
                     if (Land(hd.x, hd.y, out float yr) == 3) continue;
                     if (Landmarks.LandmarkSystem.OnPlot(hd.x, hd.y) || FilmRoads.InInterchange(hd.x, hd.y) || (clearings.Count > 0 && Cleared(hd.x, hd.y))) continue;
-                    if (np != null && InNoPlant(np, hd.x, hd.y)) continue;
+                    if (NoPlantAt(hd.x, hd.y)) continue;
                     if (gtI != null && gtI.HardNear(hd.x, hd.y, 1f)) { refused++; continue; }                // no hedge across a court or an alley
-                    if (segs != null) { bool onRoad = false; var q = new Vector2(hd.x, hd.y); foreach (var sg in segs) if (DistToSeg(q, sg.a, sg.b) < sg.half - 1f) { onRoad = true; break; } if (onRoad) continue; }
+                    var sl1 = SegsAt(hd.x, hd.y);
+                    if (sl1 != null) { bool onRoad = false; var q = new Vector2(hd.x, hd.y); foreach (var sg in sl1) if (DistToSeg(q, sg.a, sg.b) < sg.half - 1f) { onRoad = true; break; } if (onRoad) continue; }
                     if (!Physics.Raycast(new Vector3(hd.x, 6000f, hd.y), Vector3.down, out var hit, 9000f, ~0, QueryTriggerInteraction.Ignore)) continue;
                     if (!isGround.TryGetValue(hit.collider, out bool ground)) isGround[hit.collider] = ground = hit.collider.name.StartsWith("Terrain");
                     if (!ground) continue;
@@ -452,7 +461,8 @@ namespace AlatauCity.DigitalTwin
                 float p = land == 1 ? 0.25f + 0.6f * Mathf.PerlinNoise(x * 0.012f + 31f, z * 0.012f + 7f) : land == 0 ? 0.11f : land == 2 ? 0.004f : 0f;
                 if (land != 3 && FilmRoads.InInterchange(x, z)) p = 0.02f;                  // the verge between the ramps: a rare tree
                 if (pick > p) continue;
-                if (segs != null) { bool onRoad = false; var q = new Vector2(x, z); foreach (var sg in segs) if (DistToSeg(q, sg.a, sg.b) < sg.half) { onRoad = true; break; } if (onRoad) continue; }
+                var sl2 = SegsAt(x, z);
+                if (sl2 != null) { bool onRoad = false; var q = new Vector2(x, z); foreach (var sg in sl2) if (DistToSeg(q, sg.a, sg.b) < sg.half) { onRoad = true; break; } if (onRoad) continue; }
                 Try(x, z, land == 1 ? (kind < 0.58f ? 0 : kind < 0.82f ? 2 : 1) : (kind < 0.8f ? 0 : 1), yr, size);
             }
             var cd = new CellData { hard = hardN, onData = onData, refused = refused, paved = paved };
@@ -555,6 +565,23 @@ namespace AlatauCity.DigitalTwin
             if (n > 0 && cells.Count > 0) cells.Clear();
             Debug.Log($"[Alatau] film trees: {n} LRT spans keep trees off the track and from under the deck");
         }
+
+        /// <summary>Items of a cell by sub-cell of SubCell m (their boxes, SubM sub-cells of margin round the cell).</summary>
+        const float SubCell = 16f; const int SubM = 2, SubW = (int)(Cell / SubCell) + 2 * SubM;
+        static List<T>[] Sub<T>(List<T> items, float x0, float z0, System.Func<T, Rect> box)
+        {
+            var g = new List<T>[SubW * SubW];
+            foreach (var it in items)
+            {
+                var r = box(it);
+                int i0 = Mathf.Max(0, Mathf.FloorToInt((r.xMin - x0) / SubCell) + SubM), i1 = Mathf.Min(SubW - 1, Mathf.FloorToInt((r.xMax - x0) / SubCell) + SubM);
+                int j0 = Mathf.Max(0, Mathf.FloorToInt((r.yMin - z0) / SubCell) + SubM), j1 = Mathf.Min(SubW - 1, Mathf.FloorToInt((r.yMax - z0) / SubCell) + SubM);
+                for (int j = j0; j <= j1; j++) for (int i = i0; i <= i1; i++) (g[j * SubW + i] ??= new List<T>()).Add(it);
+            }
+            return g;
+        }
+        static List<T> At<T>(List<T>[] g, float x, float z, float x0, float z0)
+            => g[Mathf.Clamp(Mathf.FloorToInt((z - z0) / SubCell) + SubM, 0, SubW - 1) * SubW + Mathf.Clamp(Mathf.FloorToInt((x - x0) / SubCell) + SubM, 0, SubW - 1)];
 
         static float DistToSeg(Vector2 p, Vector2 a, Vector2 b)
         {

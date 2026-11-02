@@ -207,6 +207,28 @@ namespace AlatauCity.DigitalTwin
         /// <summary>Paving at q: hard ground of the data (GroundTypes: a park alley, a court, a playground …) or a drawn film road surface.</summary>
         static bool Paved(GroundTypes gt, Vector2 q) => gt.HardAt(q.x, q.y) || FilmRoads.OnSurface(new Vector3(q.x, CityGround.HeightAt(q.x, q.y), q.y), 0f, false);
 
+        /// <summary>The cell's way segments by sub-cell of SubCell m (each where its carriageway + 0.6 m reaches): Walkable tests a point
+        /// against the segments of its own sub-cell only, not all of the cell's (with the drives of the redrawn map a cell holds hundreds,
+        /// and a cell took 20–30 ms to fill).</summary>
+        const float SubCell = 16f; const int SubN = (int)(Cell / SubCell);
+        List<Vector2Int>[] SubGrid(List<Vector2Int> segs, float x0, float z0)
+        {
+            var g = new List<Vector2Int>[SubN * SubN];
+            foreach (var s in segs)
+            {
+                var P = ways[s.x].P; Vector2 a = P[s.y - 1], b = P[s.y]; float m = wayHalf[s.x] + 0.6f;
+                int i0 = Mathf.Max(0, Mathf.FloorToInt((Mathf.Min(a.x, b.x) - m - x0) / SubCell)), i1 = Mathf.Min(SubN - 1, Mathf.FloorToInt((Mathf.Max(a.x, b.x) + m - x0) / SubCell));
+                int j0 = Mathf.Max(0, Mathf.FloorToInt((Mathf.Min(a.y, b.y) - m - z0) / SubCell)), j1 = Mathf.Min(SubN - 1, Mathf.FloorToInt((Mathf.Max(a.y, b.y) + m - z0) / SubCell));
+                for (int j = j0; j <= j1; j++) for (int i = i0; i <= i1; i++) (g[j * SubN + i] ??= new List<Vector2Int>()).Add(s);
+            }
+            return g;
+        }
+        static List<Vector2Int> SubAt(List<Vector2Int>[] g, Vector2 q, float x0, float z0)
+        {
+            int i = Mathf.Clamp(Mathf.FloorToInt((q.x - x0) / SubCell), 0, SubN - 1), j = Mathf.Clamp(Mathf.FloorToInt((q.y - z0) / SubCell), 0, SubN - 1);
+            return g[j * SubN + i];
+        }
+
         bool Walkable(Vector2 q, int self, List<Vector2Int> segs)
         {
             if (LandmarkSystem.OnPlot(q.x, q.y, 2f)) return false;
@@ -232,7 +254,7 @@ namespace AlatauCity.DigitalTwin
                 // the ways of this cell, each with its segments in order
                 var byWay = new SortedDictionary<int, List<int>>();
                 foreach (var s in segs) { if (!byWay.TryGetValue(s.x, out var l)) byWay[s.x] = l = new List<int>(); l.Add(s.y); }
-                var pts = new List<Vector3>();
+                var pts = new List<Vector3>(); var sub = SubGrid(segs, x0, z0);
                 foreach (var kv in byWay)
                 {
                     int w = kv.Key; var W = ways[w]; float walk = wayWalk[w]; if (walk <= 0f || W.Ramp || W.P == null) continue;
@@ -256,7 +278,7 @@ namespace AlatauCity.DigitalTwin
                             {
                                 var q = a + d * t + left * off;
                                 bool inCell = q.x >= x0 && q.x < x0 + Cell && q.y >= z0 && q.y < z0 + Cell;
-                                if (inCell && Walkable(q, w, segs)) pts.Add(new Vector3(q.x, FilmRoads.SurfaceY(w, seg, t / len, q, 0.14f), q.y));     // the terrain, or the deck / embankment of the redrawn map
+                                if (inCell && Walkable(q, w, SubAt(sub, q, x0, z0))) pts.Add(new Vector3(q.x, FilmRoads.SurfaceY(w, seg, t / len, q, 0.14f), q.y));     // the terrain, or the deck / embankment of the redrawn map
                                 else Flush();
                                 carry = t + Step - len;
                             }

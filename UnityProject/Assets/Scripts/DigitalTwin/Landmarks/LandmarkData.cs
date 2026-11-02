@@ -180,7 +180,9 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 Id = "kaist", Name = "KAIST Kazakhstan · кампус", Short = "KAIST Kazakhstan", Company = "KAIST (Южная Корея) · ACA",
                 Purpose = "Технологический университет и кампус до 40 тыс. студентов (Академгородок)", Model = "campus",
                 District = 1, Status = LStatus.Preparation, StatusNote = "подготовка площадки, старт стройки — 12.12.2026",
-                StartYear = 2026, EndYear = 2030, YearOfficial = false, X = -1457, Z = -12698, Yaw = 11.0f, PadW = 420f, PadD = 360f, Height = 69f, Radius = 210f, ViewYaw = 190f, ViewPitch = 22f,
+                // stage 7 (golden.json qaist, owner: «перенести» 31.10): south of the Көктерек space centre on its own 420 × 360 m lot,
+                // turned with the quarters round it (the local streets of Golden go round the plot); was (−1457, −12698), yaw 11°
+                StartYear = 2026, EndYear = 2030, YearOfficial = false, X = -150f, Z = -11100f, Yaw = -4.5f, PadW = 420f, PadD = 360f, Height = 69f, Radius = 210f, ViewYaw = 190f, ViewPitch = 22f,
                 Source = "Kazinform, Kapital.kz", SourceDate = "29.09.2025 / 09.2026"
             }.F("Студенты", "до 40 000 (кампус Golden)").F("Сроки", "в демо — 12.2026 → 06.2030").Stage2("общежития и лаборатории", 2034, 2037)
              // the buildings of the campus with their own dates (scenario of the twin, as on the campus's monitoring page): the park and the
@@ -208,7 +210,8 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 Id = "medcluster", Name = "Медицинский кластер Golden", Short = "Медкластер", Company = "ACA · партнёры не объявлены",
                 Purpose = "Клиники, диагностика и медицинские исследования", Model = "hospital",
                 District = 1, Status = LStatus.Concept, StatusNote = "в функциональном зонировании генплана",
-                StartYear = 2030, EndYear = 2033, YearOfficial = false, X = -1075, Z = -10343, Yaw = 105.2f, PadW = 280f, PadD = 210f, Height = 48f, Radius = 140f, ViewYaw = 200f, ViewPitch = 22f,
+                // stage 7: the centre of its lot of golden.json (medcluster_golden, 16 ha), its long side along the lot's (was −1075, −10343, 105.2°)
+                StartYear = 2030, EndYear = 2033, YearOfficial = false, X = -1175.9f, Z = -10460.9f, Yaw = -80.6f, PadW = 280f, PadD = 210f, Height = 48f, Radius = 140f, ViewYaw = 200f, ViewPitch = 22f,
                 Source = "Kazinform", SourceDate = "29.09.2025"
             }.F("Сроки", "не объявлены (в демо — 2033)").Stage2("реабилитационный центр", 2036, 2039));
             L.Add(new Landmark
@@ -216,7 +219,9 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 Id = "kpark", Name = "K-Park", Short = "K-Park", Company = "Корейские партнёры · ACA",
                 Purpose = "Корейский парк и павильоны, 10 га", Model = "kpark",
                 District = 1, Status = LStatus.Construction, StatusNote = "первый камень — 14.09.2025",
-                StartYear = 2025, EndYear = 2027, YearOfficial = false, X = -515, Z = -8826, Yaw = 128f, PadW = 360f, PadD = 280f, Height = 14f, Radius = 180f, ViewYaw = 200f, ViewPitch = 28f,
+                // stage 7 (golden.json k_park): 550 m north of the old spot, clear of the frame and the OSM street s762; the model did not fit the
+                // park zone Z-P3 (260 × 420 m, arterials through it); was (−515, −8826), 128°
+                StartYear = 2025, EndYear = 2027, YearOfficial = false, X = -465f, Z = -8276f, Yaw = 0f, PadW = 360f, PadD = 280f, Height = 14f, Radius = 180f, ViewYaw = 200f, ViewPitch = 28f,
                 Source = "Kazinform", SourceDate = "14.09.2025"
             }.F("Площадь", "10 га").F("Сроки", "завершение не объявлено (в демо — 2027)").Stage2("вторая очередь парка", 2031, 2033));
             L.Add(new Landmark
@@ -224,7 +229,9 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 Id = "mars", Name = "Завод Mars Petcare", Short = "Mars Petcare", Company = "Mars Petcare Kazakhstan",
                 Purpose = "Производство кормов для домашних животных", Model = "food_mars",
                 District = 2, Status = LStatus.Construction, StatusNote = "работы начаты (сводка 26.08.2026)",
-                StartYear = 2026, EndYear = 2028, YearOfficial = false, X = 8806, Z = 1370, Yaw = -81.7f, PadW = 430f, PadD = 300f, Height = 42f, Radius = 215f, ViewYaw = 200f, ViewPitch = 24f,
+                // owner 02.11.2026 (growing_e.json mars_petcare): moved from the scheme lot at km 40 of the А-3 (−483, −2231; its 300 m gap to
+                // the new quarters left 3.7 ha) into the Growing-East industrial belt west of Sunny Paper, ≥ 300 m from housing; was (8806, 1370), −81.7°
+                StartYear = 2026, EndYear = 2028, YearOfficial = false, X = 6622f, Z = 1300f, Yaw = -90f, PadW = 430f, PadD = 300f, Height = 42f, Radius = 215f, ViewYaw = 200f, ViewPitch = 24f,
                 Source = "DigitalBusiness.kz, 24.kz", SourceDate = "20.02.2026 / 26.08.2026"
             }.F("Инвестиции", "≈ $180–185 млн (в соцсетях — $160 млн)").F("Сроки", "не объявлены (в демо — 2028)").Stage2("второй цех", 2032, 2034));
 
@@ -236,7 +243,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 Id = "sunny_paper", Name = "Sunny Paper", Short = "Sunny Paper", Company = "Sunny Paper",
                 Purpose = "Бумажное производство", Model = "paper",
                 District = 2, Status = LStatus.Construction, StatusNote = "активная фаза (сводка 26.08.2026)",
-                StartYear = 2026, EndYear = 2028, YearOfficial = false, X = 7540, Z = 1468, Yaw = -81.7f, PadW = 440f, PadD = 280f, Height = 62f, Radius = 210f, ViewYaw = 200f, ViewPitch = 24f,
+                StartYear = 2026, EndYear = 2028, YearOfficial = false, X = 7574.6f, Z = 1488f, Yaw = -81.7f, PadW = 440f, PadD = 280f, Height = 62f, Radius = 210f, ViewYaw = 200f, ViewPitch = 24f,
                 Source = "24.kz", SourceDate = "26.08.2026"
             }.F("Параметры", "не раскрыты").F("Сроки", "не объявлены (в демо — 2028)").Stage2("вторая бумагоделательная линия", 2033, 2036));
             L.Add(new Landmark
@@ -244,7 +251,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 Id = "danaflex", Name = "DanaFlex", Short = "DanaFlex", Company = "DanaFlex",
                 Purpose = "Гибкая упаковка", Model = "packaging",
                 District = 2, Status = LStatus.Construction, StatusNote = "работы начаты (сводка 26.08.2026)",
-                StartYear = 2026, EndYear = 2027, YearOfficial = false, X = 6668, Z = 651, Yaw = -81.7f, PadW = 300f, PadD = 200f, Height = 18f, Radius = 150f, ViewYaw = 200f, ViewPitch = 26f,
+                StartYear = 2026, EndYear = 2027, YearOfficial = false, X = 6091.1f, Z = 711f, Yaw = -81.7f, PadW = 300f, PadD = 200f, Height = 18f, Radius = 150f, ViewYaw = 200f, ViewPitch = 26f,
                 Source = "24.kz", SourceDate = "26.08.2026"
             }.F("Параметры", "не раскрыты").F("Сроки", "не объявлены (в демо — 2027)"));
             L.Add(new Landmark
@@ -260,7 +267,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 Id = "tlc", Name = "ТЛЦ «Жетыген»", Short = "ТЛЦ «Жетыген»", Company = "Исткомтранс",
                 Purpose = "Транспортно-логистический центр у ж/д Жетыген – Казыбек-бек", Model = "rail_terminal",
                 District = 2, Status = LStatus.Construction, StatusNote = "строится",
-                StartYear = 2025, EndYear = 2027, YearOfficial = false, X = 7870, Z = 9941, Yaw = -77.5f, PadW = 520f, PadD = 220f, Height = 25f, Radius = 260f, ViewYaw = 215f, ViewPitch = 24f,
+                StartYear = 2025, EndYear = 2027, YearOfficial = false, X = 7840f, Z = 9941f, Yaw = -77.5f, PadW = 520f, PadD = 220f, Height = 25f, Radius = 260f, ViewYaw = 215f, ViewPitch = 24f,
                 Source = "bes.media, Tengrinews", SourceDate = "11.06.2024 / 23.09.2025"
             }.F("Инвестиции", "+$150 млн (2024); 43 млрд ₸").F("Сроки", "не объявлены (в демо — 2027)").Stage2("контейнерный терминал", 2030, 2032));
             L.Add(new Landmark
@@ -277,30 +284,26 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 Id = "gtes", Name = "ГТЭС Doosan 2 × 250 МВт", Short = "ГТЭС Doosan", Company = "Doosan Enerbility · KEPCO · GGGI",
                 Purpose = "Газотурбинная электростанция с переходом на водород (ГЧП)", Model = "power",
                 District = 2, Status = LStatus.Agreement, StatusNote = "14.09.2026 — переговоры, окончательных соглашений нет",
-                StartYear = 2028, EndYear = 2031, YearOfficial = false, X = 8185, Z = 979, Yaw = -81.7f, PadW = 340f, PadD = 240f, Height = 62f, Radius = 175f, ViewYaw = 210f, ViewPitch = 22f,
+                StartYear = 2028, EndYear = 2031, YearOfficial = false, X = 10100f, Z = 4780f, Yaw = 0f, PadW = 340f, PadD = 240f, Height = 62f, Radius = 175f, ViewYaw = 210f, ViewPitch = 22f,
                 Source = "bes.media, Kapital.kz", SourceDate = "14.09.2026"
             }.F("Мощность", "2 × 250 МВт").F("Сроки", "не объявлены (в демо — 2031)").Stage2("перевод турбин на водород", 2035, 2039));
 
             L.Add(new Landmark
             {
-                Id = "airport", Name = "Аэропорт Алатау", Short = "Аэропорт", Company = "Оператор не определён · место утверждено 31.10.2026",
-                Purpose = "Международный аэропорт: одна ВПП 4 000 × 45 м, к северу от неё перрон и терминал у вокзала «Алатау» и конечной ЛРТ", Model = "airport",
-                District = 2, Status = LStatus.Concept, StatusNote = "место утверждено 31.10.2026 (схема Growing-запад); стройка 2041–2045",
-                // Owner's site of 31.10.2026 (city.json airport_new, growing_w.json objects airport_alatau): runway centre (−16000, 1500),
-                // one runway 4 000 × 45 m on 095°/275°, built after 2040. Until then nothing stands here. A construction site like the other
-                // landmarks: works from 2041 (the airport lot's base year in the Growing-West map, years [2041, 2037, 2046, 2041]) to 2045
-                // (city.json airport_new: built 2041–2045, open 2045). Progress 0 in the map year 2040 (the site empty), the hoarding, the
-                // earthworks and the frames from 2041, handed over at the end of 2045 (the planes fly from 2045). The point is the centre of the levelled plot, not of the
-                // runway: the plot (PadW × PadD, centred on the point) covers the runway strip to 150 m south of its axis and the apron,
-                // the terminal and the forecourt to 890 m north of it, all inside the airport lot (4.6 × 1.45 km: 450 m south, 1 000 m
-                // north), 8 m past the runway's ends; it stays 33 m off the farm road along the lot's north-east edge and 36 m off the
-                // village vil_11 west of the runway's end. The runway centre is 370 m south and 12 m west of the point (LandmarkModels.RwyX,
-                // AZ). Level: the median of the ground + 2.3 m (PadLift, ≈ 637 m: the ground under vil_11 moves ≤ 1.5 m instead of 3 m);
-                // the access road from the end of the Аэропортовая магистраль and the bridge to the station follow the ground (Drape).
-                // Was (−5900, 8300), yaw 30, two runways (the twin's concept until 31.10.2026).
-                StartYear = 2041, EndYear = 2045, YearOfficial = false, X = -15955.8f, Z = 1867.55f, Yaw = 95f, PadW = 1040f, PadD = 4040f, PadLift = 2.3f, Drape = true, Height = 98f, Radius = 1300f, ViewYaw = 250f, ViewPitch = 30f,
-                Source = "решение владельца 31.10.2026 (схема Growing-запад); генплан — 15 млн пасс./год, после 2040", SourceDate = "31.10.2026"
-            }.F("ВПП", "одна, 4 000 × 45 м, курс 095°/275°").F("Терминал", "к северу от ВПП, у вокзала «Алатау» (аэроэкспресс) и конечной ЛРТ").F("Стоянки", "14 телетрапов + 4 перронных, грузовой перрон").F("Подъезд", "Аэропортовая магистраль с севера, южный въезд — с 2050").F("Пассажиры", "15 млн в год (генплан)").F("Сроки", "после 2040 (генплан); в двойнике — стройка 2041–2045, открытие в 2045"));
+                Id = "airport", Name = "Аэропорт Алатау", Short = "Аэропорт", Company = "Оператор не определён · место выбрано 02.11.2026",
+                Purpose = "Международный аэропорт: две ВПП, между ними терминал в форме самолёта носом к городу; вокзал «Алатау» и конечная ЛРТ у въезда", Model = "airport",
+                District = 2, Status = LStatus.Concept, StatusNote = "место выбрано 02.11.2026 (схема Growing-запад); стройка 2041–2045",
+                // Owner's decision of 02.11.2026 (growing_w.json objects airport_alatau, city.json airport_new): the airport and the plateau
+                // industry swapped places — the plot (3 800 × 1 600 m, the twin's concept: two runways 3 400 and 2 650 m on 100°/280°, between
+                // them the airliner-shaped terminal, its glazed nose the landside hall toward the city) north of the Аэропортовая
+                // магистраль, ≥ 300 m off the 500 kV lines, 5.6 km nearer the city than the site of 31.10 (−16000, 1500; one runway
+                // 4 000 m on 095°). Yaw 280: local −z (the nose, the landside gate at (−450, −1900)) toward 100°; the gate road of the
+                // map (s_air_access) comes from the Дорога плато, the LRT terminus and the rail station «Алатау» are across the trunk.
+                // A construction site like the other landmarks: works from 2041 to 2045 (city.json airport_new: built 2041–2045, open
+                // 2045); the planes fly from 2045. Was (−15955.8, 1867.55), yaw 95, one runway (31.10.2026); before that (−5900, 8300), yaw 30.
+                StartYear = 2041, EndYear = 2045, YearOfficial = false, X = -10350f, Z = 4000f, Yaw = 280f, PadW = 1600f, PadD = 3800f, Height = 98f, Radius = 1900f, ViewYaw = 300f, ViewPitch = 30f,
+                Source = "решение владельца 02.11.2026 (схема Growing-запад); генплан — 15 млн пасс./год, после 2040, у западной границы", SourceDate = "02.11.2026"
+            }.F("ВПП", "две: 3 400 и 2 650 м, курс 100°/280°").F("Терминал", "в форме самолёта между ВПП, нос — зал прилёта и вылета к городу").F("Стоянки", "32 телетрапа + 6 перронных, грузовой терминал").F("Подъезд", "от Аэропортовой магистрали по Дороге плато; ЛРТ и аэроэкспресс — у въезда").F("Пассажиры", "15 млн в год (генплан)").F("Сроки", "после 2040 (генплан); в двойнике — стройка 2041–2045, открытие в 2045"));
 
             // ---------------- Green: tourism and recreation on Kapshagay
             L.Add(new Landmark
@@ -308,7 +311,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 Id = "marina", Name = "Марина Капшагай", Short = "Марина", Company = "ACA · инвесторы не объявлены",
                 Purpose = "Яхтенная марина и набережная туристического района", Model = "marina",
                 District = 3, Status = LStatus.Concept, StatusNote = "концепция Green District, сроков нет",
-                StartYear = 2033, EndYear = 2037, YearOfficial = false, X = 5177, Z = 23845, Yaw = -30f, PadW = 200f, PadD = 140f, Height = 14f, Radius = 180f, ViewYaw = 160f, ViewPitch = 22f,
+                StartYear = 2033, EndYear = 2037, YearOfficial = false, X = 4825f, Z = 25272f, Yaw = 30f, PadW = 200f, PadD = 140f, Height = 14f, Radius = 180f, ViewYaw = 160f, ViewPitch = 22f,
                 Source = "Kazinform, Astana Times", SourceDate = "29.09.2025 / 04.09.2026"
             }.F("Состав", "марина, клуб, набережная").F("Сроки", "не объявлены (в демо — 2037)"));
             return L;

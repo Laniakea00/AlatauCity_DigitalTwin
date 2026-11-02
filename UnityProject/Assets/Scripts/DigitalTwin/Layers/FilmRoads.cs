@@ -63,9 +63,17 @@ namespace AlatauCity.DigitalTwin
             // T-junctions the plan draws as a street ending on the middle of another road: crossings on the through road on both
             // sides of the side street, and on the side street set back from the through road's kerb
             var mids = MidJunctions(strokes);
-            for (int si = 0; si < strokes.Count; si++)
+            // the meshes are laid tile by tile (MeshTile m): a mesh covers one part of the city, so the view and every shadow cascade
+            // cull what is out of sight (in data order each of the 53 meshes of the stage-7 map spanned the whole city and all were drawn
+            // in every pass); the strokes keep their indices, only the order they are laid in changes
+            long tile = long.MinValue;
+            void TileBreak(Vector2 p) { long k = TileKey(p); if (k != tile) { Flush(); tile = k; } }
+            var order = new List<int>(strokes.Count); for (int i = 0; i < strokes.Count; i++) order.Add(i);
+            order.Sort((a, b) => TileKey(TileAt(strokes[a])).CompareTo(TileKey(TileAt(strokes[b]))));
+            foreach (int si in order)
             {
                 var st = strokes[si];
+                TileBreak(TileAt(st));
                 // a reconstruction (StageP): the lamps stand by the widest (last) cross-section in every year; the ribbons and the deck or
                 // embankment sides are drawn once per cross-section, each shown from its year until the next one's (Until)
                 int nv = st.StageP != null ? st.StageP.Length + 1 : 1;
@@ -148,10 +156,12 @@ namespace AlatauCity.DigitalTwin
             }
             // junctions: a round patch of plain asphalt (and of pavement under it) where streets meet, so their ends never show and lines
             // never cross inside a junction. A motorway or ring road that runs straight through keeps its markings (ramps just merge).
-            foreach (var kv in nodes)
+            var nodeList = new List<Junction>(nodes.Values); nodeList.Sort((a, b) => TileKey(a.P).CompareTo(TileKey(b.P)));
+            foreach (var nd in nodeList)
             {
-                var nd = kv.Value; if (nd.Deg < 2) continue;
+                if (nd.Deg < 2) continue;
                 if (nd.Fast && nd.Through) continue;
+                TileBreak(nd.P);
                 if (nd.Deg == 2 && nd.Through) continue;
                 for (int pass = nd.Walk > 0f ? 0 : 1; pass < 2; pass++)
                 {
@@ -171,9 +181,10 @@ namespace AlatauCity.DigitalTwin
             // plaza (pl 1) is left to the ground's paving, one in a paved court of an apartment or public lot (pl 2) is laid in pavers
             int nPads = 0, nPadPl = 0; var fr = LoadFilm(); padRings.Clear();
             if (fr != null && fr.pads != null)
-                foreach (var pd in fr.pads)
+                foreach (var pd in Sorted(fr.pads, q => q.p))
                 {
                     if (pd.p == null || pd.p.Length < 6) continue;
+                    TileBreak(new Vector2(pd.p[0], pd.p[1]));
                     var yv = pd.y != null && pd.y.Length >= 4 ? new Vector4(pd.y[0], pd.y[1], pd.y[2], pd.y[3]) : new Vector4(2025, 2025, 2025, 2025);
                     int m = pd.p.Length / 2; Vector2 c = Vector2.zero; for (int i = 0; i < m; i++) c += new Vector2(pd.p[2 * i], pd.p[2 * i + 1]); c /= m;
                     if (pd.pl == 1)
@@ -206,9 +217,10 @@ namespace AlatauCity.DigitalTwin
             // metres along the dock side, out from it, door pitch, dock length; the shader draws them)
             int nYards = 0, nBays = 0;
             if (fr != null && fr.yards != null)
-                foreach (var yd in fr.yards)
+                foreach (var yd in Sorted(fr.yards, q => q.p))
                 {
                     if (yd.p == null || yd.p.Length < 6) continue;
+                    TileBreak(new Vector2(yd.p[0], yd.p[1]));
                     var yv = yd.y != null && yd.y.Length >= 4 ? new Vector4(yd.y[0], yd.y[1], yd.y[2], yd.y[3]) : new Vector4(2025, 2025, 2025, 2025);
                     int m = yd.p.Length / 2; var rim = new List<Vector2>(); Vector2 c = Vector2.zero;
                     for (int i = 0; i < m; i++) c += new Vector2(yd.p[2 * i], yd.p[2 * i + 1]); c /= m;
@@ -1308,6 +1320,18 @@ namespace AlatauCity.DigitalTwin
             }
             Shader.SetGlobalVectorArray("_AlatauIcZones", v); Shader.SetGlobalFloat("_AlatauIcCount", n);
             icZones = v; icCount = n;
+        }
+
+        /// <summary>Square tiles (m) the road meshes are laid in (Build).</summary>
+        const float MeshTile = 3000f;
+        static long TileKey(Vector2 p) => ((long)Mathf.FloorToInt(p.x / MeshTile) << 32) ^ (uint)Mathf.FloorToInt(p.y / MeshTile);
+        static Vector2 TileAt(Stroke s) => s.P != null && s.P.Count > 0 ? s.P[s.P.Count / 2] : Vector2.zero;
+        static List<T> Sorted<T>(T[] items, System.Func<T, float[]> pts)
+        {
+            var l = new List<T>(items);
+            l.Sort((a, b) => Key(a).CompareTo(Key(b)));
+            return l;
+            long Key(T x) { var p = pts(x); return p != null && p.Length >= 2 ? TileKey(new Vector2(p[0], p[1])) : 0L; }
         }
 
         static List<Vector2> Resample(List<Vector2> p, float step)

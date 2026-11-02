@@ -138,7 +138,13 @@ LOG.append({"what": "ЛРТ: трасса", "trunk_m": round(L_LRT.length), "bra
 # the twin's landmark models (gen/landmark_models.json) stand on their pads (LandmarkData.cs: PadW × PadD, yaw) in the
 # industrial belt; a pad on a street, a house, water or the tracks moves to the nearest free place (moved: было → стало)
 PADS = {"danaflex": (6668.0, 651.0, 300.0, 200.0, -81.7, "packaging"), "sunny_paper": (7540.0, 1468.0, 440.0, 280.0, -81.7, "paper"),
-        "g_trans": (7882.0, 945.0, 290.0, 220.0, -81.7, "logistics_gtrans"), "ps_arna_twin": (1721.0, 360.0, 244.0, 164.0, 280.9, "substation")}
+        "g_trans": (7882.0, 945.0, 290.0, 220.0, -81.7, "logistics_gtrans"), "ps_arna_twin": (1721.0, 360.0, 244.0, 164.0, 280.9, "substation"),
+        # owner 02.11.2026: Mars Petcare leaves the scheme's lot at km 40 (its 300 m gap to the new quarters left 3.7 ha of
+        # 32) for the nearest free place of the belt ≥ 300 m from housing (z_belt_1, west of Sunny Paper)
+        "mars_petcare": (6622.0, 1300.0, 430.0, 300.0, -90.0, "food_mars")}
+MARS_WHY = ("решение владельца 02.11.2026: завод перенесён с участка схемы у 40-го км А-3 (реестр, ± 500 м) в промпояс "
+            "Growing-восток — на старом месте санитарный разрыв класса III (300 м) до новых кварталов оставлял 3,7 га из 32; "
+            "здесь до жилья ≥ 300 м, рядом Sunny Paper и DanaFlex")
 PAD_MARGIN = 12.0
 
 
@@ -195,9 +201,13 @@ for rid, (x, z, W, D, yaw, model_) in PADS.items():
         MOVED.append((rid, [x, z], [round(at[0], 1), round(at[1], 1)],
                       f"площадка модели двойника {W:.0f} × {D:.0f} м (LandmarkData) в точке двойника задевала красную линию улицы, "
                       f"дом, воду или ж/д — сдвинута на {math.dist(at, (x, z)):.0f} м к ближайшему свободному месту той же зоны"))
-# Mars Petcare and the gas power plant: the whole zone is the plot (registry 31,84 ha; the scheme zone of the plant)
+# the gas power plant: the whole zone is the plot (the scheme zone of the plant); Mars Petcare stands on its pad in the
+# belt since 02.11.2026 — the scheme's Mars lot at km 40 is an ordinary part of the industrial park
 ZB = {z["id"]: z for z in Z.ZPLAN}
-ZONE_LOT = {"mars_petcare": "z_mars", "gtes_doosan": "z_gtes"}
+ZONE_LOT = {"gtes_doosan": "z_gtes"}
+ZB["z_mars"].update({"name_ru": "Индустриальный парк у 40-го км А-3 (участок Mars Petcare схемы)",
+                     "rules": dict(ZB["z_mars"]["rules"], jobs_per_ha=35), "density": dict(ZB["z_mars"]["density"], jobs_per_ha=35),
+                     "why": ZB["z_mars"]["why"] + "; " + MARS_WHY + " — участок отдан лёгким производствам, как OIZ TULIP"})
 N.BARRIERS[:] = [OWN_ROW] + [p.buffer(N.D_IN) for p in PAD_FP.values()] + [ZB[zid]["poly"] for zid in ZONE_LOT.values()]
 
 # ===================================================================================================== 3. local streets
@@ -942,7 +952,8 @@ def zone_out(z, poly, rules):
 
 
 # landmark pads: their own zone of the model's use (a pad that lies across two scheme zones is not cut)
-PAD_USE = {"danaflex": "industry", "sunny_paper": "industry", "g_trans": "logistics", "ps_arna_twin": "utility"}
+PAD_USE = {"danaflex": "industry", "sunny_paper": "industry", "g_trans": "logistics", "ps_arna_twin": "utility",
+           "mars_petcare": "industry"}
 for rid, P in PAD_FP.items():
     src = max((z for z in Z.ZPLAN if z["poly"].intersects(P)), key=lambda z: z["poly"].intersection(P).area)
     use = PAD_USE[rid]
@@ -966,8 +977,10 @@ SZZ_W = {k: float(v["min"]) for k, v in _LN.v("szz.class_width_m").items()}
 _WS = _LN.v("szz.wind_sector_deg")
 SZZ_F, SZZ_SECTOR = float(_WS["zone_factor"]), tuple(_WS["default_sector"])
 SZZ_CLASS = {
-    "z_mars": ("III", MODEL + ": корма для животных (Mars Petcare, 100 тыс. т/год) — класс III с запасом (szz.class_examples: "
-                      "мясокомбинаты I, мельницы II; готовые корма без убоя — III)"),
+    "z_mars": ("IV", MODEL + ": участок Mars Petcare схемы после переноса завода в промпояс (02.11.2026) — лёгкие и сборочные "
+                     "производства, как OIZ TULIP у А-3: класс IV"),
+    "lm_mars_petcare": ("III", MODEL + ": корма для животных (Mars Petcare, 100 тыс. т/год) — класс III с запасом "
+                                      "(szz.class_examples: мясокомбинаты I, мельницы II; готовые корма без убоя — III)"),
     "z_belt": ("III", MODEL + ": промпояс двойника (бумага Sunny Paper, упаковка DanaFlex, машиностроение и сборка): классы "
                       "I–II в СЭЗ не ставятся (схема), принят III — 300 м"),
     "z_oiz": ("IV", MODEL + ": индустриальный парк сборочных и лёгких производств (автосборка, eVTOL), у А-3 и Жанаарны только "
@@ -1163,6 +1176,98 @@ for g in [q for q in getattr(_gap, "geoms", [_gap]) if q.geom_type == "Polygon" 
     if m.geom_type == "Polygon" and not m.interiors and m.area >= Polygon(ZONES[best]["polygon"]).buffer(0).area - 1.0:
         ZONES[best]["polygon"] = poly_pts(m)
         ZONES[best]["area_ha"] = round(m.area / 1e4, 2)
+# strict sanitary gaps (owner's request after run 5): the passes above leave production next to housing (a village strip over
+# a third of the zone is not cut, the class V bands run to the village edge, the cover slivers join any neighbour; spec:
+# z_mars 0 m of 300, z_belt_3_v, z_log_south, z_north_ind_1_v 0 m of 50). Last, on the final zones: every industry and
+# logistics zone gives up all its land within its class width (szz.class_width_m, min) of any housing — new quarters, mixed
+# centres, the waterfront, the campus and the existing villages; the gap is planted (park). Production pieces left under
+# 200 m² go to the gap, gap pieces under 200 m² to the park they touch.
+HOUSE_USES = ("residential_high", "residential_mid", "residential_low", "mixed_centre", "waterfront", "campus", "village_existing")
+SZZ_STRICT = []
+_t = time.time()
+_HU = unary_union([Polygon(z["polygon"]).buffer(0) for z in ZONES if z["use"] in HOUSE_USES]).buffer(0)
+
+
+def _rings_of(g, min_area=1.0):
+    out = []
+    for q in C.simple_parts(g, min_area):
+        out += _ring_parts(q)
+    return out
+
+
+def _new_zone(z, zid, ring):
+    while zid in ZIDS:
+        zid = zid + "_s"
+    ZIDS.add(zid)
+    d = copy.deepcopy(z)
+    d.update({"id": zid, "polygon": ring, "area_ha": round(Polygon(ring).area / 1e4, 2)})
+    ZONES.append(d)
+    return d
+
+
+def _join_park(q):
+    """A gap piece under 200 m² joins the park zone it shares the longest border with (no zones of a few m²)."""
+    best, bl = None, 0.0
+    for z in ZONES:
+        if z["use"] != "park":
+            continue
+        p = Polygon(z["polygon"]).buffer(0)
+        if p.distance(q) > 0.5:
+            continue
+        sh = p.exterior.intersection(q.buffer(0.5)).length
+        if sh > bl:
+            best, bl = z, sh
+    if best is None:
+        return False
+    m = Polygon(best["polygon"]).buffer(0).union(q.buffer(0.05)).buffer(0)
+    if m.geom_type != "Polygon" or m.interiors:
+        return False
+    best["polygon"] = poly_pts(m)
+    best["area_ha"] = round(m.area / 1e4, 2)
+    return True
+
+
+for I in [z for z in ZONES if z["use"] in ("industry", "logistics")]:
+    cls_ = I["rules"].get("szz_class") or SZZ_DEFAULT[0]
+    w = SZZ_W[cls_]
+    P = Polygon(I["polygon"]).buffer(0)
+    if P.distance(_HU) >= w:
+        continue
+    gap_ = P.intersection(_HU.buffer(w + 1.0)).buffer(0)        # +1 m: buffer arcs are chords, rings round to 0.1 m
+    # the zone rings carry hair-thin needles (z_belt_3_v, z_log_south, z_belt_6_v: a 1–2 m² spike 80 m long to the village
+    # edge); the overlay keeps a needle as a zero-width tail, so the rest is opened by 5 cm first
+    rest_ = P.difference(gap_).buffer(-0.05, join_style=2).buffer(0.05, join_style=2).intersection(P).buffer(0)
+    keep = [q for q in C.polys_of(rest_) if q.area >= 200.0]
+    keep_g = unary_union(keep).buffer(0) if keep else Polygon()
+    gap_ = P.difference(keep_g).buffer(0) if keep else P
+    if gap_.is_empty:
+        continue
+    k_rings = _rings_of(keep_g, 200.0) if keep else []
+    if k_rings:
+        I["polygon"] = k_rings[0]
+        I["area_ha"] = round(Polygon(k_rings[0]).area / 1e4, 2)
+        for k, ring in enumerate(k_rings[1:]):
+            _new_zone(I, f"{I['id']}_p{k + 2}", ring)
+    else:
+        ZONES.remove(I)
+    gid = f"g_szz_{I['id']}_strict"
+    gz = {"use": "park", "name_ru": f"Санитарный разрыв {I['name_ru']} — жильё и сёла (озеленение)", "years": I["years"],
+          "rules": {"lot_split": "none"}, "_base": gid, "_fit": gid,
+          "why": f"СЗЗ класса {cls_}: {w:.0f} м (szz.class_width_m, min; правило 15) — часть зоны {I['id']} ближе {w:.0f} м к "
+                 "жилью (новые кварталы, смешанные центры, существующие сёла) снята с производства и озеленена"}
+    n_ = 0
+    for ring in _rings_of(gap_):
+        if Polygon(ring).area < 200.0 and _join_park(Polygon(ring).buffer(0)):
+            continue
+        _new_zone(gz, gid if n_ == 0 else f"{gid}_p{n_ + 1}", ring)
+        n_ += 1
+    SZZ_STRICT.append((I["id"], cls_, round(gap_.area / 1e4, 2)))
+    SCHEME_CHANGES.append((gid, f"санитарный разрыв класса {cls_} ({w:.0f} м; {gap_.area / 1e4:.2f} га) из зоны {I['id']}"
+                                + ("" if k_rings else " (вся зона)") + ": ни одна промышленная и складская зона не ближе ширины "
+                                "СЗЗ к жилью и сёлам — озеленение"))
+LOG.append({"what": "строгий санитарный разрыв: производство не ближе ширины СЗЗ к жилью и сёлам", "zones": SZZ_STRICT,
+            "ha": round(sum(x[2] for x in SZZ_STRICT), 2), "s": round(time.time() - _t, 1)})
+print("strict SZZ", sorted(SZZ_STRICT, key=lambda x: -x[2])[:10], flush=True)
 
 print("zones", len(ZONES), round(time.time() - T0, 1), flush=True)
 # ===================================================================================================== 6. targets and densities
@@ -1393,6 +1498,14 @@ for rid, P in PAD_FP.items():
     c = P.centroid
     moved = [m for m in MOVED if m[0] == rid]
     x0, z0 = PADS[rid][0], PADS[rid][1]
+    if rid == "mars_petcare":
+        # from the scheme's lot at km 40 (the previous spec's point), by the owner's decision
+        MOVED[:] = [m for m in MOVED if m[0] != rid] + [(rid, o0.get("to"), [round(c.x, 1), round(c.y, 1)], MARS_WHY)]
+        obj(rid, "move", o0.get("to"), [round(c.x, 1), round(c.y, 1)], o0.get("accuracy", "none"),
+            MARS_WHY + f"; участок — площадка модели {PADS[rid][2]:.0f} × {PADS[rid][3]:.0f} м с запасом {PAD_MARGIN:.0f} м "
+            "(LandmarkData), без зданий по правилу", basis="по правилу", kind="landmark", footprint=P, yaw=PADS[rid][4],
+            years=Y4(2026, "industry"))
+        continue
     obj(rid, "keep" if not moved else "move", [x0, z0] if moved else None, [round(c.x, 1), round(c.y, 1)], o0.get("accuracy", "none"),
         (o0.get("why") or "точка двойника (модель)") + f"; участок — площадка модели {PADS[rid][2]:.0f} × {PADS[rid][3]:.0f} м с запасом "
         f"{PAD_MARGIN:.0f} м (LandmarkData), без зданий по правилу" + (f"; {moved[0][3]}" if moved else ""),

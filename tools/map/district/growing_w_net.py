@@ -114,8 +114,9 @@ POWER_ZONE = unary_union([q.buffer(w) for _, q, _, w, _ in POWER])
 RAIL = [g for g, p in C.layer_in("rail", POLY.buffer(100)) if p["id"].startswith("81f6836e")][0]
 RAIL_ALL = [g for g, p in C.layer_in("rail", POLY.buffer(100))]          # every OSM track near the district
 SPUR_FORK = RAIL.interpolate(RAIL.project(Point(-5800.0, -450.0)))
-SPUR = fillet([(SPUR_FORK.x, SPUR_FORK.y), (-6900.0, 120.0), (-8200.0, 900.0), (-9600.0, 1750.0), (-10900.0, 2400.0),
-               (-12000.0, 2520.0), (-13300.0, 2470.0), (-14400.0, 2540.0), (-15300.0, 2560.0)], 1200)
+# the spur ends at the station «Алатау» south of the trunk, across it from the airport's landside gate (owner 02.11.2026);
+# it went on west to the airfield of 31.10 (−15300, 2560) before
+SPUR = fillet([(SPUR_FORK.x, SPUR_FORK.y), (-6900.0, 120.0), (-8200.0, 900.0), (-8550.0, 1700.0), (-8600.0, 2480.0)], 900)
 RAIL_HALF = 25.0                                   # m: rail corridor half width kept free of streets along it (model)
 RAIL_BAR = unary_union([RAIL.buffer(RAIL_HALF), LineString(SPUR).buffer(RAIL_HALF)])
 
@@ -288,43 +289,59 @@ def cut_at(line, pts_):
     return [list(substring(L, a, b).coords) for a, b in zip(ch[:-1], ch[1:]) if b - a > 1.0]
 
 
-# --- the airport lot (runway 4 000 m at 095°, city.json airport_new): 2 300 m each way along the runway, 450 m south and
-# 1 000 m north of its axis (strip, taxiways, apron, terminal), within the district
+# --- the airport lot (owner 02.11.2026: swapped with the plateau industry, 5.6 km nearer the city than the site of 31.10):
+# the twin's concept — two runways on 100°/280° and between them the terminal in the shape of an airliner, its nose (the
+# landside) toward the city (LandmarkModels.Airport, plot 3 800 m along the runways × 1 600 m, Unity yaw 280). North of the
+# Аэропортовая магистраль, ≥ 300 m off the 500 kV lines, clear of the lakes park; the centre is LandmarkData airport X, Z
 J143 = (JOINT["J143"]["x"], JOINT["J143"]["z"])
-AIR_C = np.mean(np.array(CITY["airport_new"]["line"], float), axis=0)
-_U = np.array([math.sin(math.radians(95.0)), math.cos(math.radians(95.0))])
-_V = np.array([math.sin(math.radians(5.0)), math.cos(math.radians(5.0))])     # across the runway, to the north
-AIR_SOUTH_M, AIR_NORTH_M, AIR_HALF_L = 450.0, 1000.0, 2300.0
+AIR_C = np.array([-10350.0, 4000.0])
+AIR_YAW = 280.0                                    # Unity yaw: local −z (the nose, the landside) toward 100°
+_U = np.array([math.sin(math.radians(100.0)), math.cos(math.radians(100.0))])   # along the runways, toward the city
+_V = np.array([math.sin(math.radians(10.0)), math.cos(math.radians(10.0))])     # across the runways, to the north
+AIR_HALF_L, AIR_HALF_W = 1900.0, 800.0
 
 
-def air_pt(a, c):
-    p = AIR_C + _U * a + _V * c
+def air_pt(a, c, o=AIR_C, u=_U, v=_V):
+    p = o + u * a + v * c
     return (float(p[0]), float(p[1]))
 
 
-AIRPORT_LOT = Polygon([air_pt(-AIR_HALF_L, -AIR_SOUTH_M), air_pt(AIR_HALF_L, -AIR_SOUTH_M), air_pt(AIR_HALF_L, AIR_NORTH_M),
-                       air_pt(-AIR_HALF_L, AIR_NORTH_M)]).intersection(POLY)
-# the zimovkas stay (owner 31.10, scheme q2): the lot leaves out their village land and every house with 30 m round it
-_zim = unary_union([VILL.buffer(5.0)] + [h.buffer(30.0) for h in houses_hit(AIRPORT_LOT)])
-AIRPORT_LOT = AIRPORT_LOT.difference(_zim).buffer(0)
-AIRPORT_LOT = max(getattr(AIRPORT_LOT, "geoms", [AIRPORT_LOT]), key=lambda g: g.area).simplify(1.0)
+def _lot(poly):
+    # the zimovkas stay (owner 31.10, scheme q2): a lot leaves out their village land and every house with 30 m round it
+    poly = poly.intersection(POLY)
+    poly = poly.difference(unary_union([VILL.buffer(5.0)] + [h.buffer(30.0) for h in houses_hit(poly)])).buffer(0)
+    return max(getattr(poly, "geoms", [poly]), key=lambda g: g.area).simplify(1.0)
+
+
+AIRPORT_LOT = _lot(Polygon([air_pt(-AIR_HALF_L, -AIR_HALF_W), air_pt(AIR_HALF_L, -AIR_HALF_W), air_pt(AIR_HALF_L, AIR_HALF_W),
+                            air_pt(-AIR_HALF_L, AIR_HALF_W)]))
+# the landside gate of the model (LandmarkModels.Airport: local (−450, −1900), on the plot's east edge)
+AIR_GATE = air_pt(AIR_HALF_L, -450.0)
+# the airfield of 31.10 (runway 4 000 m on 095°, centre (−16000, 1500); 2 300 m each way, 450 m south and 1 000 m north of
+# the axis): the land of the plateau industry now (the swap); the trunk and the south entry X-IA still end at its edge
+_OC = np.array([-16000.0, 1500.0])
+_OU = np.array([math.sin(math.radians(95.0)), math.cos(math.radians(95.0))])
+_OV = np.array([math.sin(math.radians(5.0)), math.cos(math.radians(5.0))])
+OLD_AIR_LOT = _lot(Polygon([air_pt(a, c, _OC, _OU, _OV) for a, c in ((-2300.0, -450.0), (2300.0, -450.0), (2300.0, 1000.0),
+                                                                     (-2300.0, 1000.0))]))
 
 # --- Аэропортовая магистраль (scheme airport_trunk): from the А-3 joint J148 (km 44, the overpass and ramps are drawn
-# with Growing-East at level 3) through the centre «Каскелен» to the airport terminal. LRT in its median west of x −1000.
+# with Growing-East at level 3) through the centre «Каскелен», past the airport (its landside gate from the Дорога плато
+# junction) to the western industry on the airfield land of 31.10. LRT in its median from x −1000 to the airport.
 J148 = (JOINT["J148"]["x"], JOINT["J148"]["z"])
 TRUNK = fillet([J148, (-700.0, 1925.0), (-1500.0, 2150.0), (-2700.0, 2560.0), (-3350.0, 2800.0), (-4050.0, 3150.0),
                 (-4600.0, 3165.0), (-5000.0, 3165.0), (-5600.0, 3150.0), (-6500.0, 2950.0), (-7700.0, 2800.0),
                 (-9000.0, 2750.0), (-10400.0, 2900.0), (-11700.0, 2950.0), (-12400.0, 2800.0), (-13300.0, 2720.0),
                 (-14400.0, 2760.0), (-15300.0, 2750.0), (-15850.0, 2650.0), (-15960.0, 2300.0)], 900)
 _t = LineString(TRUNK)
-TRUNK = list(substring(_t, 0.0, min(_t.project(q) for q in getattr(_t.intersection(AIRPORT_LOT.exterior), "geoms",
-                                                                         [_t.intersection(AIRPORT_LOT.exterior)]))).coords)
+TRUNK = list(substring(_t, 0.0, min(_t.project(q) for q in getattr(_t.intersection(OLD_AIR_LOT.exterior), "geoms",
+                                                                         [_t.intersection(OLD_AIR_LOT.exterior)]))).coords)
 TL = LineString(TRUNK)
-AIR_GATE_N = TRUNK[-1]
-_tc = [TL.interpolate(TL.project(Point(p))) for p in [(-3350.0, 2800.0), (-5000.0, 3165.0), (-9000.0, 2750.0)]]
+WEST_GATE = TRUNK[-1]
+_tc = [TL.interpolate(TL.project(Point(p))) for p in [(-3350.0, 2800.0), (-5000.0, 3165.0), (-8300.0, 2770.0)]]
 _tparts = cut_at(TRUNK, [(q.x, q.y) for q in _tc])
 _ty = [(2030, "от стыка J148 (км 44 А-3) до центра «Каскелен»"), (2032, "центр «Каскелен» и мост через Каскелен"),
-       (2036, "левый берег и подъём на плато"), (2041, "плато: промзона и грузовой терминал до аэропорта")]
+       (2036, "левый берег и подъём на плато к аэропорту"), (2041, "вдоль аэропорта, грузовой терминал и западная промзона")]
 for i, (part, (yb, what)) in enumerate(zip(_tparts, _ty)):
     st = structs(part)
     if i == 0:
@@ -337,13 +354,13 @@ for i, (part, (yb, what)) in enumerate(zip(_tparts, _ty)):
                "ЛРТ в разделительной полосе")
 for _k, _p in enumerate(cw_ends(_tparts[-1], "arterial_regulated", TRUNK_PROFILE), 1):
     # one node per carriageway end: gen_network gives a spec joint to the one network node within 3 m
-    node(f"n_air_gate_n{_k}", _p[0], _p[1], "joint", ["s_trunk_4"], landmark="airport_alatau",
-         why_ru="магистраль приходит к терминалу аэропорта: дальше привокзальная площадь и внутренние проезды модели "
-                "airport (Unity), сеть района их не рисует; узел на каждой проезжей части")
+    node(f"n_trunk_west{_k}", _p[0], _p[1], "joint", ["s_trunk_4"],
+         why_ru="магистраль приходит к западной промзоне (лётное поле решения 31.10, после обмена 02.11.2026 — промзона): "
+                "дальше её внутренние проезды; узел на каждой проезжей части")
 SCHEME_CHANGES.append(("airport_trunk", "класс trunk → arterial_regulated: перекрёстки в одном уровне, ЛРТ аэропорта — в "
-                                        "разделительной полосе 9 м (а не отдельной полосой в 140 м севернее); западный конец — "
-                                        "у терминала на северной границе территории аэропорта, отрезок у грузового терминала на 80–150 м севернее схемы, "
-                                        "чтобы ж/д ветка к вокзалу шла южнее магистрали без пересечения"))
+                                        "разделительной полосе 9 м (а не отдельной полосой в 140 м севернее) до аэропорта; "
+                                        "аэропорт (02.11.2026) — севернее магистрали, въезд от узла с Дорогой плато; западный "
+                                        "конец — у западной промзоны, отрезок у грузового терминала на 80–150 м севернее схемы"))
 
 # --- Южная промышленная улица (scheme art_south): from the А-3 underpass at Жанаарна (OSM bdc5c57b, west end) to the
 # Rhenus hub; the joint J077 of Growing-East's ax_south is the other end of that underpass
@@ -383,16 +400,34 @@ RINGS.append(("n_ring_hub", RING_HUB))
 # --- Дорога плато (scheme art_plateau): from the trunk north over the plateau to the А-3 km 55,9 trumpet (W terminal of the
 # OSM links dfc7b64c / 3e1f1193 / 87899a36)
 KM559 = (250.2, 13683.2)                           # the terminal node of the OSM ramps dfc7b64c / 3e1f1193 / 87899a36
-_pl = LineString(fillet([C.on_line(TRUNK, x=-9000.0), (-8900.0, 5200.0), (-8300.0, 7700.0), (-7600.0, 10200.0),
+# (it starts 700 m east of the scheme's point since 02.11.2026: past the airport's east edge, the airport's gate road off it)
+_pl = LineString(fillet([C.on_line(TRUNK, x=-8300.0), (-8150.0, 5200.0), (-8300.0, 7700.0), (-7600.0, 10200.0),
                          (-7100.0, 12600.0), (-6200.0, 13700.0), (-3500.0, 13800.0), (-1200.0, 13780.0), (-300.0, 13720.0),
                          KM559], 900))
 # the trumpet's stem: the divided street ends at a two-lane ring 90 m west of the ramps' terminal node; one carriageway
 # (district_transport, as the one-lane ramps) runs from the ring to the terminal
 RING_KM559 = tuple(_pl.interpolate(_pl.length - 90.0).coords[0])
 PLAT = list(substring(_pl, 0.0, _pl.length - 90.0).coords)
+# its first 460 m, from the trunk to the airport's gate road, open with the airport (2041); the rest with the scheme (2046)
+AIR_JN = C.on_line(PLAT, z=AIR_GATE[1])
+PLAT_AIR, PLAT = cut_at(PLAT, [AIR_JN])
+street("s_plateau_air", "arterial_regulated", PLAT_AIR, "Дорога плато (север – юг)", 2041, axis="art_plateau",
+       struct=structs(PLAT_AIR),
+       why=MODEL + ": начало схемы art_plateau от Аэропортовой магистрали до въезда в аэропорт — открывается с аэропортом")
 street("s_plateau", "arterial_regulated", PLAT, "Дорога плато (север – юг)", 2046, axis="art_plateau", struct=structs(PLAT),
-       why="схема art_plateau (2040–50): от Аэропортовой магистрали у технопарка на север по плато и на восток к кольцу у "
-           "развязки А-3 км 55,9")
+       why="схема art_plateau (2040–50): от въезда в аэропорт у Аэропортовой магистрали на север по плато и на восток к "
+           "кольцу у развязки А-3 км 55,9")
+# the airport's gate road: from the Дорога плато west to the landside gate of the model (its internal roads go on to the
+# roundabout, the boulevard and the forecourt at the terminal's nose)
+AIR_ACCESS = [AIR_JN, AIR_GATE]
+street("s_air_access", "arterial_regulated", AIR_ACCESS, "Въезд в аэропорт «Алатау»", 2041, struct=structs(AIR_ACCESS),
+       why=MODEL + ": от Дороги плато до въезда на территорию аэропорта (02.11.2026: аэропорт севернее магистрали, "
+                   "носом-терминалом к городу); дальше — внутренние дороги модели airport")
+for _k, _p in enumerate(cw_ends(AIR_ACCESS, "arterial_regulated", None), 1):
+    node(f"n_air_gate{_k}", _p[0], _p[1], "joint", ["s_air_access"], landmark="airport_alatau",
+         why_ru="въезд на территорию аэропорта (внутренние проезды — модель airport, Unity); узел на каждой проезжей части")
+SCHEME_CHANGES.append(("art_plateau", "начало на магистрали в 700 м восточнее схемы (x −8300): аэропорт (02.11.2026) занял "
+                                      "плато западнее; первые 460 м до въезда в аэропорт — с 2041"))
 street("s_plateau_stem", "district_transport", [RING_KM559, KM559], "Дорога плато (въезд на развязку км 55,9)", 2046,
        axis="art_plateau",
        why=MODEL + ": от кольца до концевого узла существующих съездов развязки А-3 км 55,9 (OSM, однополосные): улица с "
@@ -468,17 +503,17 @@ N50 = fillet([DN[-1], (-200.0, 7800.0), J146], 300)
 street("s_n50", "district_transport", N50, "улица к развязке А-3 км 50,5", 2046, struct=structs(N50),
        why=MODEL + ": продолжение улицы Северная к стыку J146 (ax_n50 Growing-восток, км ≈ 50,5): путепровод над А-3 и "
                    "съезды — уровень 3 вместе с Growing-восток (замечание w42)")
-# --- south entry of the airport: Golden's X-IA (joint J143) on to the airport's south gate (service and cargo yard)
-_gate = LineString([J143, (J143[0], J143[1] + 3000.0)]).intersection(AIRPORT_LOT.exterior)
-AIR_GATE_S = (J143[0], min(q.y for q in getattr(_gate, "geoms", [_gate])))
-XIA = [J143, AIR_GATE_S]
-street("s_air_south", "arterial_regulated", XIA, "южный въезд аэропорта «Алатау»", 2050, struct=structs(XIA),
-       why=MODEL + ": продолжение X-IA Golden от стыка J143 до южных ворот аэропорта (служебная и грузовая зона у ВПП); "
-                   "дальше — внутренние дороги модели аэропорта")
+# --- south entry of the western industry: Golden's X-IA (joint J143) on to the south edge of the airfield land of 31.10
+# (the airport's south gate until the swap of 02.11.2026)
+_gate = LineString([J143, (J143[0], J143[1] + 3000.0)]).intersection(OLD_AIR_LOT.exterior)
+WEST_GATE_S = (J143[0], min(q.y for q in getattr(_gate, "geoms", [_gate])))
+XIA = [J143, WEST_GATE_S]
+street("s_west_south", "arterial_regulated", XIA, "южный въезд западной промзоны", 2050, struct=structs(XIA),
+       why=MODEL + ": продолжение X-IA Golden от стыка J143 до южного края западной промзоны (лётное поле решения 31.10, "
+                   "после обмена с аэропортом 02.11.2026 — промзона); дальше — её внутренние проезды")
 for _k, _p in enumerate(cw_ends(XIA, "arterial_regulated", None), 1):
-    node(f"n_air_gate_s{_k}", _p[0], _p[1], "joint", ["s_air_south"], landmark="airport_alatau",
-         why_ru="южные ворота аэропорта: дорога входит на территорию аэропорта (внутренние проезды — модель airport, "
-                "Unity); узел на каждой проезжей части")
+    node(f"n_west_gate_s{_k}", _p[0], _p[1], "joint", ["s_west_south"],
+         why_ru="южный въезд западной промзоны: дорога входит в промзону (её внутренние проезды); узел на каждой проезжей части")
 # --- street over the railway to the southern industry (the tertiary d492aa6d south of the rail)
 _rx = LineString([(-3500.0, -300.0), (-3500.0, -4000.0)]).intersection(POLY)
 _rx = _rx if _rx.geom_type == "LineString" else max(_rx.geoms, key=lambda g: g.length)

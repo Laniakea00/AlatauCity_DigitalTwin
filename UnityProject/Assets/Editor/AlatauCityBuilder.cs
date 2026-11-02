@@ -210,6 +210,43 @@ namespace AlatauCity.EditorTools
         }
         static X[] Cat<X>(X[] a, X[] b) { var r = new X[a.Length + b.Length]; a.CopyTo(r, 0); b.CopyTo(r, a.Length); return r; }
 
+        /// <summary>Square tiles (m) the building chunks are cut into: a chunk of the data is one year of the whole city, so one mesh
+        /// spanned 37 × 55 km, could never be culled, and every pass of every frame (depth, each shadow cascade, the view) drew all of
+        /// it (the stage-7 map: 150 M triangles a frame). Each building goes whole into the tile of its own centre.</summary>
+        const float BuildingTile = 3000f;
+        static List<AqlObj> Tiles(List<AqlObj> objs, float tile)
+        {
+            var res = new List<AqlObj>();
+            foreach (var x in objs)
+            {
+                int nt = x.Bid.Length; if (nt == 0) { res.Add(x); continue; }
+                var sum = new Dictionary<int, Vector3>(); var n = new Dictionary<int, int>();
+                for (int t = 0; t < nt; t++)
+                {
+                    var c = (x.V[x.T[t * 3]] + x.V[x.T[t * 3 + 1]] + x.V[x.T[t * 3 + 2]]) / 3f;
+                    sum[x.Bid[t]] = sum.TryGetValue(x.Bid[t], out var s) ? s + c : c; n[x.Bid[t]] = n.TryGetValue(x.Bid[t], out int k) ? k + 1 : 1;
+                }
+                var key = new Dictionary<int, Vector2Int>();
+                foreach (var kv in sum) { var c = kv.Value / n[kv.Key]; key[kv.Key] = new Vector2Int(Mathf.FloorToInt(c.x / tile), Mathf.FloorToInt(c.z / tile)); }
+                var byTile = new Dictionary<Vector2Int, List<int>>();
+                for (int t = 0; t < nt; t++) { var k = key[x.Bid[t]]; if (!byTile.TryGetValue(k, out var l)) byTile[k] = l = new List<int>(); l.Add(t); }
+                if (byTile.Count == 1) { res.Add(x); continue; }
+                foreach (var kv in byTile)
+                {
+                    var tris = kv.Value; var remap = new Dictionary<int, int>(); var V = new List<Vector3>();
+                    var T = new int[tris.Count * 3]; var col = new byte[tris.Count]; var yr = new ushort[tris.Count]; var bid = new int[tris.Count];
+                    for (int i = 0; i < tris.Count; i++)
+                    {
+                        int t = tris[i];
+                        for (int j = 0; j < 3; j++) { int v = x.T[t * 3 + j]; if (!remap.TryGetValue(v, out int r)) { r = V.Count; remap[v] = r; V.Add(x.V[v]); } T[i * 3 + j] = r; }
+                        col[i] = x.Col[t]; yr[i] = x.Yr[t]; bid[i] = x.Bid[t];
+                    }
+                    res.Add(new AqlObj { Name = $"{x.Name} t{kv.Key.x}_{kv.Key.y}", V = V.ToArray(), T = T, Col = col, Yr = yr, Bid = bid });
+                }
+            }
+            return res;
+        }
+
         /// record: u16 nameLen, name utf8, u8 kind, i32 nv, i32 nt, f32 verts[nv*3], u32 tris[nt*3], u8 col[nt], u16 year[nt], i32 bid[nt]
         /// (the buildings layer may come in parts: ReadAql)
         static void ReadLayer(string path, Color32[] pal, Material mat, Transform parent, string groupName, bool colliders, bool castShadows, float prog)
@@ -217,6 +254,7 @@ namespace AlatauCity.EditorTools
             var group = new GameObject(groupName).transform; group.SetParent(parent);
             var subGroups = new Dictionary<string, Transform>();
             var objs = ReadAql(path);
+            if (colliders) objs = Tiles(objs, BuildingTile);
             {
                 int count = objs.Count;
                 for (int o = 0; o < count; o++)

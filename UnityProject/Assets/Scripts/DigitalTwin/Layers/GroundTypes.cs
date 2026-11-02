@@ -109,7 +109,7 @@ namespace AlatauCity.DigitalTwin
                     m.vertices = v; m.colors32 = c; m.triangles = t; m.UploadMeshData(true);
                     ch.M = m; ch.R = Rect.MinMaxRect(lx, lz, hx, hz);
                     Outline(ch, part, k);
-                    chunks.Add(ch);
+                    chunks.Add(ch); chunkGrid = null;
                     vertices += nv; triangles += ni / 3;
                 }
             }
@@ -351,11 +351,32 @@ namespace AlatauCity.DigitalTwin
         }
 
         /// <summary>The type of the data's ground at (x, z) (the top piece of the final year), 0 where the data has none; ang and hash of its piece.</summary>
+        // the chunks by cell of ChunkCell m, the later (top) ones first: a point query looks at the few chunks of its cell, not all of
+        // them (the stage-7 map has 295, and the trees ask five points per candidate)
+        const float ChunkCell = 2000f;
+        Dictionary<long, int[]> chunkGrid;
+        static long CKey(int cx, int cz) => ((long)cx << 32) ^ (uint)cz;
+        void MakeChunkGrid()
+        {
+            var g = new Dictionary<long, List<int>>();
+            for (int ci = chunks.Count - 1; ci >= 0; ci--)
+            {
+                var r = chunks[ci].R;
+                for (int cz = Mathf.FloorToInt(r.yMin / ChunkCell); cz <= Mathf.FloorToInt(r.yMax / ChunkCell); cz++)
+                    for (int cx = Mathf.FloorToInt(r.xMin / ChunkCell); cx <= Mathf.FloorToInt(r.xMax / ChunkCell); cx++)
+                    { long k = CKey(cx, cz); if (!g.TryGetValue(k, out var l)) g[k] = l = new List<int>(); l.Add(ci); }
+            }
+            chunkGrid = new Dictionary<long, int[]>();
+            foreach (var kv in g) chunkGrid[kv.Key] = kv.Value.ToArray();
+        }
+
         public int TypeAt(float x, float z, out byte ang, out byte hash)
         {
             ang = 0; hash = 0;
             if (!data.Contains(new Vector2(x, z))) return 0;
-            for (int ci = chunks.Count - 1; ci >= 0; ci--)
+            if (chunkGrid == null) MakeChunkGrid();
+            if (!chunkGrid.TryGetValue(CKey(Mathf.FloorToInt(x / ChunkCell), Mathf.FloorToInt(z / ChunkCell)), out var cell)) return 0;
+            foreach (int ci in cell)
             {
                 var c = chunks[ci];
                 if (x < c.R.xMin || x > c.R.xMax || z < c.R.yMin || z > c.R.yMax) continue;

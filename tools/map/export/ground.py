@@ -114,6 +114,9 @@ NEEDS_BUILDING = {"residential_high", "residential_mid", "mixed_centre", "reside
                   "college", "university", "medical", "polyclinic", "hospital", "clinic", "pharmacy_shop", "police", "fire_station", "culture",
                   "worship", "landmark", "industry", "logistics"}
 NEVER = 9999                                                        # a year that never comes (the year byte 255)
+GAP_CLOSE_M = 300.0                                                 # strips between districts up to twice this wide get the plain lawn
+WHOLE_CITY = {"gate", "golden", "green", "growing_w", "growing_e"}  # all of them merged: the old plan outside them is shown as nature
+EDGE_PX = 2                                                         # map_dev px round the districts that keep the district's year
 
 
 def ybyte(y):
@@ -460,6 +463,21 @@ def make_dev(base_dir, Ds, area, grid, roads, gys, log):
     water = water_of(plan[np.ix_(pj, pi)]) > 0.3
     repaint = inside & ~keep & ~water
     out = base.copy(); sub = out[j0:j1, i0:i1]; sub[repaint] = val[repaint]
+    # the whole city merged: outside its districts the twin's old plan is gone as well, so its planned years there become never and the
+    # ground shows its nature (the old plan's random yards with parked cars showed in the notches of the city's edge, e.g. by the А-3
+    # in Golden, right beside the new map); what exists there (always) and the water stay
+    if WHOLE_CITY <= {D["id"] for D in Ds}:
+        xa, za = grid.centres(W, H, 0, W, 0, H)
+        ina = mask_in(area, xa, za)
+        # a band of EDGE_PX px round the districts takes the year of the nearest district pixel: the edge of the city is then where its
+        # ground pieces end, not the staircase of these 21 m pixels (the shader reads the year of a piece of the map's own year here)
+        _, idx = ndimage.distance_transform_edt(~ina, return_indices=True)
+        dist = np.hypot(idx[0] - np.arange(H)[:, None], idx[1] - np.arange(W)[None, :])
+        band = ~ina & (dist <= EDGE_PX)
+        out[band] = out[idx[0][band], idx[1][band]]
+        old = ~ina & ~band & (out > dev_value(2025)) & (out < 255)
+        out[old] = 255
+        log(f"map_dev: the whole city is merged — {int(old.sum()):,} px of the old plan outside the districts set to never (nature)")
     ys = val[repaint]
     yy = ys[(ys > 0) & (ys < 255)]
     log(f"map_dev: {repaint.sum():,} px repainted (always {int((ys == 0).sum())}, never {int((ys == 255).sum())}, years "
@@ -568,6 +586,15 @@ def ground_pieces(Ds, area, roads, gys, log, parks=None, yards=None):
             return
         P.append((t, ang, h, g, y)); cnt[what] += 1
     add(15, area, 0.0, 0, 0, "area", tol=0.5)
+    # the strips between two districts (their areas follow the twin's boundaries and leave strips up to GAP_CLOSE_M × 2 wide along
+    # the А-3 and at the joints: 280 ha in 34 pieces on the stage-7 map): no district draws them, so the ground there painted its old
+    # random yards with parked cars right beside the new ones. The same plain lawn of the map's own year; the outer edge of the
+    # city stays as it is (a strip is taken only where it touches two districts)
+    if len(Ds) > 1:
+        closed = area.buffer(GAP_CLOSE_M, join_style="mitre").buffer(-GAP_CLOSE_M, join_style="mitre")
+        for gp in getattr(closed.difference(area), "geoms", [closed.difference(area)]):
+            if gp.geom_type == "Polygon" and gp.area >= 1.0 and sum(1 for D in Ds if D["area"].distance(gp) < 1.0) >= 2:
+                P.append((15, 0.0, 0, gp.simplify(0.5), 0)); cnt["strips between districts"] += 1
     for y, g in sorted(street_corridors(roads, area), key=lambda c: -c[0]):
         add(15, g, 0.0, 0, ybyte(y), "street corridors (by year)", tol=0.5)
     for D in Ds:

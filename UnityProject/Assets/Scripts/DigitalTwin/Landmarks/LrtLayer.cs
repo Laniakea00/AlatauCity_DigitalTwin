@@ -56,6 +56,11 @@ namespace AlatauCity.DigitalTwin.Landmarks
 
         const float DeckW = 9.6f, DeckT = 1.9f, Above = 8.5f;
         static readonly Color32 Conc = LM.C("#cfcbc3"), ConcD = LM.C("#aaa59c"), Ballast = LM.C("#77736c"), Rail = LM.C("#4b5057"), Pole = LM.C("#8d939a");
+        // the Astana LRT (opened 16.05.2026) as the reference: a light concrete box girder with a white balustrade and a yellow edge, single
+        // columns with a Y head, the line on a concrete median with kerbs; at street level a green track bed between kerbs, no fences
+        static readonly Color32 Balustrade = LM.C("#f1f0eb"), Yellow = LM.C("#f2c230"), Kerb = LM.C("#d9d5cc"), TrackGrass = LM.C("#6d8f4a");
+        /// <summary>Concrete median under a viaduct: half width (m) and kerb height over the ground.</summary>
+        const float MedianHalf = 2.6f, MedianUp = 0.2f;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         static void Boot() { if (Instance == null) new GameObject("LRT (viaduct, stations, trains)").AddComponent<LrtLayer>(); }
@@ -322,14 +327,15 @@ namespace AlatauCity.DigitalTwin.Landmarks
                     deck.Quad(a + dn, b + dn, c + dn, d + dn, Vector3.down, ConcD, LM.Solid, 3f, new Vector2(u0, 0), new Vector2(u0, DeckW), new Vector2(u1, DeckW), new Vector2(u1, 0));
                     deck.Quad(a, d, d + dn, a + dn, -s0, Conc, LM.Solid, 3f, new Vector2(u0, 0), new Vector2(u1, 0), new Vector2(u1, -DeckT), new Vector2(u0, -DeckT));
                     deck.Quad(b, c, c + dn, b + dn, s0, Conc, LM.Solid, 3f, new Vector2(u0, 0), new Vector2(u1, 0), new Vector2(u1, -DeckT), new Vector2(u0, -DeckT));
-                    // parapets
+                    // parapets: a white balustrade with a yellow edge along its top (the Astana viaduct)
                     foreach (float sg in new[] { -1f, 1f })
                     {
                         Vector3 e0 = p0 + s0 * sg * (DeckW * 0.5f), e1 = p1 + s1 * sg * (DeckW * 0.5f), i0 = p0 + s0 * sg * (DeckW * 0.5f - 0.3f), i1 = p1 + s1 * sg * (DeckW * 0.5f - 0.3f);
                         var up = Vector3.up * 1.1f;
-                        deck.Quad(e0, e1, e1 + up, e0 + up, s0 * sg, Conc, LM.Solid, 3f, new Vector2(u0, 0), new Vector2(u1, 0), new Vector2(u1, 1.1f), new Vector2(u0, 1.1f));
-                        deck.Quad(i0, i1, i1 + up, i0 + up, -s0 * sg, Conc, LM.Solid, 3f, new Vector2(u0, 0), new Vector2(u1, 0), new Vector2(u1, 1.1f), new Vector2(u0, 1.1f));
-                        deck.Quad(e0 + up, e1 + up, i1 + up, i0 + up, Vector3.up, Conc, LM.Solid, 3f, Vector2.zero, Vector2.right, Vector2.one, Vector2.up);
+                        deck.Quad(e0, e1, e1 + up, e0 + up, s0 * sg, Balustrade, LM.Solid, 3f, new Vector2(u0, 0), new Vector2(u1, 0), new Vector2(u1, 1.1f), new Vector2(u0, 1.1f));
+                        deck.Quad(i0, i1, i1 + up, i0 + up, -s0 * sg, Balustrade, LM.Solid, 3f, new Vector2(u0, 0), new Vector2(u1, 0), new Vector2(u1, 1.1f), new Vector2(u0, 1.1f));
+                        deck.Quad(e0 + up, e1 + up, i1 + up, i0 + up, Vector3.up, Balustrade, LM.Solid, 3f, Vector2.zero, Vector2.right, Vector2.one, Vector2.up);
+                        deck.Beam(e0 + up * 0.93f + s0 * sg * 0.03f, e1 + up * 0.93f + s1 * sg * 0.03f, 0.08f, 0.16f, Yellow, LM.Solid);
                     }
                     // two tracks: ballast bed and rails (lines on the deck)
                     foreach (float tc in new[] { -2.15f, 2.15f })
@@ -346,12 +352,13 @@ namespace AlatauCity.DigitalTwin.Landmarks
                     }
                     foreach (float tc in new[] { -2.15f, 2.15f })
                         deck.Beam(p0 + s0 * tc + Vector3.up * 6.0f, p1 + s1 * tc + Vector3.up * 6.0f, 0.05f, 0.05f, Rail, LM.Steel);
-                    // pier every other point: column + cap beam under the deck
+                    // pier every other point: a single column with a Y head under the deck (two arms out to the deck's bearings)
                     if (i % 2 == 0)
                     {
-                        float gy = CityGround.HeightAt(p0.x, p0.z);
-                        piers.Beam(new Vector3(p0.x, gy - 1.5f, p0.z), new Vector3(p0.x, p0.y - DeckT - 1.1f, p0.z), 2.0f, 2.4f, ConcD, LM.Solid);
-                        piers.Beam(p0 - s0 * (DeckW * 0.42f) + Vector3.down * (DeckT + 0.55f), p0 + s0 * (DeckW * 0.42f) + Vector3.down * (DeckT + 0.55f), 1.6f, 1.1f, ConcD, LM.Solid);
+                        float gy = CityGround.HeightAt(p0.x, p0.z), fork = Mathf.Max(gy + 1.5f, p0.y - DeckT - 3.0f);
+                        piers.Beam(new Vector3(p0.x, gy - 1.5f, p0.z), new Vector3(p0.x, fork, p0.z), 1.9f, 1.9f, Conc, LM.Solid);
+                        foreach (float sg in new[] { -1f, 1f })
+                            piers.Beam(new Vector3(p0.x, fork - 0.4f, p0.z), p0 + s0 * sg * (DeckW * 0.32f) + Vector3.down * (DeckT + 0.05f), 1.3f, 1.5f, Conc, LM.Solid);
                     }
                 }
                 if (r.Ends != null && EndsOf(r, ph, deck)) any = true;
@@ -360,7 +367,51 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 Add(piers.ToMesh("LRT piers " + r.Name + " " + ph), ph, 0, "LRT piers · " + r.Name + " · phase " + (ph + 1));
             }
         }
-        /// <summary>A span on the ground: the ballast bed with sloped shoulders and a fence each side; where the bed stands more than
+        bool mediansBuilt;
+        /// <summary>Under the viaducts, once the film roads are drawn: a concrete median with kerbs the piers stand on — along a street
+        /// it is the median between its carriageways, over open ground a strip under the deck. A span that crosses a street (one end on a
+        /// carriageway, the other off it) gets none, so no kerb runs across the lanes.</summary>
+        void BuildMedians()
+        {
+            int spans = 0;
+            foreach (var r in Routes)
+            {
+                if (r.Sec == null) continue;
+                int n = r.P.Length; var side = new Vector3[n];
+                for (int i = 0; i < n; i++)
+                {
+                    Vector3 a = i > 0 ? r.P[i] - r.P[i - 1] : r.P[1] - r.P[0], b = i < n - 1 ? r.P[i + 1] - r.P[i] : a; a.y = b.y = 0;
+                    side[i] = (Vector3.Cross(Vector3.up, a.normalized) + Vector3.Cross(Vector3.up, b.normalized)).normalized;
+                }
+                for (int ph = 0; ph < 3; ph++)
+                {
+                    var k = new LandmarkKit();
+                    for (int i = 0; i < n - 1; i++)
+                    {
+                        if (r.Phase[i] != ph || r.Sec[i] != Elevated) continue;
+                        Vector3 p0 = r.P[i], p1 = r.P[i + 1];
+                        float g0 = CityGround.HeightAt(p0.x, p0.z), g1 = CityGround.HeightAt(p1.x, p1.z);
+                        if (p0.y - g0 < 4f || p1.y - g1 < 4f) continue;                          // a ramp end: the deck is too low for a median
+                        bool on0 = FilmRoads.OnSurface(new Vector3(p0.x, g0, p0.z), 0f, true), on1 = FilmRoads.OnSurface(new Vector3(p1.x, g1, p1.z), 0f, true);
+                        if (on0 != on1) continue;
+                        Vector3 s0 = side[i], s1 = side[i + 1]; float u0 = r.S[i], u1 = r.S[i + 1];
+                        Vector3 G(Vector3 q, float y) => new Vector3(q.x, y, q.z);
+                        Vector3 a = G(p0 - s0 * MedianHalf, g0 + MedianUp), b = G(p0 + s0 * MedianHalf, g0 + MedianUp), c = G(p1 + s1 * MedianHalf, g1 + MedianUp), d = G(p1 - s1 * MedianHalf, g1 + MedianUp);
+                        k.Quad(a, b, c, d, Vector3.up, Kerb, LM.Paving, 1f, new Vector2(a.x, a.z), new Vector2(b.x, b.z), new Vector2(c.x, c.z), new Vector2(d.x, d.z));
+                        foreach (float sg in new[] { -1f, 1f })
+                        {
+                            Vector3 e0 = sg < 0 ? a : b, e1 = sg < 0 ? d : c;
+                            k.Quad(e0, e1, G(e1, g1 - 0.3f), G(e0, g0 - 0.3f), s0 * sg, Conc, LM.Solid, 3f, new Vector2(u0, 0), new Vector2(u1, 0), new Vector2(u1, -0.5f), new Vector2(u0, -0.5f));
+                        }
+                        spans++;
+                    }
+                    if (k.VertexCount > 0) Add(k.ToMesh("LRT median " + r.Name + " " + ph), ph, 0, "LRT median · " + r.Name + " · phase " + (ph + 1));
+                }
+            }
+            Debug.Log($"[Alatau] LRT: concrete median under {spans} viaduct spans");
+        }
+
+        /// <summary>A span on the ground: a green track bed between low concrete kerbs (no fences); where the bed stands more than
         /// 1.2 m above the ground (a ramp up to a viaduct), a fill between retaining walls with parapets. Two tracks, overhead line.</summary>
         static void GroundSpan(LandmarkKit k, int i, Vector3 p0, Vector3 p1, Vector3 s0, Vector3 s1, float u0, float u1)
         {
@@ -380,15 +431,14 @@ namespace AlatauCity.DigitalTwin.Landmarks
             }
             else
             {
-                const float hw = 4.6f, sh = 1.6f, fence = 6.9f;
-                Top(k, p0, p1, s0, s1, hw, Ballast, LM.Roof);
+                // at street level: a green track bed between low concrete kerbs, no fences (the line runs in the median of its street)
+                const float hw = 4.6f;
+                Top(k, p0, p1, s0, s1, hw, TrackGrass, LM.Plant);
                 foreach (float sg in new[] { -1f, 1f })
                 {
-                    Vector3 a = p0 + s0 * sg * hw, b = p1 + s1 * sg * hw, c = G(p1 + s1 * sg * (hw + sh), g1 - 0.3f), d = G(p0 + s0 * sg * (hw + sh), g0 - 0.3f);
-                    k.Quad(a, b, c, d, s0 * sg + up, Ballast, LM.Roof, 1f, new Vector2(a.x, a.z), new Vector2(b.x, b.z), new Vector2(c.x, c.z), new Vector2(d.x, d.z));
-                    Vector3 f0 = G(p0 + s0 * sg * fence, g0), f1 = G(p1 + s1 * sg * fence, g1);
-                    k.Quad(f0, f1, f1 + up * 1.8f, f0 + up * 1.8f, s0 * sg, Pole, LM.Solid, 3f, new Vector2(u0, 0), new Vector2(u1, 0), new Vector2(u1, 1.8f), new Vector2(u0, 1.8f));
-                    k.Quad(f0, f1, f1 + up * 1.8f, f0 + up * 1.8f, -s0 * sg, Pole, LM.Solid, 3f, new Vector2(u0, 0), new Vector2(u1, 0), new Vector2(u1, 1.8f), new Vector2(u0, 1.8f));
+                    Vector3 a = p0 + s0 * sg * hw, b = p1 + s1 * sg * hw, c = G(b, g1 - 0.3f), d = G(a, g0 - 0.3f);
+                    k.Quad(a, b, c, d, s0 * sg, Kerb, LM.Solid, 3f, new Vector2(u0, 0), new Vector2(u1, 0), new Vector2(u1, -0.3f), new Vector2(u0, -0.3f));
+                    k.Beam(a + up * 0.05f - s0 * sg * 0.15f, b + up * 0.05f - s1 * sg * 0.15f, 0.3f, 0.16f, Kerb, LM.Solid);
                 }
             }
             foreach (float tc in new[] { -2.15f, 2.15f })
@@ -495,38 +545,73 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 float yaw = Mathf.Atan2(st.Dir.x, st.Dir.z) * Mathf.Rad2Deg - 90f;
                 var p = st.P; var r = Quaternion.Euler(0, yaw, 0);
                 Vector3 W(float x, float y, float z) => p + r * new Vector3(x, y, z);
-                // side platforms widen the deck; the canopy is a shallow glass vault on white ribs
-                k.Box(W(0, -0.95f, 0), new Vector3(96f, 1.9f, 17f), yaw, LM.C("#d6d2ca"), LM.Solid, 3f, LM.C("#c9c4ba"), LM.Paving);
-                foreach (float sg in new[] { -1f, 1f }) k.Box(W(0, 0.45f, sg * 6.6f), new Vector3(92f, 0.9f, 3.6f), yaw, white, LM.Solid, 1f, LM.C("#bdb8ae"), LM.Paving);
-                for (int i = 0; i < 9; i++)
-                {
-                    float x = -40f + i * 10f;
-                    foreach (float sg in new[] { -1f, 1f }) k.Beam(W(x, 0.9f, sg * 7.6f), W(x, 6.4f, sg * 7.6f), 0.35f, 0.35f, white, LM.Solid);
-                }
-                var c0 = new List<Vector2>(); var c1 = new List<Vector2>();
-                // vault: two sloped glass roofs meeting at a white ridge
+                // as the Astana LRT stations (2026): 70 m side platforms under a glazed vault of white triangular panels, a thick white
+                // arch at each end, glass screens along the platforms; elevated, a glass ticket hall under the deck and a stair and lift
+                // tower to the platform level
+                const float Plat = 70f, Half = 37f, Eave = 3.6f, Rise = 5.6f, Span = 8.8f; const int Nc = 10, Nl = 12;
+                k.Box(W(0, -0.95f, 0), new Vector3(Half * 2f + 4f, 1.9f, 17.6f), yaw, LM.C("#d6d2ca"), LM.Solid, 3f, LM.C("#c9c4ba"), LM.Paving);
                 foreach (float sg in new[] { -1f, 1f })
                 {
-                    var a = W(-46f, 6.4f, sg * 8.6f); var b = W(46f, 6.4f, sg * 8.6f); var c = W(46f, 8.4f, 0f); var d = W(-46f, 8.4f, 0f);
-                    k.Quad(a, b, c, d, Vector3.up + (W(0, 0, sg) - p).normalized * 0.3f, glass, LM.Glass, 1.5f, new Vector2(0, 0), new Vector2(92f, 0), new Vector2(92f, 8.8f), new Vector2(0, 8.8f));
+                    k.Box(W(0, 0.45f, sg * 6.6f), new Vector3(Plat, 0.9f, 3.6f), yaw, white, LM.Solid, 1f, LM.C("#bdb8ae"), LM.Paving);
+                    k.Box(W(0, 0.92f, sg * 4.95f), new Vector3(Plat, 0.04f, 0.3f), yaw, Yellow, LM.Solid, 1f, Yellow, LM.Solid);   // the yellow edge line
+                    k.Quad(W(-Half, 0.9f, sg * 8.5f), W(Half, 0.9f, sg * 8.5f), W(Half, Eave, sg * 8.5f), W(-Half, Eave, sg * 8.5f), r * new Vector3(0, 0, sg),
+                           glass, LM.Glass, 1.5f, new Vector2(0, 0), new Vector2(Half * 2f, 0), new Vector2(Half * 2f, Eave), new Vector2(0, Eave));
+                    for (int i = 0; i <= 6; i++) k.Beam(W(-Half + i * Half / 3f, 0.9f, sg * 8.5f), W(-Half + i * Half / 3f, Eave, sg * 8.5f), 0.22f, 0.22f, white, LM.Solid);
                 }
-                k.Beam(W(-46f, 8.45f, 0), W(46f, 8.45f, 0), 0.6f, 0.4f, white, LM.Solid);
+                // the vault: a half ellipse across the station (Span m each side, Rise m high over the eaves), each bay cut into two
+                // triangles, white panel and glass in turn
+                Vector3 Arc(float x, int j, float grow = 0f) { float t = Mathf.PI * j / Nc; return W(x, Eave + Mathf.Sin(t) * (Rise + grow), -Mathf.Cos(t) * (Span + grow)); }
+                for (int i = 0; i < Nl; i++)
+                    for (int j = 0; j < Nc; j++)
+                    {
+                        float x0 = -Half + 2f * Half * i / Nl, x1 = -Half + 2f * Half * (i + 1) / Nl;
+                        Vector3 a = Arc(x0, j), b = Arc(x1, j), c = Arc(x1, j + 1), d = Arc(x0, j + 1);
+                        var o = ((a + c) * 0.5f - W((x0 + x1) * 0.5f, Eave, 0f)).normalized; bool even = ((i + j) & 1) == 0;
+                        k.Tri(a, b, c, o, even ? white : glass, even ? LM.Solid : LM.Glass, 1.5f, Vector2.zero, Vector2.right, Vector2.one);
+                        k.Tri(a, c, d, o, even ? glass : white, even ? LM.Glass : LM.Solid, 1.5f, Vector2.zero, Vector2.one, Vector2.up);
+                    }
+                // the end arches: thick white ribs a little proud of the vault, down to the platforms
+                foreach (float x in new[] { -Half - 0.4f, Half + 0.4f })
+                {
+                    for (int j = 0; j < Nc; j++) k.Beam(Arc(x, j, 0.5f), Arc(x, j + 1, 0.5f), 1.4f, 1.1f, white, LM.Solid);
+                    foreach (int j in new[] { 0, Nc }) { var top = Arc(x, j, 0.5f); k.Beam(new Vector3(top.x, p.y + 0.9f, top.z), top, 1.4f, 1.1f, white, LM.Solid); }
+                }
                 if (st.Kind == Ground)
                 {
-                    // at street level: no lift tower; the red LRT sign on a post at the platform end
+                    // at street level: no hall or tower; the red LRT sign on a post at the platform end
                     onGround++;
-                    k.Beam(W(44f, 0f, 10.2f), W(44f, 4.6f, 10.2f), 0.3f, 0.3f, white, LM.Solid);
-                    k.Box(W(44f, 4.2f, 10.2f), new Vector3(0.4f, 1.6f, 3.2f), yaw, red, LM.Light, 1f, red, LM.Light);
+                    k.Beam(W(Half + 2f, 0f, 10.2f), W(Half + 2f, 4.6f, 10.2f), 0.3f, 0.3f, white, LM.Solid);
+                    k.Box(W(Half + 2f, 4.2f, 10.2f), new Vector3(0.4f, 1.6f, 3.2f), yaw, red, LM.Light, 1f, red, LM.Light);
                     continue;
                 }
-                // lift and stair tower to the street, with the red LRT sign
-                float gy = CityGround.HeightAt(W(0, 0, 13f).x, W(0, 0, 13f).z);
-                var tb = W(0, 0, 13.5f); tb.y = gy;
-                k.Box(tb + Vector3.up * ((p.y - gy) * 0.5f + 2f), new Vector3(8f, p.y - gy + 4f, 6f), yaw, glass, LM.Glass, 4f, white, LM.Roof);
-                k.Box(W(0, 4.2f, 16.8f), new Vector3(3.2f, 1.6f, 0.4f), yaw, red, LM.Light, 1f, red, LM.Light);
+                // the ticket hall under the deck (glass, a white roof) and the stair and lift tower beside it, with the red LRT sign
+                var hc = W(0, 0, 0); float gy = CityGround.HeightAt(hc.x, hc.z);
+                if (p.y - gy > 8f) k.Box(new Vector3(hc.x, gy + 2.6f, hc.z), new Vector3(26f, 5.2f, 9f), yaw, glass, LM.Glass, 4f, white, LM.Roof);
+                // the tower at a platform end, on the first side of the four clear of buildings (else where it always stood)
+                float tx = Half - 8f, tz = 13.5f;
+                foreach (var (cx, cz) in new[] { (Half - 8f, 13.5f), (Half - 8f, -13.5f), (8f - Half, 13.5f), (8f - Half, -13.5f) })
+                    if (Clear(W(cx, 0, cz), yaw)) { tx = cx; tz = cz; break; }
+                var tb = W(tx, 0, tz); tb.y = CityGround.HeightAt(tb.x, tb.z);
+                k.Box(tb + Vector3.up * ((p.y - tb.y) * 0.5f + 2f), new Vector3(9f, p.y - tb.y + 4f, 6f), yaw, glass, LM.Glass, 4f, white, LM.Roof);
+                foreach (float dx in new[] { -4.6f, 4.6f }) k.Beam(W(tx + dx, 0f, tz) + Vector3.up * (tb.y - p.y), W(tx + dx, 0f, tz) + Vector3.up * 4f, 0.3f, 0.3f, white, LM.Solid);
+                k.Box(W(tx, 4.2f, tz + Mathf.Sign(tz) * 3.1f), new Vector3(3.2f, 1.6f, 0.4f), yaw, red, LM.Light, 1f, red, LM.Light);
             }
             for (int ph = 0; ph < 3; ph++) if (kits[ph].VertexCount > 0) Add(kits[ph].ToMesh("LRT stations " + ph), ph, 2, "LRT stations · phase " + (ph + 1));
             if (under > 0 || onGround > 0) Debug.Log($"[Alatau] LRT stations: {onGround} at street level (no lift), {under} underground (no structure, trains still stop)");
+        }
+
+        /// <summary>No building (a collider other than the terrain, risen 1.5 m over the ground) under the 10 × 7 m tower footprint at c.</summary>
+        static bool Clear(Vector3 c, float yaw)
+        {
+            var r = Quaternion.Euler(0, yaw, 0);
+            for (int i = -1; i <= 1; i++)
+                for (int j = -1; j <= 1; j++)
+                {
+                    var q = c + r * new Vector3(i * 5f, 0f, j * 3.5f);
+                    if (Physics.Raycast(new Vector3(q.x, 6000f, q.z), Vector3.down, out var hit, 9000f, ~0, QueryTriggerInteraction.Ignore)
+                        && !hit.collider.name.StartsWith("Terrain") && hit.point.y > CityGround.HeightAt(q.x, q.z) + 1.5f) return false;
+                }
+            return true;
         }
 
         void Add(Mesh m, int phase, int kind, string name)
@@ -574,6 +659,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
         void Update()
         {
             if (!built) return;
+            if (!mediansBuilt && FilmRoads.Ready) { mediansBuilt = true; BuildMedians(); lastYear = -1; }
             int y = TwinState.Year, s = (int)TwinState.Scenario;
             if (y != lastYear || TwinState.Scenario != lastSc) { ApplyYear(y, s); lastYear = y; lastSc = TwinState.Scenario; }
             MoveTrains(Time.deltaTime);

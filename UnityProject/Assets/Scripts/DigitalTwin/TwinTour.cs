@@ -257,7 +257,7 @@ namespace AlatauCity.DigitalTwin
                     At(0.6f, () => Spot(2, "Заводы", new Color(1f, 0.62f, 0.22f), b => b.Kind == "industry")),
                     At(8f, () => Spot(2, "Энергетика и сети", new Color(1f, 0.86f, 0.25f), b => b.Kind == "utility" || b.Kind == "solar")) } });
             steps.Add(new Step { Seg = 3, Zone = 2, Year = 2050, Dur = 22, Enter = () => { LS?.Select(null, false); var c = Cam; if (c != null) c.FlyTo(c.overview); TourFx.Instance?.ShowSilkRoad(); }, Title = () => "Шёлковый путь через Алатау" });
-            // the airport on the owner's site of 31.10.2026 (Growing-West, runway centre −16000, 1500; LandmarkData «airport» built 2041–2045, open from 2045)
+            // the airport on the owner's site of 02.11.2026 (Growing-West, plot centre −10350, 4000; LandmarkData «airport» built 2041–2045, open from 2045)
             steps.Add(new Step { Seg = 3, Zone = 2, Module = "objects", Year = 2050, Dur = 22, Enter = () => Object("airport"), Title = () => "Аэропорт «Алатау» · после 2040" });
 
             // ================= Green: tourism on Kapshagay (segment 4)

@@ -266,12 +266,12 @@ namespace AlatauCity.DigitalTwin.Landmarks
             m.vertices = v; m.RecalculateBounds();
             Debug.Log(string.Format("[Alatau] landmark {0}: {1} vertices past its plot follow the ground ({2:0.0} … {3:0.0} m)", l.Id, moved, lo, hi));
         }
-        /// <summary>Take-off on the airport's runway toward 095° (local +z) from its west end: lined up, a 900 m roll, rotation at
+        /// <summary>Take-off on the airport's main runway toward 280° (local +z) from its east end: lined up, a 900 m roll, rotation at
         /// ≈ 76 m/s, the climb out over the runway; then again (every 45 s).</summary>
         static void Fly(Node n, float dt)
         {
             n.FlyT = (n.FlyT + dt) % 45f; float t = n.FlyT;
-            const float z0 = LandmarkModels.RwyZ0 + 60f, zr = z0 + 900f, acc = 3.2f;
+            const float z0 = LandmarkModels.RwyLZ0 + 60f, zr = z0 + 900f, acc = 3.2f;
             float z, y = 0.45f, pitch = 0f;
             if (t < 2.5f) z = z0;                                                                  // lined up
             else
@@ -285,7 +285,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             }
             bool vis = t < 42f;
             if (n.Flyer.gameObject.activeSelf != vis) n.Flyer.gameObject.SetActive(vis);
-            n.Flyer.localPosition = new Vector3(LandmarkModels.RwyX, y, z); n.Flyer.localRotation = Quaternion.Euler(pitch, 0f, 0f);
+            n.Flyer.localPosition = new Vector3(LandmarkModels.RwyLX, y, z); n.Flyer.localRotation = Quaternion.Euler(pitch, 0f, 0f);
         }
 
         /// <summary>Hoarding and tower cranes of the construction site (shown only while the object is being built).</summary>

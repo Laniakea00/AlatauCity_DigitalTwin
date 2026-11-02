@@ -23,6 +23,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(HERE), "gen"))
 T0 = time.time()
 import numpy as np  # noqa: E402
 import shapely  # noqa: E402
+import shapely.affinity  # noqa: E402
 from shapely.geometry import LineString, Point, Polygon, box  # noqa: E402
 from shapely.ops import substring, unary_union  # noqa: E402
 
@@ -194,10 +195,24 @@ for _g, _p in C.layer_in("infrastructure", GOLDEN):
         _PZ.append(_g.buffer(_hw))
 POWER_PZ = unary_union(_PZ) if _PZ else Polygon()
 
+# the KAIST campus of Unity (LandmarkData kaist: plot PadW × PadD = 420 × 360 m, the QTwin campus model at its fixed size) at the
+# QAIST point (owner: «перенести», 31.10), turned with the quarters round it (Unity yaw −4.5°, clockwise from north): no local
+# street crosses it, the campus is one lot (8 m off for the pavements of the streets round it)
+KAIST_XZ, KAIST_YAW, KAIST_W, KAIST_D = (-150.0, -11100.0), -4.5, 420.0, 360.0
+KAIST_PAD = shapely.affinity.translate(shapely.affinity.rotate(box(-KAIST_W / 2, -KAIST_D / 2, KAIST_W / 2, KAIST_D / 2), -KAIST_YAW,
+                                                               origin=(0, 0)), *KAIST_XZ)
+# K-Park of Unity (LandmarkData kpark: its model is 360 × 280 m): zone Z-P3 is 260 × 420 m with arterials through it, so the park went
+# over the streets; 300 m west, between the frame streets, turned 90° with the quarters (local streets go round it, as KAIST)
+KPARK_XZ, KPARK_YAW, KPARK_W, KPARK_D = (-465.0, -8276.0), 0.0, 360.0, 280.0
+KPARK_PAD = shapely.affinity.translate(shapely.affinity.rotate(box(-KPARK_W / 2, -KPARK_D / 2, KPARK_W / 2, KPARK_D / 2), -KPARK_YAW,
+                                                               origin=(0, 0)), *KPARK_XZ)
+
 # ===================================================================================================== 3. local streets
 t = time.time()
 N.LRT_RAMPS[:] = LRT_RAMPS
-made = N.generate_local(stations=STATION_PTS, barriers=unary_union([OWN_ROW, IC_LAND, POWER_PZ]), lrt_line=L_LRT)
+made = N.generate_local(stations=STATION_PTS, barriers=unary_union([OWN_ROW, IC_LAND, POWER_PZ, KAIST_PAD.buffer(8.0, join_style=2),
+                                                                                 KPARK_PAD.buffer(8.0, join_style=2)]),
+                        lrt_line=L_LRT)
 LOG.append({"what": "местные улицы сгенерированы", "n": made, "s": round(time.time() - t, 1)})
 TIMES["generate_local"] = round(time.time() - t, 1)
 
@@ -639,6 +654,11 @@ for nid, P in IC_POLYS.items():
                      "местных улиц (здания и проезды не встают на насыпи и съезды)"}, P, {"lot_split": "none"})
     Z.SCHEME_CHANGES.append(("u_" + nid, f"земля развязки {IC_NAME[nid]} ({P.area / 1e4:.1f} га) вынута из зон схемы: "
                                          "съезды и насыпи не застраиваются"))
+# the K-Park plot right after: one zone of its own, so no zone border cuts the model's lot (it lies across the park zone Z-P3's
+# neighbours west of it)
+zone_out({"id": "z_kpark", "use": "park", "name_ru": "K-Park (корейский парк и павильоны)", "years": [2025, 2027],
+          "why": "участок под модель Unity kpark 360 × 280 м (объект k_park)"}, KPARK_PAD, {"lot_split": "none"})
+Z.SCHEME_CHANGES.append(("z_kpark", f"участок K-Park ({KPARK_PAD.area / 1e4:.1f} га) вынут из зон схемы: модель 360 × 280 м целиком"))
 # sanitary gaps (rule 15): every logistics / industry zone states its SZZ class; no housing within the class width w, nor
 # within w × zone_factor in the downwind sector; the gap is planted (park zone) on the housing side
 _LN = LU.Norms()
@@ -940,11 +960,11 @@ def regpt(rid):
 
 
 # --- campus «Көктерек»: QAIST moves next to the space centre (the source: «рядом с действующим центром космической связи»)
-put("qaist", "move", regpt("qaist"), (-150.0, -11100.0), "Z-C1", None, "landmark", Y4(2028, "social"),
+obj("qaist", "move", regpt("qaist"), list(KAIST_XZ), "district_only",
     "по источнику (S21, Vlast): кампус QAIST «рядом с действующим центром космической связи «Көктерек»»; точка двойника "
     "(−1457, −12698) — модель (district_only), в 2,3 км от «Көктерек» за развязкой км 30,1; теперь — квартал кампуса Z-C1 "
-    "южнее центра космической связи (модель Unity kaist на весь квартал); первая очередь к 2028",
-    basis="по источнику", capacity={"students": 5000})
+    "южнее центра космической связи: участок 420 × 360 м под модель Unity kaist (местные улицы его обходят); первая очередь к 2028",
+    basis="по источнику", kind="landmark", footprint=KAIST_PAD, years=Y4(2028, "social"), yaw=KAIST_YAW, capacity={"students": 5000})
 put("kaist_research_institute", "move", regpt("kaist_research_institute"), (300.0, -10500.0), "Z-C1", 40000.0, "university",
     Y4(2029, "social"), "часть QAIST: едет вместе с кампусом — восточное крыло у «Көктерек» (точка источника — точка QAIST "
                        "двойника); участок 4 га по правилу", basis="по правилу")
@@ -960,11 +980,12 @@ put("medcluster_golden", "keep", regpt("medcluster_golden"), regpt("medcluster_g
     basis="по источнику", capacity={"beds": 1864})
 put("korean_clinics", "by_rule", None, (-1050.0, -10150.0), "Z-M1", 15000.0, "clinic", Y4(2031, "social"),
     MODEL + ": в медкластере (места в источнике нет)")
-kp = zpoly("Z-P3")
-obj("k_park", "keep", regpt("k_park"), regpt("k_park"), "district_only",
-    "точка двойника — модель, но место хорошее: у станции ЛРТ и Теренкары, вокруг вырастает главный центр; участок — зона "
-    "Z-P3 (10 га по источнику), модель Unity kpark", basis="по источнику", kind="landmark", footprint=kp, years=Y4(2027))
-obj("k_park_parts", "keep", regpt("k_park"), regpt("k_park"), "district_only", "внутри K-Park (его модель)", basis="по источнику")
+obj("k_park", "move", regpt("k_park"), list(KPARK_XZ), "district_only",
+    "точка двойника — модель, но место хорошее: у станции ЛРТ и Теренкары, вокруг вырастает главный центр; модель Unity kpark "
+    "360 × 280 м не помещается в зону Z-P3 (260 × 420 м, через неё идут магистрали) — участок под модель в 300 м западнее, "
+    "между улицами каркаса (местные улицы его обходят); зона Z-P3 остаётся парком", basis="по источнику", kind="landmark",
+    footprint=KPARK_PAD, years=Y4(2027), yaw=KPARK_YAW)
+obj("k_park_parts", "move", regpt("k_park"), list(KPARK_XZ), "district_only", "внутри K-Park (его модель)", basis="по источнику")
 put("sport_centre_hippodrome", "by_rule", None, (-750.0, -13700.0), "Z-S1", 400000.0, "sport", Y4(2046, "social"),
     MODEL + ": у развязок «Жаңаталап» и км 30,1 — зрители не едут через жильё; вдали от больниц; зона Z-S1")
 obj("stadium_50k", "remove", None, None, "none", "по источнику: стадион на 50 тыс. отменён (план 2026); вместо него — спортцентр "

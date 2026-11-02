@@ -27,7 +27,10 @@ namespace AlatauCity.DigitalTwin
 
         Light sun; Camera cam; MapCamera mc; Material sky; bool applied; FilmPost post; Renderer[] curtains = new Renderer[0]; FilmRoads roads; FilmTrees trees;
         // what the scene looked like before, to give it back
-        Quaternion sunRot0; Color sunCol0, ambSky0, ambEq0, ambGr0, fogCol0; float sunInt0, sunStr0, fogStart0, fogEnd0, shadowDist0; FogMode fogMode0;
+        Quaternion sunRot0; Color sunCol0, ambSky0, ambEq0, ambGr0, fogCol0; float sunInt0, sunStr0, fogStart0, fogEnd0, shadowDist0; FogMode fogMode0; int cascades0;
+        /// <summary>Shadow cascades of the film look: each cascade draws every caster in its slice again, and with the stage-7 city two of the
+        /// four cost 36 M triangles and 15 ms a frame on the gate_wide view for shadows that differ little at these distances.</summary>
+        const int FilmCascades = 2;
 
         static readonly int FilmId = Shader.PropertyToID("_AlatauFilm"), NightId = Shader.PropertyToID("_AlatauNight"), SunDirId = Shader.PropertyToID("_AlatauSunDir"),
             SunColId = Shader.PropertyToID("_AlatauSunColor"), ZenId = Shader.PropertyToID("_AlatauSkyZenith"), HorId = Shader.PropertyToID("_AlatauSkyHorizon"),
@@ -117,7 +120,7 @@ namespace AlatauCity.DigitalTwin
             if (sun != null) { sunRot0 = sun.transform.rotation; sunCol0 = sun.color; sunInt0 = sun.intensity; sunStr0 = sun.shadowStrength; }
             ambSky0 = RenderSettings.ambientSkyColor; ambEq0 = RenderSettings.ambientEquatorColor; ambGr0 = RenderSettings.ambientGroundColor;
             fogCol0 = MapStyle.Background; fogMode0 = RenderSettings.fogMode; fogStart0 = RenderSettings.fogStartDistance; fogEnd0 = RenderSettings.fogEndDistance;
-            shadowDist0 = QualitySettings.shadowDistance;
+            shadowDist0 = QualitySettings.shadowDistance; cascades0 = QualitySettings.shadowCascades;
             if (cam != null) { post = cam.GetComponent<FilmPost>(); if (post == null) post = cam.gameObject.AddComponent<FilmPost>(); post.enabled = false; }
             // the translucent walls along the district boundaries belong to the map view, not to the film
             var list = new System.Collections.Generic.List<Renderer>();
@@ -230,6 +233,7 @@ namespace AlatauCity.DigitalTwin
             float dist = mc != null ? mc.distance : 3000f, vis = Mathf.Clamp(dist * 7f, 22000f, 320000f);
             RenderSettings.fog = true; RenderSettings.fogMode = FogMode.ExponentialSquared; RenderSettings.fogDensity = 0.83f / vis; RenderSettings.fogColor = Color.Lerp(hor, zen, 0.12f + 0.3f * dusk) + new Color(0.025f, 0.015f, 0.008f) * night;
             QualitySettings.shadowDistance = Mathf.Clamp(dist * 3.2f, 900f, 40000f);
+            if (QualitySettings.shadowCascades != FilmCascades) QualitySettings.shadowCascades = FilmCascades;
             if (cam != null && sky != null) { RenderSettings.skybox = sky; cam.clearFlags = CameraClearFlags.Skybox; }
             if (post != null)
             {
@@ -256,7 +260,7 @@ namespace AlatauCity.DigitalTwin
             if (sun != null) { sun.transform.rotation = sunRot0; sun.color = sunCol0; sun.intensity = sunInt0; sun.shadowStrength = sunStr0; }
             RenderSettings.ambientSkyColor = ambSky0; RenderSettings.ambientEquatorColor = ambEq0; RenderSettings.ambientGroundColor = ambGr0;
             RenderSettings.fogMode = fogMode0; RenderSettings.fogStartDistance = fogStart0; RenderSettings.fogEndDistance = fogEnd0; RenderSettings.fogColor = fogCol0;
-            QualitySettings.shadowDistance = shadowDist0;
+            QualitySettings.shadowDistance = shadowDist0; QualitySettings.shadowCascades = cascades0;
             if (cam != null) { cam.clearFlags = CameraClearFlags.SolidColor; cam.backgroundColor = MapStyle.Background; }
             RenderSettings.skybox = null;
             if (post != null) post.enabled = false;

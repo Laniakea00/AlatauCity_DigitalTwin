@@ -51,7 +51,9 @@ J062 = (N.JOINT["J062"]["x"], N.JOINT["J062"]["z"])
 TL = N.TL
 P_M = C.on_line(N.TRUNK, x=-1150.0)
 S_M = TL.project(Point(P_M))
-S_END = TL.length - 40.0                         # the line stops 40 m short of the trunk's end at the terminal
+# the line stops in the median 280 m west of the Дорога плато junction, across the trunk from the airport's landside gate
+# (owner 02.11.2026: the airport north of the trunk; the trunk goes on west to the western industry without the LRT)
+S_END = TL.project(Point(N.AIR_JN)) + 280.0
 # into the median along the trunk's own direction: the last 120 m before P_M lie on the trunk's tangent at P_M, so the
 # curve meets the median without a kink (rule 25: curve radius)
 _tm = np.array(TL.interpolate(S_M + 2.0).coords[0]) - np.array(TL.interpolate(S_M - 2.0).coords[0])
@@ -441,26 +443,39 @@ def zone_out(z, poly, rules):
 
 
 ZB = {z["id"]: z for z in Z.ZPLAN}
-# --- the airport: the scheme's airside zone becomes the airport lot (runway 4 000 m at 095°, owner 31.10); the rest of
-# the old airside land joins the airport's protection reserve
+# --- the airport swapped with the plateau industry (owner 02.11.2026: «не прям далеко и не прям близко», the west of
+# the city, the twin's airliner-shaped terminal): the airport lot (two runways 100°/280°, 3.8 × 1.6 km, model airport)
+# is cut out of every zone of the plateau; the scheme's airfield and terminal land (and the airfield of 31.10) in the
+# far west become the western industry with the rules of the plateau industry
 AIR = N.AIRPORT_LOT
-old_air = ZB["air_airside"]["poly"]
-ZB["air_airside"]["poly"] = AIR
-ZB["air_airside"]["rules"] = {"lot_split": "none", "homes_per_ha": 0, "jobs_per_ha": 0}
-ZB["air_airside"]["why"] = ("решение владельца 31.10: ВПП 4 000 × 45 м, курс 095°, центр (−16000, 1500), после 2040; территория "
-                            "аэропорта — 4,6 км вдоль ВПП, 450 м к югу и 1 000 м к северу от оси (лётная полоса, рулёжки, "
-                            "перрон, терминал), участок модели airport")
-for zid in ("air_terminal", "air_reserve_1", "air_reserve_2", "air_reserve_3", "air_reserve_4", "res_rest_3", "res_rest_2",
-            "ind_plateau_3", "log_cargo_2"):
+_IND = ZB["ind_plateau_1"]
+old_air = unary_union([ZB["air_airside"]["poly"], N.OLD_AIR_LOT]).difference(AIR).buffer(0)
+for z in Z.ZPLAN:
+    if z["id"] != "air_airside":
+        z["poly"] = z["poly"].difference(AIR).buffer(0)
+ZB["air_airside"].update({"poly": AIR, "name_ru": "Аэропорт «Алатау»: лётное поле, терминал, перрон",
+                          # the airport's own jobs on its lot (LandmarkCapacity airport: 4 500, the twin's estimate)
+                          "rules": {"lot_split": "none", "homes_per_ha": 0, "jobs_per_ha": round(4500.0 / (AIR.area / 1e4), 2)},
+                          "why": "решение владельца 02.11.2026: аэропорт на месте промзоны плато (обмен с ней), в 5,6 км ближе к "
+                                 "городу, чем место 31.10; две ВПП 3 400 и 2 650 м курсом 100°/280°, между ними терминал в "
+                                 "форме самолёта носом к городу; территория 3,8 × 1,6 км — участок модели airport"})
+ZB["air_terminal"].update({"use": "industry", "name_ru": "Западная промзона (бывшая аэросити схемы)",
+                           "rules": copy.deepcopy(_IND["rules"]), "density": copy.deepcopy(_IND["density"]),
+                           "years": list(_IND["years"]),
+                           "why": "обмен 02.11.2026: земля терминала схемы — промзона с правилами промзоны плато (ind_plateau_1); "
+                                  "далеко от жилья, у Аэропортовой магистрали"})
+for zid in ("air_reserve_1", "air_reserve_2", "air_reserve_3", "air_reserve_4"):
     if zid in ZB:
-        ZB[zid]["poly"] = ZB[zid]["poly"].difference(AIR).buffer(0)
-_rest = old_air.difference(AIR).buffer(0)
-if _rest.area > 1000:
-    Z.ZPLAN.append({"id": "air_reserve_5", "use": "reserve", "name_ru": "Охранная зона аэропорта", "poly": _rest,
-                    "years": [2041, 2060], "rules": {"lot_split": "none"}, "density": None, "src": "v0",
-                    "why": "часть лётного поля схемы вне территории аэропорта (ВПП 4 000 м по решению 31.10): охранная зона"})
-Z.CHANGES.append(("air_airside", "лётное поле = территория аэропорта под ВПП 4 000 м 095° (4,6 × 1,45 км, "
-                                 f"{AIR.area / 1e4:.0f} га), остаток схемы — охранная зона air_reserve_5"))
+        ZB[zid].update({"name_ru": "Резерв (бывшая охранная зона аэропорта схемы)",
+                        "why": "обмен 02.11.2026: охранная зона лётного поля схемы без аэропорта — резерв"})
+Z.ZPLAN.insert([z["id"] for z in Z.ZPLAN].index("air_airside") + 1,
+               {"id": "ind_west", "use": "industry", "name_ru": "Западная промзона (бывшее лётное поле)", "poly": old_air,
+                "years": list(_IND["years"]), "rules": copy.deepcopy(_IND["rules"]), "density": copy.deepcopy(_IND["density"]),
+                "src": "l2", "why": "обмен 02.11.2026: лётное поле схемы и решения 31.10 — промзона с правилами промзоны "
+                                    "плато (ind_plateau_1): в 13 км от жилья, Аэропортовая магистраль и въезд X-IA от J143"})
+Z.CHANGES.append(("air_airside", f"аэропорт и промзона плато поменялись местами (02.11.2026): территория аэропорта 3,8 × 1,6 км "
+                                 f"({AIR.area / 1e4:.0f} га) вынута из зон плато; лётное поле и терминал схемы — промзона "
+                                 f"ind_west и air_terminal ({old_air.area / 1e4:.0f} га + терминал)"))
 
 # --- corridors kept free of rule buildings: the railway, the airport spur (model), the sorting yard
 RAIL_STRIP = N.RAIL.buffer(20.0).intersection(POLY)
@@ -618,6 +633,88 @@ for g in [q_ for q_ in getattr(_gap, "geoms", [_gap]) if q_.geom_type == "Polygo
     if m.geom_type == "Polygon" and not m.interiors:
         ZONES[best]["polygon"] = poly_pts(m)
         ZONES[best]["area_ha"] = round(m.area / 1e4, 2)
+# strict sanitary gaps (owner's request after run 5): the passes above leave production next to housing (the village gap is
+# cut from the scheme zones before the cover, the slivers join any neighbour; spec: ind_south_5 0 m, ind_south_3 92 m of
+# 100). Last, on the final zones: every industry and logistics zone gives up all its land within its class width
+# (szz.class_width_m, min) of any housing — new quarters, mixed centres, the waterfront, the campus and the existing
+# villages; the gap is planted (park). Production pieces left under 200 m² go to the gap, gap pieces under 200 m² to the
+# park they touch.
+HOUSE_USES = RES_USES + ("village_existing",)
+SZZ_STRICT = []
+_HU = unary_union([Polygon(z["polygon"]).buffer(0) for z in ZONES if z["use"] in HOUSE_USES]).buffer(0)
+
+
+def _new_zone(z, zid, q_):
+    while zid in ZIDS:
+        zid = zid + "_s"
+    ZIDS.add(zid)
+    d = copy.deepcopy(z)
+    d.update({"id": zid, "polygon": poly_pts(q_), "area_ha": round(q_.area / 1e4, 2)})
+    ZONES.append(d)
+    return d
+
+
+def _join_park(q_):
+    """A gap piece under 200 m² joins the park zone it shares the longest border with (no zones of a few m²)."""
+    best, bl = None, 0.0
+    for z in ZONES:
+        if z["use"] != "park":
+            continue
+        p = Polygon(z["polygon"]).buffer(0)
+        if p.distance(q_) > 0.5:
+            continue
+        sh = p.boundary.intersection(q_.buffer(0.5)).length
+        if sh > bl:
+            best, bl = z, sh
+    if best is None:
+        return False
+    m = Polygon(best["polygon"]).buffer(0).union(q_.buffer(0.05)).buffer(0)
+    if m.geom_type != "Polygon" or m.interiors:
+        return False
+    best["polygon"] = poly_pts(m)
+    best["area_ha"] = round(m.area / 1e4, 2)
+    return True
+
+
+for I in [z for z in ZONES if z["use"] in ("industry", "logistics")]:
+    cls_ = I["rules"].get("szz_class") or SZZ_DEFAULT[I["use"]][0]
+    w = SZZ_W[cls_]
+    P = Polygon(I["polygon"]).buffer(0)
+    if P.distance(_HU) >= w:
+        continue
+    gap_ = P.intersection(_HU.buffer(w + 1.0)).buffer(0)        # +1 m: buffer arcs are chords, rings round to 0.1 m
+    keep = [q_ for q_ in getattr(P.difference(gap_).buffer(0), "geoms", [P.difference(gap_).buffer(0)])
+            if q_.geom_type == "Polygon" and q_.area >= 200.0]
+    keep_g = unary_union(keep).buffer(0) if keep else Polygon()
+    gap_ = P.difference(keep_g).buffer(0) if keep else P
+    if gap_.area < 1.0:
+        continue
+    k_parts = simple_parts(keep_g, 200.0) if keep else []
+    if k_parts:
+        I["polygon"] = poly_pts(k_parts[0])
+        I["area_ha"] = round(k_parts[0].area / 1e4, 2)
+        for k, q_ in enumerate(k_parts[1:]):
+            _new_zone(I, f"{I['id']}_p{k + 2}", q_)
+    else:
+        ZONES.remove(I)
+    gid = f"g_szz_{I['id']}_strict"
+    gz = {"use": "park", "name_ru": f"Санитарный разрыв {I['name_ru']} — жильё и сёла (озеленение)", "years": I["years"],
+          "rules": {"lot_split": "none"}, "_src": "l2", "_base": gid,
+          "why": f"СЗЗ класса {cls_}: {w:.0f} м (szz.class_width_m, min; правило 15) — часть зоны {I['id']} ближе {w:.0f} м к "
+                 "жилью (новые кварталы, смешанные центры, существующие сёла) снята с производства и озеленена"}
+    n_ = 0
+    for q_ in simple_parts(gap_, 1.0):
+        if q_.area < 200.0 and _join_park(q_):
+            continue
+        _new_zone(gz, gid if n_ == 0 else f"{gid}_p{n_ + 1}", q_)
+        n_ += 1
+    SZZ_STRICT.append((I["id"], cls_, round(gap_.area / 1e4, 2)))
+    Z.CHANGES.append((gid, f"санитарный разрыв класса {cls_} ({w:.0f} м; {gap_.area / 1e4:.2f} га) из зоны {I['id']}"
+                           + ("" if k_parts else " (вся зона)") + ": ни одна промышленная и складская зона не ближе ширины СЗЗ "
+                           "к жилью и сёлам — озеленение"))
+LOG.append({"what": "строгий санитарный разрыв: производство не ближе ширины СЗЗ к жилью и сёлам", "zones": SZZ_STRICT,
+            "ha": round(sum(x[2] for x in SZZ_STRICT), 2)})
+print("strict SZZ", sorted(SZZ_STRICT, key=lambda x: -x[2])[:10], flush=True)
 
 
 
@@ -828,13 +925,14 @@ def reg_pt(rid):
 MOVED = []      # (registry id, было, стало, почему) for the report
 AC = N.AIR_C
 obj("airport_alatau", "move", reg_pt("airport_alatau"), [round(AC[0], 1), round(AC[1], 1)], "district_only",
-    "решение владельца 31.10 (city.json airport_new): ВПП 4 000 × 45 м, курс 095°/275°, центр (−16000, 1500), 15 млн пасс./год "
-    "(генплан № 727), строительство после 2040. Точка реестра (−16488, 561) по правилу «западная граница» лежит у края района "
-    "и южнее ВПП; территория аэропорта — 4,6 × 1,45 км вдоль ВПП (модель airport); магистраль и ЛРТ подходят к терминалу с "
-    "севера, южный въезд — продолжение X-IA Golden (J143)", kind="landmark", footprint=AIR, yaw=95.0,
-    years=Y4(2041), basis="по источнику", from_twin=[-5900, 8300])
-MOVED.append(("airport_alatau", "(−16488, 561) реестр; модель Unity (−5900, 8300)", "(−16000, 1500), ВПП 095°",
-              "решение владельца 31.10 (city.json airport_new); модель Unity airport пока стоит на старом месте и с двумя ВПП"))
+    "решение владельца 02.11.2026 (обмен с промзоной плато): центр участка (−10350, 4000), в 5,6 км ближе к городу, чем "
+    "место 31.10 (−16000, 1500), на западе города (генплан: «вдоль западной границы», 15 млн пасс./год, после 2040). Концепция "
+    "двойника: две ВПП 3 400 и 2 650 м курсом 100°/280°, между ними терминал в форме самолёта носом к городу (модель airport, "
+    "3,8 × 1,6 км); ≥ 300 м от ЛЭП 500 кВ, севернее Аэропортовой магистрали; въезд — от Дороги плато, ЛРТ и вокзал «Алатау» "
+    "напротив въезда", kind="landmark", footprint=AIR, yaw=N.AIR_YAW, years=Y4(2041), basis="по источнику",
+    from_twin=[-5900, 8300])
+MOVED.append(("airport_alatau", "(−16488, 561) реестр; решение 31.10 (−16000, 1500), ВПП 095°", "(−10350, 4000), ВПП 100°/280°",
+              "решение владельца 02.11.2026: ближе к городу, обмен с промзоной плато; модель airport — две ВПП и терминал-самолёт"))
 # rail station «Алатау»: at the end of the spur, next to the terminal and the LRT terminus
 ST_RAIL = Point(N.SPUR[-1])
 _u = np.array(N.SPUR[-1]) - np.array(N.SPUR[-4])
@@ -845,12 +943,13 @@ RS_FP = Polygon([tuple(_c - _u * 300 - _v * 60), tuple(_c + _u * 300 - _v * 60),
                  tuple(_c - _u * 300 + _v * 60)]).difference(_red_all).difference(AIR.buffer(2.0)).buffer(0)
 RS_FP = max(getattr(RS_FP, "geoms", [RS_FP]), key=lambda g: g.area).simplify(0.5)
 obj("airport_rail_station", "move", reg_pt("airport_rail_station"), P1(RS_FP.centroid.coords[0]), "district_only",
-    MODEL + ": вокзал у терминала, в одном узле с конечной ЛРТ «Аэропорт «Алатау»»: конец ветки 10–11 км от обходной ж/д у ПС "
-            "«Алма» (полоса util_rail_spur, южнее магистрали, без пересечения с ней); поезда на Алматы-2 и Конаев по обходу",
+    MODEL + ": вокзал напротив въезда в аэропорт, в одном узле с конечной ЛРТ «Аэропорт «Алатау»»: конец ветки ≈ 4 км от "
+            "обходной ж/д у ПС «Алма» (полоса util_rail_spur, южнее магистрали, без пересечения с ней); поезда на Алматы-2 и "
+            "Конаев по обходу",
     kind="transit", footprint=RS_FP, yaw=round(math.degrees(math.atan2(_u[0], _u[1])), 1), years=Y4(2041),
     line=[P1(p) for p in N.SPUR[::max(1, len(N.SPUR) // 30)]] + [P1(N.SPUR[-1])])
 MOVED.append(("airport_rail_station", "(−16488, 561) реестр (точка аэропорта)", f"({RS_FP.centroid.x:.0f}, {RS_FP.centroid.y:.0f})",
-              "у нового терминала, на конце ветки; точка реестра — точка аэропорта по правилу"))
+              "напротив въезда в аэропорт, на конце ветки; точка реестра — точка аэропорта по правилу"))
 obj("rail_sorting_station", "by_rule", None, P1(YARD.representative_point().coords[0]), "none",
     MODEL + ": «между аэропортом и Конаевым» (генплан): парк путей вдоль обходной ж/д с северной стороны между ПС «Алма» и А-3 "
             f"({YARD.area / 1e4:.0f} га), вне жилья; Южная промышленная улица севернее, проезд s_rail_x над парком",
@@ -954,7 +1053,7 @@ STREET_AT = {"J062": "ЛРТ lrt_growing_w_airport (конец, эстакада
              "J148": "s_trunk_1 (Аэропортовая магистраль, путепровод над А-3; съезды км 44 — уровень 3 с Growing-восток)",
              "J147": "s_n48 (путепровод над А-3; съезды км 48 — уровень 3 с Growing-восток)",
              "J146": "s_n50 (путепровод над А-3; съезды км 50,5 — уровень 3 с Growing-восток)",
-             "J143": "s_air_south (продолжение X-IA Golden до южных ворот аэропорта)",
+             "J143": "s_west_south (продолжение X-IA Golden до южного въезда западной промзоны)",
              "J077": "s_south через существующий тоннель OSM bdc5c57b под А-3 (западный выход (−592, 222))",
              "J031": "обходная ж/д (OSM 81f6836e), полоса util_rail_bypass", "J063": "обходная ж/д (OSM 81f6836e), полоса util_rail_bypass"}
 JOINTS = []

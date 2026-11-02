@@ -80,6 +80,7 @@ COL = {"res_mid": 0, "res_high": 1, "podium": 2, "public": 3, "tower": 4, "educa
 PLINTH_M = 1.5        # a new building without a `plinth` whose ground falls more than this under its footprint is logged
 PLINTH_FROM_TOL_M = 0.2    # the lowest ground merge finds on the outline this far below plinth.from_y is logged (gen_buildings samples inside)
 NEW_COLS = ["model", "plinth_m", "dock"]   # buildings.csv columns after the twin's sixteen (module docstring)
+WHOLE_CITY = {"gate", "golden", "green", "growing_w", "growing_e"}   # all merged: nothing of the base LRT trunk is kept outside them
 CANOPY_MODELS = {"bus_canopy"}             # models drawn as a roof on posts
 CANOPY_SLAB_M = 0.5        # … the roof slab's thickness
 CANOPY_POST_M = 0.4        # … square posts this wide
@@ -1197,6 +1198,13 @@ def merge_lrt(base_routes, base_lrt, Ds, R, norms=None):
         L0 = LineString(pts)
         inside = L0.intersection(area)
         km_delta[phase(inside.centroid.y)] -= inside.length / 1000
+        if WHOLE_CITY <= {D["id"] for D in Ds}:
+            # the whole city merged: the districts' lines replace the base trunk, and what the areas leave of it are stubs in the
+            # strips between districts (a 180 m viaduct at (1300, −1679) between Golden and Growing-E stood alone over the steppe)
+            for c in pieces:
+                km_delta[phase(float(np.mean([p[1] for p in c])))] -= U.polyline_len(c) / 1000
+            R.log(f"lrt: route {r['name']}: {len(pieces)} pieces outside the areas dropped (the whole city is merged)")
+            continue
         for k, c in enumerate(pieces):
             q = dict(r, pts=[round(float(v), 1) for p in c for v in p])
             if len(pieces) > 1:
