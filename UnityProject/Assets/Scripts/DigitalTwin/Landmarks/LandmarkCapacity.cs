@@ -27,7 +27,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
         {
             var L = new List<Cap>
             {
-                new Cap { Id = "pepsico", Product = "чипсы и снеки", Design = 63f, Unit = "тыс. т в год", Plain = "переработка 210 тыс. т казахстанского картофеля в год", Jobs = 900, RevenueUsdM = 320f, Export = 0.40f, Stage2Gain = 0.35f, Official = true, Industrial = true, Note = "сырьё 210 тыс. т — официально; выпуск — оценка по выходу 30 %" },
+                new Cap { Id = "pepsico", Product = "чипсы и снеки", Design = 21f, Unit = "тыс. т в год", Plain = "переработка 210 тыс. т казахстанского картофеля в год", Jobs = 900, RevenueUsdM = 110f, Export = 0.40f, Official = true, Industrial = true, Note = "выпуск 16 → 21 тыс. т в год и сырьё — официально (реестр объектов); выручка — оценка двойника" },
                 new Cap { Id = "mars", Product = "корма для животных", Design = 100f, Unit = "тыс. т в год", Plain = "корма для рынка Казахстана и Центральной Азии", Jobs = 400, RevenueUsdM = 260f, Export = 0.50f, Stage2Gain = 0.40f, Industrial = true, Note = "оценка по аналогичным заводам Mars" },
                 new Cap { Id = "sunny_paper", Product = "бумага и картон", Design = 120f, Unit = "тыс. т в год", Plain = "замещает импорт тарного картона", Jobs = 450, RevenueUsdM = 110f, Export = 0.25f, Stage2Gain = 0.60f, Industrial = true, Note = "параметры не раскрыты — оценка двойника" },
                 new Cap { Id = "danaflex", Product = "гибкая упаковка", Design = 30f, Unit = "тыс. т в год", Plain = "упаковка для пищевых заводов города и региона", Jobs = 300, RevenueUsdM = 120f, Export = 0.30f, Industrial = true, Note = "оценка по заводу DanaFlex-Alabuga" },
@@ -36,8 +36,8 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 new Cap { Id = "griffin", Product = "складская логистика", Design = 120f, Unit = "тыс. м² складов", Plain = "≈ 600 тыс. т грузов в год", Jobs = 600, RevenueUsdM = 18f, Export = 0f, Stage2Gain = 0.50f, Official = true, Industrial = true, Note = "площадь складов — официально (ЕАБР)" },
                 new Cap { Id = "gtes", Product = "электроэнергия", Design = 500f, Unit = "МВт", Plain = "≈ 3,7 млрд кВт·ч в год — четверть спроса города в 2030", Jobs = 150, RevenueUsdM = 210f, Export = 0f, Official = true, Industrial = true, Note = "2 × 250 МВт — официально; выработка при КИУМ 85 %" },
                 new Cap { Id = "ps_arna", Product = "электроснабжение", Design = 500f, Unit = "МВА", Plain = "питание первой очереди города", Jobs = 40, Note = "оценка двойника" },
-                new Cap { Id = "airport", Product = "пассажиры и грузы", Design = 20f, Unit = "млн пассажиров в год", Plain = "и ≈ 250 тыс. т грузов в год", Jobs = 6000, RevenueUsdM = 380f, Export = 0.35f, Industrial = true, Note = "концепция двойника" },
-                new Cap { Id = "iconic", Product = "офисы, жильё, отель", Design = 276.8f, Unit = "тыс. м²", Plain = "≈ 8 000 рабочих мест в офисах и отеле", Jobs = 8000, Official = true, Note = "площадь — официально (SOM)" },
+                new Cap { Id = "airport", Product = "пассажиры и грузы", Design = 15f, Unit = "млн пассажиров в год", Plain = "и ≈ 190 тыс. т грузов в год", Jobs = 4500, RevenueUsdM = 285f, Export = 0.35f, Official = true, Industrial = true, Note = "15 млн пассажиров — генплан; грузы, места и выручка — оценка двойника" },
+                new Cap { Id = "iconic", Product = "офисы, жильё, отель", Design = 276.8f, Unit = "тыс. м²", Plain = "≈ 8 000 рабочих мест в офисах и отеле", Jobs = 8000, Official = true, Note = "площадь — официально (SOM); шесть офисных корпусов (≈ 58 100 м²) входят в неё" },
                 new Cap { Id = "lotte_l7", Product = "гостиница", Design = 180f, Unit = "номеров", Plain = "≈ 50 тыс. гостей в год", Jobs = 220, RevenueUsdM = 22f, Official = true },
                 new Cap { Id = "kaist", Product = "образование и наука", Design = 40f, Unit = "тыс. студентов", Plain = "инженеры и IT для компаний города", Jobs = 3500, Official = true, Note = "студенты — официально" },
                 new Cap { Id = "medcluster", Product = "медицина", Design = 1200f, Unit = "коек", Plain = "≈ 600 тыс. приёмов в год", Jobs = 2800, Note = "оценка по нормативам на 0,7 млн жителей Golden" },
@@ -54,7 +54,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
         public static float Load(Landmark l, float y)
         {
             if (l == null) return 0f;
-            float p = LandmarkSystem.Progress(l, y);
+            float p = LandmarkSystem.InYear(l, y);
             if (p < 0.85f) return 0f;
             if (p < 0.999f) return 0.15f;              // commissioning
             float yrs = y - l.EndYear;

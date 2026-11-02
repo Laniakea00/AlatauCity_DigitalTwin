@@ -22,9 +22,22 @@ namespace AlatauCity.DigitalTwin.Data
 
         // ---------------- roads
         public enum RoadClass : byte { Highway, Ring, Main, Street }
-        public struct RoadEdge { public int A, B; public RoadClass Cls; public float Len; public Vector2[] Geom; public int[] Year; }
+        /// <summary>An edge of roads.json. Optional fields of the redrawn map (CONTRACT §6), absent in the old data: T norms class
+        /// (null = old data), K 0 two-way / 1 one carriageway of a divided road / 2 ramp, H surface height per vertex of Geom (null = on the
+        /// terrain), St flat [from_m, to_m, code, …] (0 ground 1 embankment 2 cut 3 bridge 4 overpass 5 tunnel), P index into RoadProfiles
+        /// (−1 none), Ic interchange index (−1 none). PsP / PsY: a reconstruction (roads.json `ps`, network `stages`): from year PsY[k][s]
+        /// in scenario s the edge has profile PsP[k] (a ramp widened to more lanes; the geometry stays); null when it keeps P.</summary>
+        public struct RoadEdge { public int A, B; public RoadClass Cls; public float Len; public Vector2[] Geom; public int[] Year; public string T; public int K, P, Ic; public float[] H, St; public int[] PsP; public int[][] PsY; }
+        /// <summary>Street cross-section of roads.json `profiles` (metres; lanes forward / back; side arrays are [left, right] of the edge's
+        /// point order).</summary>
+        public class RoadProfile
+        {
+            public string Id, T; public int LanesF, LanesB; public float LaneW, MedianW, RedLineW;
+            public float[] Sidewalk = new float[2], Verge = new float[2], Bike = new float[2], Parking = new float[2];
+        }
         public static Vector2[] RoadNodes = new Vector2[0];
         public static RoadEdge[] Roads = new RoadEdge[0];
+        public static RoadProfile[] RoadProfiles = new RoadProfile[0];
 
         // ---------------- facilities and networks
         public class Facility
@@ -115,8 +128,28 @@ namespace AlatauCity.DigitalTwin.Data
                 var e = edges[i]; var g = Floats(G(e, "g")); var geom = new Vector2[g.Length / 2];
                 for (int k = 0; k < geom.Length; k++) geom[k] = new Vector2(g[2 * k], g[2 * k + 1]);
                 var c = S(G(e, "c"));
+                object ep = G(e, "p"), eic = G(e, "ic"), eh = G(e, "h"), est = G(e, "st");
                 Roads[i] = new RoadEdge { A = I(G(e, "a")), B = I(G(e, "b")), Len = F(G(e, "len")), Geom = geom, Year = Ints(G(e, "y")),
-                    Cls = c == "highway" ? RoadClass.Highway : c == "ring" ? RoadClass.Ring : c == "main" ? RoadClass.Main : RoadClass.Street };
+                    Cls = c == "highway" ? RoadClass.Highway : c == "ring" ? RoadClass.Ring : c == "main" ? RoadClass.Main : RoadClass.Street,
+                    T = G(e, "t") as string, K = I(G(e, "k")), P = ep == null ? -1 : I(ep), Ic = eic == null ? -1 : I(eic),
+                    H = eh == null ? null : Floats(eh), St = est == null ? null : Floats(est) };
+                if (Roads[i].H != null && Roads[i].H.Length != geom.Length) Roads[i].H = null;          // malformed: back to the terrain
+                var eps = A(G(e, "ps"));
+                if (eps != null && eps.Count > 0)
+                {
+                    var pp = new List<int>(); var py = new List<int[]>();
+                    foreach (var o in eps) { var yy = Ints(G(o, "y")); object op = G(o, "p"); if (op == null || yy.Length < 4) continue; pp.Add(I(op)); py.Add(yy); }
+                    if (pp.Count > 0) { Roads[i].PsP = pp.ToArray(); Roads[i].PsY = py.ToArray(); }
+                }
+            }
+            var prs = A(G(r, "profiles")); RoadProfiles = new RoadProfile[prs != null ? prs.Count : 0];
+            for (int i = 0; i < RoadProfiles.Length; i++)
+            {
+                var o = prs[i]; var ln = Floats(G(o, "lanes"));
+                float[] Side(string k) { var v = Floats(G(o, k)); return v.Length >= 2 ? new[] { v[0], v[1] } : new float[2]; }
+                RoadProfiles[i] = new RoadProfile { Id = S(G(o, "id")), T = S(G(o, "t")), LanesF = ln.Length > 0 ? Mathf.RoundToInt(ln[0]) : 1,
+                    LanesB = ln.Length > 1 ? Mathf.RoundToInt(ln[1]) : 0, LaneW = F(G(o, "lane_w")), MedianW = F(G(o, "median_w")), RedLineW = F(G(o, "red_line_w")),
+                    Sidewalk = Side("sidewalk_w"), Verge = Side("verge_w"), Bike = Side("bike_w"), Parking = Side("parking_w") };
             }
             // facilities + networks
             var n = Read(dir, "networks");

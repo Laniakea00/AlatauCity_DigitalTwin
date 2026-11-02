@@ -68,7 +68,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             try
             {
                 IconicShape.P = prof; RegisterSources();
-                L = l; H = l.Height; Report = l.Begin + 0.5f * (l.Finish - l.Begin); T0 = Mathf.Floor(l.Begin); T1 = Mathf.Max(Mathf.Ceil(l.Finish + 0.05f), l.EndYear + 1f);
+                L = l; H = l.Height; Report = l.Begin + 0.5f * (l.Finish - l.Begin); T0 = Mathf.Floor(l.Begin); T1 = Mathf.Max(Mathf.Ceil(l.Finish + 0.25f), l.EndYear + 1f);
                 MakeModel(); sumCache[id] = Collect();
                 return true;
             }

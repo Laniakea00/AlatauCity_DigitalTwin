@@ -42,6 +42,54 @@ namespace AlatauCity.DigitalTwin
         /// <summary>Facade family of a building kind (see AlatauFilm.cginc).</summary>
         /// <summary>Radius around Iconic Complex drawn like its presentation model (white buildings, planted roofs), metres.</summary>
         public const float MaketR = 750f;
+        /// <summary>The wall variant AlatauFilm.cginc draws for a facade seed byte (r1: a golden-ratio sequence, the same numbers as the shader).</summary>
+        public static float FacadeVariant(int seed) => Mathf.Repeat(seed * 0.618034f + 0.1f, 1f);
+
+        /// <summary>The facade seed of every building (byte, per bid): it starts from the building's lot (Parcel; the n-th building of a lot
+        /// takes the lot's start + n, so the houses of one lot step through the variants) or, without a lot, from its bid, and moves on along
+        /// the sequence while a building within 40 m already has a variant close to it: the seed whose variant lies farthest from its
+        /// neighbours' is taken (the first at least 0.3 away). Two buildings side by side never share a facade.</summary>
+        static byte[] FacadeSeeds(BuildingInfo[] bs, int n)
+        {
+            const float R = 40f;
+            var seeds = new byte[n]; var grid = new System.Collections.Generic.Dictionary<long, System.Collections.Generic.List<BuildingInfo>>();
+            var perLot = new System.Collections.Generic.Dictionary<string, int>(); var near = new System.Collections.Generic.List<float>();
+            foreach (var b in bs)
+            {
+                if (b == null || b.Bid < 0 || b.Bid >= n) continue;
+                uint h0;
+                if (!string.IsNullOrEmpty(b.Parcel))
+                {
+                    string key = b.District + "|" + b.Parcel; perLot.TryGetValue(key, out int k); perLot[key] = k + 1;
+                    uint f = 2166136261u; foreach (char ch in key) f = (f ^ ch) * 16777619u;          // FNV-1a: the same on every platform
+                    h0 = (f >> 24) + (uint)k;
+                }
+                else h0 = (uint)(b.Bid * 2654435761u) >> 24;
+                int cx = Mathf.FloorToInt(b.X / R), cz = Mathf.FloorToInt(b.Z / R);
+                near.Clear();
+                for (int dz = -1; dz <= 1; dz++)
+                    for (int dx = -1; dx <= 1; dx++)
+                        if (grid.TryGetValue(((long)(cx + dx) << 32) ^ (uint)(cz + dz), out var l))
+                            foreach (var o in l) if ((o.X - b.X) * (o.X - b.X) + (o.Z - b.Z) * (o.Z - b.Z) < R * R) near.Add(FacadeVariant(seeds[o.Bid]));
+                int best = (int)(h0 & 255);
+                if (near.Count > 0)
+                {
+                    float bestD = -1f;
+                    for (int t = 0; t < 256; t++)
+                    {
+                        int s = (int)((h0 + (uint)t) & 255); float v = FacadeVariant(s), d = 1f;
+                        foreach (float u in near) { float e = Mathf.Abs(v - u); d = Mathf.Min(d, Mathf.Min(e, 1f - e)); }
+                        if (d > bestD + 1e-4f) { bestD = d; best = s; if (d >= 0.3f) break; }
+                    }
+                }
+                seeds[b.Bid] = (byte)best;
+                long gk = ((long)cx << 32) ^ (uint)cz;
+                if (!grid.TryGetValue(gk, out var cell)) grid[gk] = cell = new System.Collections.Generic.List<BuildingInfo>();
+                cell.Add(b);
+            }
+            return seeds;
+        }
+
         public static int StyleOf(string kind)
         {
             switch (kind)
@@ -107,15 +155,16 @@ namespace AlatauCity.DigitalTwin
             var db = CityDatabase.Instance;
             if (db != null)
             {
-                var px = new Color32[256 * 256];
+                var px = new Color32[BidTable.N];
+                var seeds = FacadeSeeds(db.Buildings, px.Length);
                 // around Iconic the district looks as on the presentation model shown with it: white buildings, planted roofs (style 10)
-                Landmarks.Landmark icl = null; foreach (var q in Landmarks.LandmarkCatalog.All()) if (q.Id == "iconic") icl = q; var ic = icl != null ? new Vector2(icl.X, icl.Z) : new Vector2(-3170f, -19080f);
+                var ic = Landmarks.IconicFrame.Centre;          // the Iconic entry of LandmarkData (its place after the stage-7 move)
                 foreach (var b in db.Buildings) if (b != null && b.Bid >= 0 && b.Bid < px.Length)
                 {
                     int st = (new Vector2(b.X, b.Z) - ic).sqrMagnitude < MaketR * MaketR && b.Source != "existing_osm" ? 10 : StyleOf(b.Kind);
-                    px[b.Bid] = new Color32((byte)st, (byte)((uint)(b.Bid * 2654435761u) >> 24), (byte)Mathf.Clamp(b.Floors, 1, 255), 255);
+                    px[b.Bid] = new Color32((byte)st, seeds[b.Bid], (byte)Mathf.Clamp(b.Floors, 1, 255), 255);
                 }
-                var tex = new Texture2D(256, 256, TextureFormat.RGBA32, false, true) { name = "Alatau building style", filterMode = FilterMode.Point, wrapMode = TextureWrapMode.Clamp };
+                var tex = BidTable.New(TextureFormat.RGBA32, "Alatau building style");
                 tex.SetPixels32(px); tex.Apply(false, false); Shader.SetGlobalTexture(StyleId, tex);
             }
         }

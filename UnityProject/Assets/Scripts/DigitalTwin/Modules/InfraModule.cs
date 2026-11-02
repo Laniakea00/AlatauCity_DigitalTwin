@@ -30,7 +30,7 @@ namespace AlatauCity.DigitalTwin.Modules
 
         Label eyebrow, summary, summarySub; readonly Label[] kv = new Label[4], kl = new Label[4]; readonly VisualElement[] kb = new VisualElement[4];
         VisualElement rows, rowsDetails, card, next, scheme; SchemeView schemeView;
-        VisualElement netBox, netChips; static int netDistrict = 2, lastHeader = -1;
+        VisualElement netBox, netChips; static int netDistrict = -1, lastHeader = -1;     // −1: no chip pressed yet (the district in view)
 
         public InfraModule() { InvestRegistry.Init(); }
 
@@ -189,28 +189,33 @@ namespace AlatauCity.DigitalTwin.Modules
             int inService = 0, total = 0, over = 0, warn = 0; string worstName = null; float worstUtil = 0;
             foreach (var f in TwinData.Facilities)
             {
-                if (f.Res == "telecom") continue; total++;
+                total++;                                    // every facility of the data, the telecom nodes too (the log counts them all)
                 var st = Status(f, s, y, out float u);
                 if (st != "planned") inService++;
                 if (st == "bad") { over++; if (u > worstUtil) { worstUtil = u; worstName = f.Name; } }
                 if (st == "warn") warn++;
             }
             float km = 0; foreach (var k in LineLayers.NetKeys) km += LineLayers.KmBuilt(k, y, s);
-            // deficits by resource (unserved load)
-            var deficits = new List<string>(); var deficitNames = new List<string>();
-            for (int i = 0; i < Res.Length; i++)
+            // deficits: the spells of NetDeficits (where, which years, how much), the same numbers as the analytics and the journal
+            var spells = NetDeficits.Spells(s, -1);
+            var deficits = new List<string>(); var deficitNames = new List<string>(); int nextS = -1, lastS = -1;
+            for (int i = 0; i < spells.Count; i++)
             {
-                var b = TwinData.BalanceOf(s, Res[i].key, -1); if (b == null) continue;
-                float d = b.Deficit[TwinData.YI(y)]; if (d > 0.5f) { deficits.Add(string.Format("−{0}\u00A0{1}", Fmt(Res[i].key, d), Res[i].unit)); deficitNames.Add(Lower1(Loc.T(Res[i].name))); }
+                var sp = spells[i];
+                if (NetDeficits.Active(sp, y))
+                {
+                    deficits.Add(string.Format("{0}: −{1}", NetDeficits.Where(sp), NetDeficits.Amount(sp, NetDeficits.At(s, sp, y))));
+                    string g = NetDeficits.Res[sp.Res].gen; if (!deficitNames.Contains(g)) deficitNames.Add(g);
+                }
+                else if (sp.From > y) { if (nextS < 0) nextS = i; }
+                else lastS = i;
             }
             summary.EnableInClassList("bad", deficits.Count > 0); summary.EnableInClassList("ok", deficits.Count == 0);
             if (deficits.Count == 0)
             {
                 summary.text = "Мощности хватает по всем сетям";
-                int ny = -1; string nr = null;
-                for (int yy = y + 1; yy <= TwinState.MaxYear && ny < 0; yy++)
-                    for (int i = 0; i < Res.Length; i++) { var bb = TwinData.BalanceOf(s, Res[i].key, -1); if (bb != null && bb.Deficit[TwinData.YI(yy)] > 0.5f) { ny = yy; nr = Lower1(Loc.T(Res[i].name)); break; } }
-                summarySub.text = ny < 0 ? "Дефицитов до 2050 года нет" : string.Format("Следующий дефицит: {0}, {1}", nr, ny);
+                summarySub.text = nextS >= 0 ? string.Format("Впереди: {0}", NetDeficits.Story(spells[nextS]))
+                                : lastS >= 0 ? string.Format("Раньше: {0}", NetDeficits.Story(spells[lastS])) : "Дефицитов до 2050 года нет";
             }
             else
             {
@@ -311,10 +316,18 @@ namespace AlatauCity.DigitalTwin.Modules
         {
             if (netBox == null) return;
             if (TwinState.District != lastHeader) { lastHeader = TwinState.District; if (lastHeader >= 0) netDistrict = lastHeader; }   // the header district wins once, chips after it
-            int d = netDistrict;
+            int d = netDistrict >= 0 ? netDistrict : DistrictInView();
             int i = 0; foreach (var c in netChips.Children()) { c.EnableInClassList("active", i == d); i++; }
             netBox.Clear();
             netBox.Add(NetForPlot.Build(d));
+        }
+
+        /// <summary>Until a chip is pressed: the district the map looks at (its camera target), else Gate — never a fixed other district.</summary>
+        static int DistrictInView()
+        {
+            var cam = Camera.main; var mc = cam != null ? cam.GetComponent<MapCamera>() : null;
+            int d = mc != null ? CityStats.DistrictAt(mc.target.x, mc.target.z) : -1;
+            return d >= 0 && d < CityStats.Districts ? d : 0;
         }
 
         void BuildCard(TwinData.Facility f, int s, int y)
@@ -339,8 +352,8 @@ namespace AlatauCity.DigitalTwin.Modules
             close.style.alignSelf = Align.FlexEnd; close.style.marginTop = 4; b.Add(close);
         }
 
-        static string Lower1(string t) => string.IsNullOrEmpty(t) ? t : char.ToLowerInvariant(t[0]) + t.Substring(1);
-        static string Fmt(string res, float v) => res == "water" || res == "sewer" || res == "gas" ? Loc.N1(v / 1000f) : Loc.N0(v);
+        /// <summary>One number format for every panel (InvestRegistry.Fmt: thousands for gas, water and sewer; one decimal below 10).</summary>
+        static string Fmt(string res, float v) => InvestRegistry.Fmt(res, v);
 
         void Set(int i, string v, string l, string cls)
         {

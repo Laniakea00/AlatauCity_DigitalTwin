@@ -101,7 +101,7 @@ namespace AlatauCity.DigitalTwin.Modules
         {
             var box = new VisualElement();
             if (!TwinData.Ready || TwinData.LrtStations.Length == 0 || !CityStats.Ready) { var l = new Label("Данные ЛРТ загружаются…"); l.AddToClassList("note"); box.Add(l); return box; }
-            var c = CityStats.DistrictBounds[Mathf.Clamp(d, 0, CityStats.Districts - 1)].center; var p0 = new Vector2(c.x, c.z);
+            var p0 = CityStats.DistrictCentre(d);
             int best = -1; float bd = float.MaxValue;
             for (int i = 0; i < TwinData.LrtStations.Length; i++)
             {

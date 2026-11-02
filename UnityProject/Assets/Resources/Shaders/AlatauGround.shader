@@ -35,22 +35,127 @@ Shader "AlatauCity/Ground"
         struct Input { float2 uv_MainTex; float3 worldPos; };
         float WaterOf(float3 c) { return saturate((c.b - c.r - 0.10) * 8.0) * saturate((c.b - c.g - 0.03) * 25.0); }
         float FBM(float2 p) { float a = 0.5, r = 0.0; for (int i = 0; i < 4; i++) { r += a * ANoise(p); p = p * 2.03 + 17.1; a *= 0.5; } return r / 0.9375; }
+        // ---- the ground of the redrawn map (Layers/GroundTypes.cs, Resources/Map/map_ground.bytes): three render textures of the data's
+        //      pieces, r = type (low 5 bits; 0 = no data: today's ground) + the lot's hash (top 3 bits), g = direction of the lot (0..1 =
+        //      0..90°), b = distance to the nearest piece outline (0..1 over _AlatauGtW metres; fine and near only), a = the piece's year
+        //      byte (0 the map's own year from map_dev, 1 always, 26..254 = 2000 + v, 255 never; a piece whose earthworks have not begun
+        //      is not in the textures, so the ground under it shows). _AlatauGtFine covers the ground just in front of the camera,
+        //      _AlatauGtNear a window round the camera, _AlatauGtFar all the data; their rectangles are (x0, z0, 1 / w, 1 / h),
+        //      _AlatauGtFineT / _AlatauGtNearT their texels (1 / w, 1 / h, w, h), _AlatauGtW = (W of fine, W of near) in metres.
+        //      _AlatauGtHash: 256 × 256 bytes, the yard cells' table (the same bytes as GroundTypes.CellHash on the CPU).
+        sampler2D _AlatauGtNear, _AlatauGtFar, _AlatauGtFine, _AlatauGtHash; float4 _AlatauGtNearR, _AlatauGtFarR, _AlatauGtFineR, _AlatauGtNearT, _AlatauGtFineT, _AlatauGtW; float _AlatauGtOn;
+        // a texture of pieces read exactly: of the four texels round the point, the piece with the largest signed distance (+ where a
+        // texel is that piece, − where it is another, each texel's distance to the nearest outline weighted bilinearly) wins, so the edge
+        // between two pieces runs where the data's outline runs, straight between the texel centres, instead of in steps of a texel.
+        // e = metres from the point to the nearest outline (bilinear; the lines of fields, tracks and playgrounds)
+        float4 GtExact(sampler2D t, float2 u, float4 tx, float W, out float e)
+        {
+            float2 st = u * tx.zw - 0.5, i0 = floor(st), fr = st - i0;
+            float2 c0 = (i0 + 0.5) * tx.xy;
+            float4 a = tex2Dlod(t, float4(c0, 0, 0)), b = tex2Dlod(t, float4(c0 + float2(tx.x, 0.0), 0, 0));
+            float4 c = tex2Dlod(t, float4(c0 + float2(0.0, tx.y), 0, 0)), d = tex2Dlod(t, float4(c0 + tx.xy, 0, 0));
+            float wa = (1.0 - fr.x) * (1.0 - fr.y) * a.b, wb = fr.x * (1.0 - fr.y) * b.b, wc = (1.0 - fr.x) * fr.y * c.b, wd = fr.x * fr.y * d.b;
+            // the same piece: type and hash, angle and year bytes all equal; ±1 per pair
+            float ab = step(dot(abs(a.rga - b.rga), float3(1, 1, 1)), 0.001) * 2.0 - 1.0, ac = step(dot(abs(a.rga - c.rga), float3(1, 1, 1)), 0.001) * 2.0 - 1.0;
+            float ad = step(dot(abs(a.rga - d.rga), float3(1, 1, 1)), 0.001) * 2.0 - 1.0, bc = step(dot(abs(b.rga - c.rga), float3(1, 1, 1)), 0.001) * 2.0 - 1.0;
+            float bd = step(dot(abs(b.rga - d.rga), float3(1, 1, 1)), 0.001) * 2.0 - 1.0, cd = step(dot(abs(c.rga - d.rga), float3(1, 1, 1)), 0.001) * 2.0 - 1.0;
+            float sa = wa + wb * ab + wc * ac + wd * ad, sb = wb + wa * ab + wc * bc + wd * bd;
+            float sc = wc + wa * ac + wb * bc + wd * cd, sd = wd + wa * ad + wb * bd + wc * cd;
+            float4 r = a; float m = sa;
+            if (sb > m) { r = b; m = sb; }
+            if (sc > m) { r = c; m = sc; }
+            if (sd > m) { r = d; }
+            e = (wa + wb + wc + wd) * W;
+            return r;
+        }
+        float4 GroundTypeAt(float2 xz, out float e)
+        {
+            float2 u0 = (xz - _AlatauGtFineR.xy) * _AlatauGtFineR.zw, un = (xz - _AlatauGtNearR.xy) * _AlatauGtNearR.zw, uf = (xz - _AlatauGtFarR.xy) * _AlatauGtFarR.zw;
+            float in0 = step(0.002, min(u0.x, u0.y)) * step(max(u0.x, u0.y), 0.998);
+            float inN = step(0.001, min(un.x, un.y)) * step(max(un.x, un.y), 0.999);
+            float inF = step(0.0, min(uf.x, uf.y)) * step(max(uf.x, uf.y), 1.0);
+            float4 r = float4(0, 0, 0, 0); e = 1000.0;
+            if (in0 > 0.5) r = GtExact(_AlatauGtFine, u0, _AlatauGtFineT, _AlatauGtW.x, e);
+            else if (inN > 0.5) r = GtExact(_AlatauGtNear, un, _AlatauGtNearT, _AlatauGtW.y, e);
+            else r = tex2Dlod(_AlatauGtFar, float4(saturate(uf), 0, 0)) * inF;
+            return r;
+        }
+        // the byte of a yard cell (0..255) from the table, lh = the lot's hash (0..7): whole numbers all the way, so the CPU
+        // (GroundTypes.CellKindAt) gets the same
+        float CellByte(float2 id, float lh)
+        {
+            float2 k = fmod(id + 8192.0 + float2(lh * 7.0, lh * 13.0), 256.0);
+            return floor(tex2Dlod(_AlatauGtHash, float4((k + 0.5) / 256.0, 0, 0)).r * 255.0 + 0.5);
+        }
+        // the calm tone a lot's yard merges into from far away, by its type (see Yard)
+        fixed3 YardAvg(float gt, fixed3 grass)
+        {
+            fixed3 pave = fixed3(0.63, 0.62, 0.59), conc = fixed3(0.57, 0.56, 0.53), asph = fixed3(0.38, 0.38, 0.38);
+            return gt < 2.5 ? grass
+                 : gt < 3.5 ? pave
+                 : gt < 4.5 ? lerp(asph, fixed3(0.5, 0.5, 0.5), 0.35)
+                 : gt < 5.5 ? lerp(grass, fixed3(0.42, 0.37, 0.29), 0.30)
+                 : gt < 6.5 ? grass
+                 : gt < 7.5 ? conc
+                 : gt < 8.5 ? grass
+                 : gt < 9.5 ? asph
+                 : gt < 10.5 ? grass
+                 : gt < 11.5 ? conc
+                 : gt < 12.5 ? fixed3(0.33, 0.46, 0.30)
+                 : gt < 13.5 ? fixed3(0.55, 0.40, 0.33)
+                 : gt < 14.5 ? pave
+                 : gt < 16.5 ? grass
+                 : gt < 17.5 ? fixed3(0.70, 0.66, 0.58)
+                 : fixed3(0.62, 0.34, 0.27);
+        }
         // A yard inside a city block, as seen from the air: cells of 36 × 30 m along the block, each a lawn, a car park with cars, a paved
         // court or a playground (by land use), paved paths along some cell edges. Details that would be smaller than a pixel fade to
         // their average colour, so nothing shimmers from the whole-city view.
-        fixed3 Yard(float2 p, float ang, float resid, float civic, float indus, float px, float3 pg, float3 pp, float3 pa, fixed3 grass, out float car)
+        // gt > 0: the piece's own type from the data (map_ground.bytes) decides the kind (GroundTypes.Kind; lh = the lot's hash 0..7, no cell
+        // of the data picks its kind any more: an industrial yard is plain concrete without cell seams): the yards are lawn, and their aprons,
+        // paths, playgrounds, sports grounds and tracks are pieces of their own, drawn to their exact edges (ge = metres to the nearest
+        // outline: the white line of a field, the kerb of a playground, the lanes of a track); gardens are beds in continuous rows along the
+        // block; no loose paths and no planted squares. gt = 0 gives exactly the yards of the old plan.
+        fixed3 Yard(float2 p, float ang, float resid, float civic, float indus, float px, float3 pg, float3 pp, float3 pa, fixed3 grass, float gt, float lh, float ge, out float car)
         {
             float ca = cos(ang), sa = sin(ang); float2 q = float2(p.x * ca + p.y * sa, -p.x * sa + p.y * ca);
             float2 cs = float2(36.0, 30.0), id = floor(q / cs), f = q - id * cs;
-            float h = AHash2(id + 0.37), h2 = AHash2(id + 7.9), h3 = AHash2(id + 21.3);
+            float2 idh = id + lh * 37.0;                                         // each lot draws its own cells (lh = 0 without data: as before)
+            float h = AHash2(idh + 0.37), h2 = AHash2(idh + 7.9), h3 = AHash2(idh + 21.3);
             float aa = max(px, 0.05);
-            // type: 0 lawn, 1 car park, 2 paved court, 3 playground, 4 concrete yard (industry)
+            // type: 0 lawn, 1 car park, 2 paved court, 3 playground, 4 concrete yard (industry), 5 sports ground, 6 garden beds,
+            //       7 loading yard with truck bays, 8 asphalt, 9 park alley, 10 running track
             float t;
-            if (indus > 0.5) t = h < 0.50 ? 4.0 : h < 0.78 ? 1.0 : h < 0.90 ? 2.0 : 0.0;
-            else if (resid > 0.5) t = h < 0.52 ? 0.0 : h < 0.74 ? 1.0 : h < 0.90 ? 2.0 : 3.0;
-            else t = h < 0.34 ? 2.0 : h < 0.66 ? 1.0 : h < 0.92 ? 0.0 : 3.0;
-            fixed3 lawn = grass * lerp(float3(1, 1, 1), pg, 0.8) * (0.95 + 0.08 * h2);
-            fixed3 asph = fixed3(0.37, 0.37, 0.37) * lerp(float3(1, 1, 1), pa, 0.6) * (0.94 + 0.1 * h3);
+            float dat = step(0.5, gt);
+            if (gt < 0.5)
+            {
+                if (indus > 0.5) t = h < 0.50 ? 4.0 : h < 0.78 ? 1.0 : h < 0.90 ? 2.0 : 0.0;
+                else if (resid > 0.5) t = h < 0.52 ? 0.0 : h < 0.74 ? 1.0 : h < 0.90 ? 2.0 : 3.0;
+                else t = h < 0.34 ? 2.0 : h < 0.66 ? 1.0 : h < 0.92 ? 0.0 : 3.0;
+            }
+            else
+            {
+                t = gt < 2.5 ? 0.0                                                // 1 yard green, 2 school / kindergarten plot: lawn
+                  : gt < 3.5 ? 2.0                                                // 3 square
+                  : gt < 4.5 ? 1.0                                                // 4 surface parking (only where the data has one)
+                  : gt < 5.5 ? 6.0                                                // 5 village garden, low-rise plot: beds, orchard rows
+                  : gt < 6.5 ? 0.0                                                // 6 park (the caller draws it as grass)
+                  : gt < 7.5 ? 4.0                                                // 7 industry, logistics: plain concrete (the film roads draw the truck yards)
+                  : gt < 8.5 ? 0.0                                                // 8 reserve (the caller draws steppe)
+                  : gt < 9.5 ? 8.0                                                // 9 drive, turnaround pad
+                  : gt < 10.5 ? 0.0                                               // 10 public lot: lawn round its aprons
+                  : gt < 11.5 ? 4.0                                               // 11 utility with a building: concrete
+                  : gt < 12.5 ? 5.0                                               // 12 sports ground
+                  : gt < 13.5 ? 3.0                                               // 13 playground
+                  : gt < 14.5 ? 2.0                                               // 14 pavement: drives, aprons, yard paths, rest squares
+                  : gt < 16.5 ? 0.0                                               // 15 land without a lot, 16 round the houses: lawn
+                  : gt < 17.5 ? 9.0                                               // 17 park alley
+                  : 10.0;                                                         // 18 running track
+            }
+            float plain = dat;                                                   // the data's paving has no planted square
+            // the data's lawns and asphalt run on without a step at the cells' edges (the cells only vary the old plan's yards)
+            fixed3 lawn = grass * lerp(float3(1, 1, 1), pg, 0.8) * (0.95 + 0.08 * lerp(h2, 0.5, dat));
+            fixed3 asph = fixed3(0.37, 0.37, 0.37) * lerp(float3(1, 1, 1), pa, 0.6) * (0.94 + 0.1 * lerp(h3, 0.5, dat));
             fixed3 pave = fixed3(0.66, 0.64, 0.60) * lerp(float3(1, 1, 1), pp, 0.7);
             fixed3 c = lawn; car = 0.0;
             if (t < 0.5)
@@ -58,7 +163,7 @@ Shader "AlatauCity/Ground"
                 // a lawn with a darker mown stripe pattern and a footpath across
                 c *= 1.0 - 0.04 * step(0.5, frac(f.x / 6.0)) * saturate(1.0 - px * 0.5);
                 float diag = abs((f.x - f.y * 1.2 - (h2 - 0.5) * 20.0)) / 1.56;
-                c = lerp(c, pave * 0.97, (1.0 - smoothstep(0.9, 0.9 + aa, diag)) * step(0.55, h3));
+                c = lerp(c, pave * 0.97, (1.0 - smoothstep(0.9, 0.9 + aa, diag)) * step(0.55, h3) * (1.0 - dat));
             }
             else if (t < 1.5)
             {
@@ -92,29 +197,91 @@ Shader "AlatauCity/Ground"
                 float j = min(frac(f.x / 3.0), frac(f.y / 3.0)) * 3.0;
                 c *= 1.0 - 0.08 * (1.0 - smoothstep(0.05, 0.05 + aa, j)) * saturate(1.3 - px);
                 float2 m = abs(f - cs * 0.5) - float2(7.0, 5.0);
-                c = lerp(c, lawn, (1.0 - smoothstep(0.0, aa, max(m.x, m.y))) * step(0.4, h2));
+                c = lerp(c, lawn, (1.0 - smoothstep(0.0, aa, max(m.x, m.y))) * step(0.4, h2) * (1.0 - plain));
             }
             else if (t < 3.5)
             {
-                // playground: rubber surface, a sand pit, a strip of lawn around
+                // playground: rubber surface (crumb), a sand pit, a strip of lawn around; the equipment stands on it (GroundProps.cs).
+                // A playground lot of the data (13) is rubber to its own edge (no lawn strip, no pit: its sandbox is a model)
                 float2 m = abs(f - cs * 0.5) - float2(12.0, 9.0);
-                fixed3 rub = h2 < 0.5 ? fixed3(0.62, 0.36, 0.28) : fixed3(0.34, 0.52, 0.42);
-                c = lerp(lawn, rub, 1.0 - smoothstep(0.0, aa, max(m.x, m.y)));
+                float hr = dat > 0.5 ? frac((lh + 0.5) * 0.37) : h2;                  // one colour per playground of the data
+                fixed3 rub = hr < 0.4 ? fixed3(0.60, 0.36, 0.29) : hr < 0.75 ? fixed3(0.40, 0.50, 0.36) : fixed3(0.38, 0.45, 0.55);
+                rub *= 0.94 + 0.12 * ANoise(p * 1.7) * saturate(1.5 - px);
+                c = lerp(lawn, rub, max(1.0 - smoothstep(0.0, aa, max(m.x, m.y)), dat));
                 float sand = length(f - cs * 0.5 - float2(5.0, 2.0)) - 3.5;
-                c = lerp(c, fixed3(0.80, 0.73, 0.58), 1.0 - smoothstep(0.0, aa, sand));
+                c = lerp(c, fixed3(0.80, 0.73, 0.58), (1.0 - smoothstep(0.0, aa, sand)) * (1.0 - dat));
+                // the data's playground: a grey kerb of 0.25 m round the rubber (it lies to its exact edge)
+                c = lerp(c, pave * 0.86, (1.0 - smoothstep(0.25, 0.25 + aa, ge)) * dat);
+            }
+            else if (t < 4.5)
+            {
+                // concrete yard of a factory: slabs, oil stains, a gravel patch; the data's yards are one even concrete (no patch that
+                // changes at a cell's edge, faint stains)
+                c = fixed3(0.60, 0.59, 0.56) * lerp(float3(1, 1, 1), pp, 0.5) * (0.92 + 0.1 * lerp(ANoise(p * 0.15), 0.5, dat * 0.6));
+                c = lerp(c, fixed3(0.53, 0.50, 0.45), smoothstep(0.6, 0.75, ANoise(p * 0.05 + h * 9.0)) * (1.0 - dat));
+                c *= 1.0 - 0.12 * smoothstep(0.75, 0.9, ANoise(p * 0.3 + 3.0)) * (1.0 - 0.6 * dat);
+            }
+            else if (t < 5.5)
+            {
+                // sports ground: a pitch of mown turf with white lines, a red running track round it, lawn beyond; the data's sports
+                // ground is turf to its own edge (its track is a piece of its own) with a white line 0.5 m inside it
+                float2 m = abs(f - cs * 0.5), e = m - float2(14.0, 10.0), e2 = m - float2(16.5, 12.5);
+                float inP = 1.0 - smoothstep(0.0, aa, max(e.x, e.y)), inT = 1.0 - smoothstep(0.0, aa, max(e2.x, e2.y));
+                inP = max(inP, dat); inT = max(inT, dat);
+                fixed3 turf = fixed3(0.31, 0.47, 0.29) * (0.96 + 0.06 * step(0.5, frac((dat > 0.5 ? q.x : f.x) / 4.0)) * saturate(1.5 - px * 0.5));
+                c = lerp(lawn, fixed3(0.62, 0.35, 0.28), inT);
+                c = lerp(c, turf, inP);
+                float lines = (1.0 - smoothstep(0.08, 0.08 + aa, abs(max(e.x, e.y))))
+                            + inP * (1.0 - smoothstep(0.08, 0.08 + aa, m.x)) + inP * (1.0 - smoothstep(0.08, 0.08 + aa, abs(length(f - cs * 0.5) - 4.5)));
+                lines = dat > 0.5 ? 1.0 - smoothstep(0.08, 0.08 + aa, abs(ge - 0.5)) : lines;
+                c = lerp(c, fixed3(0.88, 0.88, 0.85), saturate(lines) * saturate(1.5 - px));
+            }
+            else if (t < 6.5)
+            {
+                // garden of a house: beds and orchard rows of 1.6 m (dark soil, green rows), a grass path every 9 m, rows turned per cell;
+                // the data's gardens: rows run on along the whole block (no seams at cell edges), a grass path every 22 m, the crops
+                // varying in patches of tens of metres (each house has its own lawn round it, a piece of its own)
+                float2 fb = dat > 0.5 ? q : (h2 < 0.5 ? f : f.yx);
+                float row = frac(fb.y / 1.6), patch = ANoise(p * 0.035 + lh * 3.1);
+                fixed3 soil = fixed3(0.43, 0.37, 0.29) * lerp(float3(1, 1, 1), pp, 0.3), crop = lawn * lerp(fixed3(0.86, 1.06, 0.80), fixed3(0.95, 1.0, 0.86), patch * dat);
+                float rowK = dat > 0.5 ? lerp(0.45, 1.0, smoothstep(0.3, 0.7, patch)) : 1.0;
+                fixed3 bed = lerp(soil, crop, lerp(0.5, smoothstep(0.30, 0.50, row) * (1.0 - smoothstep(0.80, 0.95, row)), rowK));
+                bed = lerp(bed, lerp(soil, crop, 0.55), saturate((px - 0.8) / 1.5));
+                float pw = dat > 0.5 ? 22.0 : 9.0;
+                c = lerp(bed, lawn, 1.0 - smoothstep(0.7, 0.7 + aa, abs(frac(fb.x / pw) - 0.5) * pw));
+            }
+            else if (t < 7.5)
+            {
+                // loading yard: concrete, a darker dock apron along the building side, a row of 4 m truck bays with yellow lines, no trucks
+                c = fixed3(0.60, 0.59, 0.56) * lerp(float3(1, 1, 1), pp, 0.5) * (0.92 + 0.1 * ANoise(p * 0.15));
+                c = lerp(c, c * 0.80, 1.0 - smoothstep(0.0, aa, f.y - 2.5));
+                float bl = (1.0 - smoothstep(0.12, 0.12 + aa, frac(f.x / 4.0) * 4.0)) * step(2.5, f.y) * step(f.y, 20.5);
+                c = lerp(c, fixed3(0.84, 0.80, 0.55), bl * 0.8 * saturate(1.5 - px));
+            }
+            else if (t < 8.5)
+            {
+                // asphalt of a drive or a turnaround pad
+                c = asph * (0.97 + 0.05 * ANoise(p * 0.2));
+            }
+            else if (t < 9.5)
+            {
+                // park alley: warm granite slabs of 1.2 × 0.6 m laid across the way, joints fading with distance
+                c = fixed3(0.70, 0.66, 0.58) * lerp(float3(1, 1, 1), pp, 0.6) * (0.96 + 0.06 * AHash2(floor(p / float2(1.2, 0.6))));
+                float j = min(frac(p.x / 1.2) * 1.2, frac(p.y / 0.6) * 0.6);
+                c *= 1.0 - 0.07 * (1.0 - smoothstep(0.03, 0.03 + aa, j)) * saturate(1.2 - px);
             }
             else
             {
-                // concrete yard of a factory: slabs, oil stains, a gravel patch
-                c = fixed3(0.60, 0.59, 0.56) * lerp(float3(1, 1, 1), pp, 0.5) * (0.92 + 0.1 * ANoise(p * 0.15));
-                c = lerp(c, fixed3(0.53, 0.50, 0.45), smoothstep(0.6, 0.75, ANoise(p * 0.05 + h * 9.0)));
-                c *= 1.0 - 0.12 * smoothstep(0.75, 0.9, ANoise(p * 0.3 + 3.0));
+                // running track round a school's field (3 m of red rubber): white lane lines 1 m from each of its edges
+                c = fixed3(0.62, 0.34, 0.27) * (0.95 + 0.08 * ANoise(p * 1.3) * saturate(1.5 - px));
+                c = lerp(c, fixed3(0.90, 0.88, 0.84), (1.0 - smoothstep(0.05, 0.05 + aa, abs(ge - 1.0))) * saturate(1.5 - px));
             }
             // paths along some cell edges
             float ex = min(f.x, cs.x - f.x), ey = min(f.y, cs.y - f.y);
             float px1 = (1.0 - smoothstep(1.1, 1.1 + aa, ex)) * step(0.45, AHash2(float2(id.x + step(cs.x * 0.5, f.x), id.y) + 5.5));
             float py1 = (1.0 - smoothstep(1.1, 1.1 + aa, ey)) * step(0.45, AHash2(float2(id.x, id.y + step(cs.y * 0.5, f.y)) + 8.5));
-            c = lerp(c, pave, saturate(px1 + py1) * (t < 0.5 || t > 2.5 ? 1.0 : 0.5));
+            float pathK = t < 0.5 ? 1.0 : t < 2.5 ? 0.5 : t < 4.5 ? 1.0 : t < 5.5 ? 0.0 : t < 6.5 ? 0.6 : t < 7.5 ? 0.5 : 0.0;
+            c = lerp(c, pave, saturate(px1 + py1) * pathK * (1.0 - plain) * (1.0 - dat));      // the data's lots: no loose paths
             return c;
         }
 
@@ -128,6 +295,17 @@ Shader "AlatauCity/Ground"
             float2 uv = IN.uv_MainTex;
             fixed3 plan = tex2D(_MainTex, uv).rgb, nat = tex2D(_NatTex, uv).rgb;
             float dev = tex2D(_DevTex, uv).r * 255.0 + 2000.0;
+            // ---- the redrawn map: the piece of the data here (GroundTypes.cs); 0 = no data, the plan colours decide as before. A piece
+            //      with a year of its own (its street, its first building, its park) is built in that year, to its own outline: the 40 m
+            //      pixels of map_dev only decide where the data says nothing (byte 0)
+            float gt = 0.0, gAng = 0.0, gLh = 0.0, gYb = 0.0, gEdge = 1000.0;
+            if (_AlatauGtOn > 0.5)
+            {
+                float4 gq = GroundTypeAt(IN.worldPos.xz, gEdge);
+                float rb = floor(gq.r * 255.0 + 0.5);
+                gt = fmod(rb, 32.0); gLh = floor(rb / 32.0); gAng = gq.g * 1.5707963; gYb = floor(gq.a * 255.0 + 0.5);
+            }
+            dev = gt > 0.5 && gYb > 0.5 ? (gYb < 1.5 ? 2000.0 : 2000.0 + gYb) : dev;
             float k = _AlatauDevK > 0.01 ? _AlatauDevK : 1.0;
             float eff = dev <= 2025.5 ? dev : 2025.0 + (dev - 2025.0) * k;
             float y = _AlatauGrow > 0.5 ? _AlatauYearF + 1.0 : (_AlatauYear < 1 ? 2050.0 : _AlatauYear);
@@ -141,6 +319,7 @@ Shader "AlatauCity/Ground"
             // ---- the city and its context (variant C): metres to the boundary, + inside
             float sdm = (tex2D(_CityTex, uv).r * 255.0 - 128.0) * 25.0;
             float sdw = max(fwidth(sdm), 0.5);
+            float2 dTx = fwidth(uv * _DistTex_TexelSize.zw);                     // pixel size in district texels (the focus border, below)
             float inside = _CityOn > 0.5 ? saturate(sdm / max(sdw * 1.5, 20.0) + 0.5) : 1.0;
             half3 em = c * _Ambient; float waterG = 0.0;
             if (_AlatauFilm > 0.5 && _AlatauMode < 1.5)
@@ -171,6 +350,10 @@ Shader "AlatauCity/Ground"
                 float shore = smoothstep(0.10, 0.34, wsum) * (1.0 - water);                    // wet bank around the water
                 float green = saturate((c.g - max(c.r, c.b)) * 6.0) * (1.0 - water);
                 float open = saturate((0.50 - lum) * 5.0) * saturate(1.0 - sat * 7.0) * (1.0 - water);     // land the plan leaves alone
+                // ---- the redrawn map (gt, read above): once a piece is developed its type decides what is park (grass) and reserve (steppe)
+                float gData = step(0.5, gt), gOn = gData * done;
+                green = lerp(green, (abs(gt - 6.0) < 0.5 ? 1.0 : 0.0) * (1.0 - water), gOn);
+                open = lerp(open, (abs(gt - 8.0) < 0.5 ? 1.0 : 0.0) * (1.0 - water), gOn);
                 float n1 = ANoise(wp.xz * 0.045), n2 = ANoise(wp.xz * 0.011 + 7.0), n3 = ANoise(wp.xz * 0.9);
                 // big soft patches over the land (a few hundred metres): nature is never one flat colour
                 float macro = ANoise(wp.xz * 0.0032) * 0.55 + ANoise(wp.xz * 0.0105 + 3.7) * 0.30 + ANoise(wp.xz * 0.037 + 9.2) * 0.15;
@@ -241,15 +424,19 @@ Shader "AlatauCity/Ground"
                     float gz = tex2Dlod(_AlatauBlockTex, float4(uvP + float2(0, 40.0 * mU.y), 0, 0)).r - tex2Dlod(_AlatauBlockTex, float4(uvP - float2(0, 40.0 * mU.y), 0, 0)).r;
                     float ang = abs(gx) + abs(gz) > 0.004 ? atan2(gz, gx) : 0.35;
                     ang = ang - floor(ang / 1.5707963) * 1.5707963; ang = floor(ang / 0.0872665 + 0.5) * 0.0872665;
+                    ang = gData > 0.5 ? gAng : ang;                                         // a lot of the data: the direction of the lot itself
                     float car = 0.0;
-                    fixed3 yard = Yard(wp.xz, ang, resid, civic, indus, px, pg, pp, pa, grass, car);
+                    fixed3 yard = Yard(wp.xz, ang, resid, civic, indus, px, pg, pp, pa, grass, gt, gLh, gEdge, car);
                     // from far away the yards merge into one calm tone of their quarter (no salt-and-pepper mosaic)
                     fixed3 yAvg = resid * lerp(grass, fixed3(0.47, 0.47, 0.45), 0.35) + civic * fixed3(0.58, 0.57, 0.54) + indus * fixed3(0.57, 0.56, 0.53);
+                    yAvg = gData > 0.5 ? YardAvg(gt, grass) : yAvg;
                     yard = lerp(yard, yAvg * (0.96 + 0.08 * fd), saturate((px - 2.5) / 7.0) * 0.75);
-                    // a quarter only exists between roads: far from any street (special zones, the airfield, empty plots) the land stays land
-                    float noBlock = smoothstep(50.0, 61.0, sd);
+                    // a quarter only exists between roads: far from any street (special zones, the airfield, empty plots) the land stays land;
+                    // where the data has lots, the lots decide
+                    float noBlock = smoothstep(50.0, 61.0, sd) * (1.0 - gData);
                     f = lerp(f, land, noBlock * built * done);
-                    // inside a motorway interchange (FilmRoads.PublishZones) the land between the ramps is a mown verge, never yards
+                    // inside a motorway interchange (FilmRoads.PublishZones) the land between the ramps is a mown verge, never yards; the
+                    // data's own pieces (a park, a lot) next to an interchange keep their ground (item 93)
                     float icz = 0.0;
                     for (int iz = 0; iz < 32; iz++)
                     {
@@ -257,10 +444,15 @@ Shader "AlatauCity/Ground"
                         float4 zz = _AlatauIcZones[iz];
                         icz = max(icz, 1.0 - smoothstep(zz.z * 0.8, zz.z, distance(wp.xz, zz.xy)));
                     }
+                    icz *= 1.0 - gData;
                     f = lerp(f, yard, done * (1.0 - water) * inBlock * (1.0 - green) * (1.0 - open) * (1.0 - noBlock) * (1.0 - icz) * 0.92);      // everywhere the city is built
                     f = lerp(f, verge, icz * done * (1.0 - water) * (1.0 - green));
                     f = lerp(f, verge, town * (1.0 - inBlock));                                   // the whole road corridor is a mown verge
-                    f = lerp(f, paved, town * walk * 0.9 * (1.0 - icz));                         // no pavements of the plan's old ramp scribbles
+                    // ... except where a drive of the data crosses it to its street (asphalt and its pavements reach the road)
+                    float drive = gData * (abs(gt - 9.0) < 0.5 || abs(gt - 14.0) < 0.5 || abs(gt - 17.0) < 0.5 ? 1.0 : 0.0);
+                    f = lerp(f, yard, drive * done * (1.0 - water) * (1.0 - inBlock) * (1.0 - icz) * 0.92);
+                    f = lerp(f, paved, town * walk * 0.9 * (1.0 - icz) * (1.0 - gData));         // no pavements of the plan's old ramp scribbles;
+                                                                                                 // none in the data's lots (street profiles carry theirs)
                     f *= 1.0 - 0.30 * kerb * town * saturate(1.6 - sw * 2.0) * (1.0 - icz);
                 }
                 // wet, darker bank and a strip of pale sand where the steppe meets the water
@@ -351,21 +543,29 @@ Shader "AlatauCity/Ground"
                 if (_AlatauFocusD > -0.5)
                 {
                     float did = DistAt(uv);
-                    float2 o = _DistTex_TexelSize.xy * 1.5;
-                    float nb = (DistAt(uv + float2(o.x, 0)) != did ? 1.0 : 0.0) + (DistAt(uv - float2(o.x, 0)) != did ? 1.0 : 0.0) + (DistAt(uv + float2(0, o.y)) != did ? 1.0 : 0.0) + (DistAt(uv - float2(0, o.y)) != did ? 1.0 : 0.0);
-                    bool focus = abs(did - _AlatauFocusD) < 0.5;
+                    // the share of the district in focus round the point, read bilinearly from the four texels round it: its border (share
+                    // 0.5) runs smoothly between the texel centres and is drawn as a line about 1.5 px wide (at least ~3 m), not as a band
+                    // in the 20 m steps of map_districts that read as a stepped water strip from afar
+                    float2 dst = uv * _DistTex_TexelSize.zw - 0.5, di0 = floor(dst), dfr = dst - di0;
+                    float2 dc0 = (di0 + 0.5) * _DistTex_TexelSize.xy;
+                    float f00 = abs(DistAt(dc0) - _AlatauFocusD) < 0.5 ? 1.0 : 0.0;
+                    float f10 = abs(DistAt(dc0 + float2(_DistTex_TexelSize.x, 0)) - _AlatauFocusD) < 0.5 ? 1.0 : 0.0;
+                    float f01 = abs(DistAt(dc0 + float2(0, _DistTex_TexelSize.y)) - _AlatauFocusD) < 0.5 ? 1.0 : 0.0;
+                    float f11 = abs(DistAt(dc0 + _DistTex_TexelSize.xy) - _AlatauFocusD) < 0.5 ? 1.0 : 0.0;
+                    float share = lerp(lerp(f00, f10, dfr.x), lerp(f01, f11, dfr.x), dfr.y);
+                    float2 dsh = float2(lerp(f10 - f00, f11 - f01, dfr.y), lerp(f01 - f00, f11 - f10, dfr.x));    // d share / d texel
+                    float lw2 = max((abs(dsh.x) * dTx.x + abs(dsh.y) * dTx.y) * 1.5, 0.08);                // no derivative in this branch
+                    float nb = 1.0 - smoothstep(0.0, lw2, abs(share - 0.5));
+                    bool focus = share > 0.5;
                     fixed3 dc = _AlatauFocusD < 0.5 ? fixed3(0.18, 0.39, 0.69) : _AlatauFocusD < 1.5 ? fixed3(0.85, 0.65, 0.13) : _AlatauFocusD < 2.5 ? fixed3(0.95, 0.45, 0.21) : fixed3(0.20, 0.62, 0.36);
                     if (!focus && did > -0.5)
                     {
                         float lf = dot(c, fixed3(0.299, 0.587, 0.114));
                         c = lerp(fixed3(lf, lf, lf), c, 0.35) * 0.62; em *= 0.55;
                     }
-                    if (focus)
-                    {
-                        c = lerp(c, dc, 0.06);
-                        float edgeF = saturate(nb) * inside;
-                        c = lerp(c, dc, edgeF * 0.85); em += dc * edgeF * 0.9;
-                    }
+                    if (focus) c = lerp(c, dc, 0.06);
+                    float edgeF = saturate(nb) * inside;                                 // on both sides of the border
+                    c = lerp(c, dc, edgeF * 0.85); em += dc * edgeF * 0.6;
                 }
                 // the map rectangle dissolves into the background at its edges: no slab hanging in the void
                 float edge = min(min(uv.x, 1.0 - uv.x) * 43600.0, min(uv.y, 1.0 - uv.y) * 61700.0);

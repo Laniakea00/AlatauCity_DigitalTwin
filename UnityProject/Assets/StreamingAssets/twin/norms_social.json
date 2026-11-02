@@ -1,0 +1,1 @@
+{"school_places_per_1000":165,"kindergarten_places_per_1000":63.2,"school_radius_m":500,"kindergarten_radius_m":300,"polyclinic_radius_m":1000,"source_ru":"spec/norms.json: schools.places_per_1000_genplan (ГП727), kindergartens.places_per_1000_genplan (ГП727), schools.radius_m (С08-8), kindergartens.radius_m (С08-8), clinics.polyclinic_radius_m (С08-8); источники: ГП727, С08-8"}

@@ -1,0 +1,3134 @@
+diff --git a/tools/map/district/gate_build.py b/tools/map/district/gate_build.py
+index 50e8828..d40e87c 100644
+--- a/tools/map/district/gate_build.py
++++ b/tools/map/district/gate_build.py
+@@ -142,8 +142,9 @@ ic_existing("ic_a3_a19", -2052.5, -18338.8, "trumpet", [k_of("3cec7dd6"), k_of("
+             ["be1950a1", "7c490ced", "b6783511", "8cd1a33b", "fda944b2"], "interchange_a3_yntymak_zhanadaur",
+             "существующая развязка А-3 × А-19 (OSM), съезды как в данных; новых съездов в Gate не добавляется")
+ ic_existing("ic_a3_gatecity", -3302.0, -23824.0, "diamond", [k_of("1424848a"), "s_gatecity"],
+-            ["fd499b4d", "86370d28", "c1053ec1", "0229484f"], "interchange_a3_km16_5",
+-            "существующий съезд А-3 у ЖК Gate City (OSM); Проспект Gate City приходит к его концевому узлу")
++            ["fd499b4d", "86370d28"], "interchange_a3_km18_5",
++            "существующий съезд А-3 у ЖК Gate City (OSM, реестр interchange_a3_km18_5 в 74 м); Проспект Gate City приходит к "
++            "его концевому узлу; восточные съезды (c1053ec1, 0229484f) за границей города сняты (retire_existing)")
+ # Проспект Gate City ends at the ramp terminal of the existing interchange (OSM node where ramp fd499b4d meets the ЖК streets)
+ GCs = N.SID["s_gatecity"]
+ term = OSM[oid_full("fd499b4d")][0]
+@@ -712,6 +713,12 @@ obj("pepsico", "move", REG["pepsico"]["geom"]["coordinates"], list(pep_c), "poin
+     "по источнику: завод PepsiCo в мкр Ынтымақ строится — его корпус есть в OSM (здание двойника bid 48572, 28 041 м², 347 × 82 м); "
+     "точка реестра стояла среди домов Ынтымака — объект на своём корпусе, корпус остаётся существующим зданием; "
+     "вокруг — зона i_pepsico (промышленность)", yaw=-74.0, basis="по источнику")
++# the А-3 diamond at ЖК Gate City: registry interchange_a3_km18_5 (OSM ramps, 74 m from node ic_a3_gatecity; the level-0 spec
++# named km16_5, 1.9 km south, outside the city)
++obj("interchange_a3_km18_5", "keep", REG["interchange_a3_km18_5"]["geom"]["coordinates"], [-3302.0, -23824.0], "point_50m",
++    "по источнику: существующая развязка OSM (узел ic_a3_gatecity, ромб); в Gate её западные съезды fd499b4d и 86370d28 — "
++    "к Проспекту Gate City; восточные съезды c1053ec1 и 0229484f и проезд 4d44246d с узла А-3 ведут за границу города "
++    "на обрывок базовой карты (зданий нет, дальше улицы только 2099 г.) — сняты (retire_existing)", basis="по источнику")
+ # hospital (Golden gets its own id), polyclinic (Growing-E gets its own id)
+ hosp = Polygon(Z.ZBY["m_hospital"]["poly"]).buffer(0)
+ hfp = box(-2600.0, -18270.0, -2420.0, -18060.0).intersection(hosp)
+@@ -830,7 +837,7 @@ for n in N.NODES.values():
+         continue
+     NODES_OUT.append(d)
+ ZONES_OUT = [{k: v for k, v in z.items() if not k.startswith("_")} for z in ZONES]
+-replaced = sorted(set(N.RETIRED) | set(T.spec["replaced_osm"]))
++replaced = sorted((set(N.RETIRED) | set(T.spec["replaced_osm"])) - set(N.ORPHAN_OSM))
+ 
+ # agglomeration rail at the TPU station (tester r2 item 55): the trial's design, cut at the district's east edge (the city's)
+ RAIL = T.rail_spec(GATE, "Алматы-1: остальные 12,4 км 1-й очереди — вне города (за восточной границей района)")
+@@ -863,6 +870,7 @@ spec = {
+     "utilities": UTIL,
+     "corridors": None,
+     "replaced_osm": replaced,
++    "retire_existing": [{"osm": oid, "why_ru": why} for oid, why in sorted(N.ORPHAN_OSM.items())],
+     "scheme_changes": [{"id": k, "why": v} for k, v in Z.SCHEME_CHANGES + N.SCHEME_CHANGES],
+     "trial_changes": [{"id": k, "why": v} for k, v in N.TRIAL_CHANGED.items()] + [{"id": k, "why": v} for k, v in Z.CHANGES],
+     "checks": {},
+@@ -892,8 +900,8 @@ if __name__ == "__main__":
+     print("targets", {k: TARGETS[k] for k in ("homes_2050", "population_2050", "jobs_2050")}, "FH %.3f FJ %.3f" % (FH, FJ))
+     print("log", Counter(x["what"] for x in LOG))
+     print(f"rail: {RAIL['lines'][0]['length_m']} m, edge {RAIL['lines'][0]['edge_joints']}, homes zones within 100 m {RAIL_SZZ}")
+-    for r_ in T.rail_check(RAIL, os.path.join(C.OUT, "gate", "network.json")):
+-        print("  rail over", r_)
++    for r_ in T.rail_check(RAIL, os.path.join(C.OUT, "gate")):
++        print("  rail over", r_, "LOW" if r_[4] < r_[5] else "")
+     if "--no-check" not in sys.argv:
+         ok = CHK.main([SPEC_OUT])
+         sys.exit(0 if ok else 1)
+diff --git a/tools/map/district/gate_net.py b/tools/map/district/gate_net.py
+index 283f889..b6aeb97 100644
+--- a/tools/map/district/gate_net.py
++++ b/tools/map/district/gate_net.py
+@@ -288,9 +288,18 @@ def keep_name(p):
+     return n
+ 
+ 
++# The east side of the А-3 diamond at ЖК Gate City (registry interchange_a3_km18_5) is outside the city: the area edge runs
++# along the А-3 there. Its northbound exit and entry ramps and a service road off the А-3 node cross that edge onto a leftover
++# piece of the twin's base map (a loop and stubs east of the А-3, no buildings; its onward streets open only in 2099), so no
++# car uses them in any year (merged roads.json of Gate r4: e16366, e14491, e14501, e16541 at v/c 0 in 2035 and 2050).
++# Retired (spec retire_existing); the diamond keeps its west ramps, which serve Gate City.
++ORPHAN_WHY = ("съезд / проезд ведёт за границу города на обрывок базовой карты двойника (петля и тупики к востоку от А-3, "
++              "зданий нет, дальше улицы только 2099 г.): машин нет ни в одном году — снят; развязка у ЖК Gate City "
++              "работает западными съездами")
++ORPHAN_OSM = {SH[k]: ORPHAN_WHY for k in ("c1053ec1", "0229484f", "4d44246d") if k in SH}
+ for oid, (g, p) in sorted(OSM.items()):
+     cls = osm_class(p, g)
+-    if cls is None:
++    if cls is None or oid in ORPHAN_OSM:
+         continue
+     clip = g.intersection(GATE)
+     if clip.length < 3.0:
+@@ -310,6 +319,44 @@ for oid, (g, p) in sorted(OSM.items()):
+            why="существующая дорога OSM/Overture, как есть (направление линии = направление движения)" if cls in ("expressway", "ramp")
+            else "существующая дорога OSM, как есть")
+     KEEP_IDS[oid] = sid
++# А-3 southbound at the south-east edge: the area edge (city.json) runs along this carriageway, so the OSM way fa5592e4 leaves
++# the area for 141 m on the edge itself (x −3597…−3681) and comes back; gen_network keeps only the parts inside, and the part
++# that comes back in (node n791 of the Gate runs) had no twin road to stitch to within 80 m (the twin's А-3 crosses the edge at
++# J025, 142 m away). The carriageway goes on inside: this piece is the same existing carriageway, drawn 0.3 m inside the edge,
++# so the southbound А-3 is one road through Gate and meets the city's А-3 only at J025 (northbound) and J026 (southbound).
++A3_SB = SH.get("fa5592e4")
++A3_SB_EDGE = None
++if A3_SB:
++    _g = OSM[A3_SB][0]
++    _out = [q for q in getattr(_g.difference(GATE), "geoms", [_g.difference(GATE)]) if q.geom_type == "LineString"]
++    _s = KEEP_IDS.get(A3_SB)
++    for _q in _out:
++        a_, b_ = _q.coords[0], _q.coords[-1]
++        if not (GATE.exterior.distance(Point(a_)) < 0.5 and GATE.exterior.distance(Point(b_)) < 0.5 and 20.0 < _q.length < 400.0):
++            continue                                        # only a piece that leaves and comes back
++        if _g.project(Point(a_)) > _g.project(Point(b_)):
++            a_, b_ = b_, a_                                 # in the direction of travel
++        # the same path 0.3 m inside the edge: the area's inner ring between the points nearest to where the way leaves
++        # and comes back (the way cuts the edge's corner at x −3599 by up to 2 m, so it is not simply shifted)
++        _ring = GATE.buffer(-0.3, join_style=2).exterior
++        _sa, _sb = _ring.project(Point(a_)), _ring.project(Point(b_))
++        def _ring_path(s0, s1):                            # along the ring's own direction, over its start if needed
++            if s0 <= s1:
++                return list(substring(_ring, s0, s1).coords)
++            return list(substring(_ring, s0, _ring.length).coords) + list(substring(_ring, 0.0, s1).coords)[1:]
++        _c1, _c2 = _ring_path(_sa, _sb), _ring_path(_sb, _sa)[::-1]
++        _fw = min((LineString(_c1), LineString(_c2)), key=lambda q_: q_.length)   # the short way round, from a_ to b_
++        _pts = list(_fw.simplify(0.05).coords)
++        A3_SB_EDGE = street("s_a3_sb_edge", "expressway", _pts, "А-3 Алматы – Өскемен", 2025, oneway=True,
++                            years=C.EXISTING, axis="ax_a3", layer="osm",
++                            profile={"carriageways": 1, "oneway": True, "lanes": [2, 0], "median_w": 0.0, "verge_w": [0.0, 10.0],
++                                     "sidewalk_w": [0.0, 0.0], "bike_w": [0.0, 0.0], "parking_w": [0.0, 0.0]},
++                            why="существующая проезжая часть А-3 на юг (OSM fa5592e4), %.0f м по самой границе района: "
++                                "граница города идёт по ней, и дорога OSM уходила из района и возвращалась; кусок проведён в 0,3 м "
++                                "внутри границы как продолжение той же проезжей части (профиль — как у соседних кусков: одна "
++                                "проезжая часть, 2 полосы), иначе южная часть А-3 в Gate начиналась на границе без связи с "
++                                "А-3 города (стык в 142 м от J025)" % _q.length)
++        break
+ # the trial's village streets keep their ids and classes (level-1 design)
+ for s in T.STREETS:
+     if s["source"].startswith("keep_existing:") and s["id"].startswith("v_"):
+@@ -386,7 +433,7 @@ for oid, (g, p) in OSM.items():
+         RETIRED.append(oid)
+     elif gi.intersection(DEV_IN.buffer(5)).length > 0.5 * gi.length and not houses_hit(gi.buffer(30.0)):
+         RETIRED.append(oid)                      # a road that serves existing houses (ЖК Gate City, farms) stays
+-RETIRED_SET = set(RETIRED)
++RETIRED_SET = set(RETIRED) | set(ORPHAN_OSM)
+ # OSM service drives (sub driveway / parking_aisle / alley) would come out of gen_network as driveway_secondary, a class
+ # CONTRACT §8 does not use: the ones that stay are kept as village lanes (in a village) or local side streets
+ for oid, (g, p) in sorted(OSM.items()):
+diff --git a/tools/map/district/gate_trial_build.py b/tools/map/district/gate_trial_build.py
+index 5504110..99b7aaf 100644
+--- a/tools/map/district/gate_trial_build.py
++++ b/tools/map/district/gate_trial_build.py
+@@ -731,7 +731,10 @@ for key, lst in sorted(ends_at.items()):
+ ic_streets = [s["id"] for s in STREETS if s["id"].startswith("k_") and s["class"] == "expressway"]
+ node("ic_a3_bakad", -2270.0, -20315.0, "cloverleaf", ic_streets, keep_existing=True, registry_id="interchange_a3_bakad",
+      osm_ids=[s["source"].split(":", 1)[1] for s in STREETS if s["id"].startswith("k_")],
+-     why_ru="существующий клевер с распределительными дорогами по А-3 (OSM/Overture), остаётся как есть; путепроводы БАКАД над А-3")
++     why_ru="существующий клевер с распределительными дорогами по А-3 (OSM/Overture), остаётся как есть; путепроводы БАКАД над А-3",
++     # tester r2 item 71: the loop k_92670eef → k_d080e3ad → k_dc8f8e80 (А-3 S → БАКАД E) carries 4.3–5.7k veh/h; layout kept
++     ramps={"А-3 S → БАКАД E": {"lanes": 2, "from_year": 2035,
++                                "why_ru": "реконструкция петли: спрос выше 1 200 авт./ч (норма второй полосы), модель qTwin"}})
+ 
+ # twin roads cut by the area edge that no trial street continues: listed so merge can trim them (log only)
+ for c in cuts:
+@@ -1404,7 +1407,8 @@ phases = [{"queue": 1, "years": [2026, 2030],
+ # qTwin: the line comes from Алматы-1 over the Turksib corridor east of А-3 and enters the city at its east edge south of the
+ # БАКАД; it crosses the А-3 × БАКАД cloverleaf (А-3, its ramps, the TPU street) on a viaduct, so the station is elevated: two
+ # tracks along the plot's north side (the side w44's land_transit gives the tracks: towards the motorways), a side platform on
+-# the hall's side at the hall's upper floor, buffer stops at the west end (a terminus until the line goes on, 2050).
++# the hall's side, reached from the hall's upper floor by stairs and lifts (the viaduct clears the drives under it), buffer
++# stops at the west end (a terminus until the line goes on, 2050).
+ RAIL_PLOT = (-2930.0, -20590.0, -2680.0, -20352.0)      # agglo_rail_station_1 footprint (rect `rail` of the objects)
+ RAIL_GAP_M = 5.0          # track centres (w44 land_transit TRACK_BED_M; модель qTwin)
+ RAIL_EDGE_M = 3.0         # north track axis from the plot's north edge
+@@ -1417,11 +1421,17 @@ PLAT_X = (-2900.0, -2770.0)      # platform 130 m = w44 land_transit TRAIN_LEN_M
+ PLAT_W_M = 8.0            # side platform (w44 PLATFORM_W_M)
+ PLAT_EDGE_M = 1.75        # track axis to the platform edge (модель qTwin: car 3,5 m wide)
+ PLAT_UP_M = 1.1           # high platform above the rail head (модель qTwin)
+-# rail head heights (absolute, as road y): the platform section level, rising and falling at ≤ 11 ‰ so that the underside
+-# (rail head − 1.8 m deck) clears every road it crosses by bridges.road_clearance_m 5,0 m. Road surfaces from the Gate run of
+-# 01.11 (network.json: TPU street 640,1; А-3 643,6–644,1; ramps 638,2–644,2 m); checked again by rail_check() on each build.
++# rail head heights (absolute, as road y): the platform section level, rising and falling at ≤ 11 ‰. The deck's underside is
++# the rail head less RAIL_DECK_M and spans RAIL_DECK_HALF_M each side of each track axis (lib MODEL rail_deck_below_m /
++# rail_deck_half_m, as rule 25 «under_decks» and RailLayer take it); every point of it over a carriageway clears that
++# carriageway by bridges.road_clearance_m 5,0 m, over a drive or turnaround pad by fire_access.arches.height_min_m 4,5 m, both
++# with RAIL_MARGIN_M to spare. The station level is set over the highest ground under its deck (641,5 m at the buffer stops:
++# any drive at grade there passes), the hump over ramp s35 k_f46e8f8f (651,45 m needed at its deck edge). Road surfaces of the
++# runs of 01.11 (gate_trial r5, Gate r4 network.json / driveways.json); rail_check() measures it again on each build.
+ RAIL_DECK_M = 1.8
+-RAIL_PROFILE = [(0.0, 647.0), (230.0, 647.0), (600.0, 651.1), (700.0, 651.1)]
++RAIL_DECK_HALF_M = 2.6
++RAIL_MARGIN_M = 0.3
++RAIL_PROFILE = [(0.0, 648.2), (230.0, 648.2), (560.0, 651.6), (700.0, 651.6)]
+ RAIL_FALL = 0.011
+ 
+ 
+@@ -1496,11 +1506,15 @@ def rail_spec(area, edge_to):
+             "why": MODEL + ": двухпутная линия (колея 1520) приходит с востока через коридор Турксиба и входит в город на его восточной "
+                            "границе южнее БАКАД; развязку А-3 × БАКАД (А-3, её съезды, улица ТПУ) проходит по эстакаде, поэтому "
+                            "станция эстакадная: пути вдоль северной стороны участка станции (сторона к магистралям, как у w44), "
+-                           "боковая платформа со стороны вокзала на уровне его второго этажа, упоры в западном конце — тупиковая "
++                           "боковая платформа со стороны вокзала, вход с его второго этажа лестницами и лифтами, упоры в западном конце — тупиковая "
+                            "станция 1-й очереди до продления линии (53,5 км к 2050). Кривая R %s м, поворот %s°; головка рельса "
+-                           "%s м на станции, до %s м над А-3, уклоны ≤ %d ‰; низ пролёта над каждой дорогой ≥ 5,0 м "
+-                           "(bridges.road_clearance_m)" % (dec(RAIL_R, 0), dec(turn, 1), dec(RAIL_PROFILE[0][1], 1),
+-                                                           dec(RAIL_PROFILE[-1][1], 1), round(RAIL_FALL * 1000))}
++                           "%s м на станции, до %s м над А-3, уклоны ≤ %d ‰; низ пролёта (головка рельса − %s м, %s м в каждую "
++                           "сторону от оси пути) над каждой проезжей частью ≥ 5,0 м (bridges.road_clearance_m), над проездами "
++                           "и площадками ≥ 4,5 м (fire_access.arches.height_min_m), с запасом %s м; на станции — над самой "
++                           "высокой землёй под пролётом (%s м)" % (
++                               dec(RAIL_R, 0), dec(turn, 1), dec(RAIL_PROFILE[0][1], 1), dec(RAIL_PROFILE[-1][1], 1),
++                               round(RAIL_FALL * 1000), dec(RAIL_DECK_M, 1), dec(RAIL_DECK_HALF_M, 1), dec(RAIL_MARGIN_M, 1),
++                               dec(RAIL_PROFILE[0][1] - RAIL_DECK_M - 4.5 - RAIL_MARGIN_M, 1))}
+     platforms = [{"id": "rail_agglo_p1", "line": "rail_agglo_1", "station": "agglo_rail_station_1", "side": "south",
+                   "tracks": ["rail_agglo_t2"], "polygon": poly_pts(plat, 2), "y": y_pl, "length_m": round(PLAT_X[1] - PLAT_X[0], 1),
+                   "width_m": PLAT_W_M, "years": Y4(2030),
+@@ -1510,31 +1524,67 @@ def rail_spec(area, edge_to):
+     return {"lines": [line], "platforms": platforms}
+ 
+ 
+-def rail_check(rail, net_path):
+-    """Clearance of the viaduct over the roads of a run's network.json (road y + 5.0 m ≤ rail head − deck): [(seg, class, x, z,
+-    clear_m)]; and homes zones nearer than szz.rail_m (100 m) to an outer track."""
++def rail_check(rail, out_dir):
++    """Clearance under the viaduct as rule 25 «under_decks» measures it, on a run's network.json and driveways.json: the deck
++    (rail head − RAIL_DECK_M, RAIL_DECK_HALF_M each side of each track) over every carriageway (land_util carriage polygon,
++    bridges.road_clearance_m 5,0 m) and every drive and turnaround pad (fire_access.arches 4,5 m), sampled on a 0,5 m grid.
++    Returns [(id, what, x, z, clear_m, need_m)], the lowest point per road / drive."""
++    import shapely
++    sys.path.insert(0, os.path.join(C.MAP, "gen"))
++    import land_util as U
+     out = []
+-    if os.path.exists(net_path):
+-        with open(net_path, encoding="utf-8") as f:
++    ln = rail["lines"][0]
++    tr = [np.array(t_["pts"], float) for t_ in ln["tracks"]]
++    fp = unary_union([LineString(q[:, :2]).buffer(RAIL_DECK_HALF_M, cap_style=2) for q in tr])
++    axes = [(LineString(q[:, :2]), np.r_[0.0, np.cumsum(np.hypot(*np.diff(q[:, :2], axis=0).T))], q[:, 2]) for q in tr]
++    nm = U.Norms()
++
++    def under(Q):                                    # deck underside over each point: the nearer track's rail head − deck
++        best = np.full(len(Q), np.inf)
++        dist = np.full(len(Q), np.inf)
++        for L, S, Y in axes:
++            P = shapely.points(Q)
++            d_ = shapely.distance(L, P)
++            y_ = np.interp(shapely.line_locate_point(L, P), S, Y) - RAIL_DECK_M
++            m = d_ < dist
++            best[m], dist[m] = y_[m], d_[m]
++        return best
++
++    def along(P):
++        P = np.asarray(P, float)
++        S = np.r_[0.0, np.cumsum(np.hypot(*np.diff(P[:, :2], axis=0).T))]
++        L = LineString(P[:, :2])
++        return lambda Q: np.interp(shapely.line_locate_point(L, shapely.points(Q)), S, P[:, 2])
++
++    def low(poly, surf, sid, what, need):
++        ov = poly.intersection(fp)
++        if ov.is_empty or ov.area < 0.01:
++            return
++        x0, z0, x1, z1 = ov.bounds
++        gx, gz = np.meshgrid(np.arange(x0 + 0.25, x1, 0.5), np.arange(z0 + 0.25, z1, 0.5))
++        gx, gz = gx.ravel(), gz.ravel()
++        m = shapely.contains_xy(ov, gx, gz)
++        Q = np.vstack([shapely.get_coordinates(ov), np.c_[gx[m], gz[m]]])
++        c = under(Q) - surf(Q)
++        k = int(np.argmin(c))
++        out.append((sid, what, round(float(Q[k, 0]), 1), round(float(Q[k, 1]), 1), round(float(c[k]), 2), need))
++
++    for name, need in (("network.json", 5.0), ("driveways.json", 4.5)):
++        path = os.path.join(out_dir, name)
++        if not os.path.exists(path):
++            continue
++        with open(path, encoding="utf-8") as f:
+             net = json.load(f)
+-        ln = rail["lines"][0]
+-        cl = LineString([(q[0], q[1]) for q in ln["tracks"][0]["pts"]])
+-        for sg in net["segments"]:
+-            g = LineString([(q[0], q[1]) for q in sg["pts"]])
+-            if not g.intersects(cl):
+-                continue
+-            arr = np.array(sg["pts"], float)
+-            cs = np.r_[0.0, np.cumsum(np.hypot(*np.diff(arr[:, :2], axis=0).T))]
+-            X = g.intersection(cl)
+-            for x in getattr(X, "geoms", [X]):
+-                if x.geom_type != "Point":
+-                    continue
+-                y_road = float(np.interp(g.project(x), cs, arr[:, 2]))
+-                s_ = cl.project(x)
+-                y_rail = float(np.interp(s_, np.r_[0.0, np.cumsum(np.hypot(*np.diff(np.array(ln["tracks"][0]["pts"])[:, :2], axis=0).T))],
+-                                         np.array(ln["tracks"][0]["pts"])[:, 2]))
+-                out.append((sg["id"], sg["class"], round(x.x), round(x.y), round(y_rail - RAIL_DECK_M - y_road, 2)))
+-    return out
++        for sg, poly, lv in U.network_polys(net, nm, "carriage"):
++            if len(sg.get("pts") or []) >= 2 and poly.intersects(fp):
++                low(poly, along(sg["pts"]), sg["id"], f"{sg['class']} {sg.get('street') or ''}".strip(), need)
++        nodes = {n["id"]: n for n in net.get("nodes") or []}
++        for pd in net.get("pads") or []:
++            pg = Polygon(pd["polygon"]).buffer(0)
++            y = (nodes.get(pd["node"]) or {}).get("y")
++            if y is not None and pg.intersects(fp):
++                low(pg, lambda Q, y=float(y): np.full(len(Q), y), "pad_" + pd["node"], "разворотная площадка", need)
++    return sorted(out, key=lambda r_: r_[4] - r_[5])
+ 
+ 
+ RAIL = rail_spec(AREA, "Алматы-1: остальные 12,4 км 1-й очереди — вне города (за восточной границей пробной зоны)")
+@@ -1619,8 +1669,8 @@ if __name__ == "__main__":
+     print(f"wrote {SPEC_OUT}: {len(txt) // 1024} KB; streets {len(STREETS)}, nodes {len(NODES)}, edge_joints {len(EDGE_JOINTS)}, "
+           f"zones {len(ZONES)}, objects {len(OBJ)}; area {spec['area_ha']} ha")
+     print(f"rail: {RAIL['lines'][0]['length_m']} m, edge {RAIL['lines'][0]['edge_joints']}, homes zones within 100 m {RAIL_SZZ}")
+-    for r_ in rail_check(RAIL, os.path.join(C.OUT, "gate_trial", "network.json")):
+-        print("  rail over", r_)
++    for r_ in rail_check(RAIL, os.path.join(C.OUT, "gate_trial")):
++        print("  rail over", r_, "LOW" if r_[4] < r_[5] else "")
+     if "--no-check" not in sys.argv:
+         ok = CHK.main([SPEC_OUT])
+         sys.exit(0 if ok else 1)
+diff --git a/tools/map/spec/gate.json b/tools/map/spec/gate.json
+index a0ed3ea..78500db 100644
+--- a/tools/map/spec/gate.json
++++ b/tools/map/spec/gate.json
+@@ -38448,537 +38448,537 @@
+        [
+         -2925.0,
+         -20355.0,
+-        647.0
++        648.2
+        ],
+        [
+         -2735.0,
+         -20355.0,
+-        647.0
++        648.2
+        ],
+        [
+         -2734.98,
+         -20355.0,
+-        647.0
++        648.2
+        ],
+        [
+         -2726.42,
+         -20355.07,
+-        647.0
++        648.2
+        ],
+        [
+         -2726.37,
+         -20355.07,
+-        647.0
++        648.2
+        ],
+        [
+         -2717.81,
+         -20355.29,
+-        647.0
++        648.2
+        ],
+        [
+         -2717.77,
+         -20355.3,
+-        647.0
++        648.2
+        ],
+        [
+         -2709.21,
+         -20355.66,
+-        647.0
++        648.2
+        ],
+        [
+         -2709.17,
+         -20355.66,
+-        647.0
++        648.2
+        ],
+        [
+         -2700.62,
+         -20356.18,
+-        647.0
++        648.2
+        ],
+        [
+         -2700.58,
+         -20356.18,
+-        647.0
++        648.2
+        ],
+        [
+         -2692.04,
+         -20356.84,
+-        647.03
++        648.23
+        ],
+        [
+         -2692.0,
+         -20356.84,
+-        647.03
++        648.23
+        ],
+        [
+         -2683.47,
+         -20357.65,
+-        647.13
++        648.32
+        ],
+        [
+         -2683.43,
+         -20357.65,
+-        647.13
++        648.32
+        ],
+        [
+         -2674.92,
+         -20358.6,
+-        647.22
++        648.41
+        ],
+        [
+         -2674.88,
+         -20358.61,
+-        647.22
++        648.41
+        ],
+        [
+         -2666.39,
+         -20359.71,
+-        647.32
++        648.49
+        ],
+        [
+         -2666.34,
+         -20359.71,
+-        647.32
++        648.49
+        ],
+        [
+         -2657.87,
+         -20360.95,
+-        647.41
++        648.58
+        ],
+        [
+         -2657.83,
+         -20360.96,
+-        647.41
++        648.58
+        ],
+        [
+         -2649.38,
+         -20362.35,
+-        647.51
++        648.67
+        ],
+        [
+         -2649.34,
+         -20362.36,
+-        647.51
++        648.67
+        ],
+        [
+         -2640.91,
+         -20363.89,
+-        647.6
++        648.76
+        ],
+        [
+         -2640.87,
+         -20363.9,
+-        647.6
++        648.76
+        ],
+        [
+         -2632.47,
+         -20365.57,
+-        647.7
++        648.85
+        ],
+        [
+         -2632.45,
+         -20365.58,
+-        647.7
++        648.85
+        ],
+        [
+         -2622.75,
+         -20367.6,
+-        647.81
++        648.95
+        ],
+        [
+         -2613.04,
+         -20369.62,
+-        647.92
++        649.05
+        ],
+        [
+         -2603.34,
+         -20371.64,
+-        648.02
++        649.15
+        ],
+        [
+         -2593.63,
+         -20373.67,
+-        648.13
++        649.26
+        ],
+        [
+         -2583.93,
+         -20375.69,
+-        648.24
++        649.36
+        ],
+        [
+         -2574.23,
+         -20377.71,
+-        648.35
++        649.46
+        ],
+        [
+         -2564.52,
+         -20379.74,
+-        648.46
++        649.56
+        ],
+        [
+         -2554.82,
+         -20381.76,
+-        648.57
++        649.66
+        ],
+        [
+         -2545.11,
+         -20383.78,
+-        648.68
++        649.77
+        ],
+        [
+         -2535.41,
+         -20385.8,
+-        648.79
++        649.87
+        ],
+        [
+         -2525.71,
+         -20387.83,
+-        648.9
++        649.97
+        ],
+        [
+         -2516.0,
+         -20389.85,
+-        649.01
++        650.07
+        ],
+        [
+         -2506.3,
+         -20391.87,
+-        649.12
++        650.17
+        ],
+        [
+         -2496.6,
+         -20393.9,
+-        649.23
++        650.28
+        ],
+        [
+         -2486.89,
+         -20395.92,
+-        649.34
++        650.38
+        ],
+        [
+         -2477.19,
+         -20397.94,
+-        649.45
++        650.48
+        ],
+        [
+         -2467.48,
+         -20399.97,
+-        649.56
++        650.58
+        ],
+        [
+         -2457.78,
+         -20401.99,
+-        649.67
++        650.68
+        ],
+        [
+         -2448.08,
+         -20404.01,
+-        649.78
++        650.79
+        ],
+        [
+         -2438.37,
+         -20406.03,
+-        649.89
++        650.89
+        ],
+        [
+         -2428.67,
+         -20408.06,
+-        650.0
++        650.99
+        ],
+        [
+         -2418.96,
+         -20410.08,
+-        650.11
++        651.09
+        ],
+        [
+         -2409.26,
+         -20412.1,
+-        650.22
++        651.2
+        ],
+        [
+         -2399.56,
+         -20414.13,
+-        650.33
++        651.3
+        ],
+        [
+         -2389.85,
+         -20416.15,
+-        650.44
++        651.4
+        ],
+        [
+         -2380.15,
+         -20418.17,
+-        650.55
++        651.5
+        ],
+        [
+         -2360.74,
+         -20422.22,
+-        650.77
++        651.6
+        ],
+        [
+         -2351.04,
+         -20424.24,
+-        650.88
++        651.6
+        ],
+        [
+         -2341.33,
+         -20426.26,
+-        650.99
++        651.6
+        ],
+        [
+         -2331.63,
+         -20428.29,
+-        651.1
++        651.6
+        ],
+        [
+         -2321.93,
+         -20430.31,
+-        651.1
++        651.6
+        ],
+        [
+         -2312.22,
+         -20432.33,
+-        651.1
++        651.6
+        ],
+        [
+         -2302.52,
+         -20434.36,
+-        651.1
++        651.6
+        ],
+        [
+         -2292.81,
+         -20436.38,
+-        651.1
++        651.6
+        ],
+        [
+         -2283.11,
+         -20438.4,
+-        651.1
++        651.6
+        ],
+        [
+         -2273.41,
+         -20440.42,
+-        651.1
++        651.6
+        ],
+        [
+         -2263.7,
+         -20442.45,
+-        651.1
++        651.6
+        ],
+        [
+         -2254.0,
+         -20444.47,
+-        651.1
++        651.6
+        ],
+        [
+         -2244.29,
+         -20446.49,
+-        651.1
++        651.6
+        ],
+        [
+         -2234.59,
+         -20448.52,
+-        651.1
++        651.6
+        ],
+        [
+         -2224.89,
+         -20450.54,
+-        651.0
++        651.5
+        ],
+        [
+         -2215.18,
+         -20452.56,
+-        650.89
++        651.39
+        ],
+        [
+         -2205.48,
+         -20454.58,
+-        650.78
++        651.28
+        ],
+        [
+         -2195.78,
+         -20456.61,
+-        650.67
++        651.17
+        ],
+        [
+         -2186.07,
+         -20458.63,
+-        650.56
++        651.06
+        ],
+        [
+         -2176.37,
+         -20460.65,
+-        650.45
++        650.95
+        ],
+        [
+         -2166.66,
+         -20462.68,
+-        650.35
++        650.85
+        ],
+        [
+         -2156.96,
+         -20464.7,
+-        650.24
++        650.74
+        ],
+        [
+         -2147.26,
+         -20466.72,
+-        650.13
++        650.63
+        ],
+        [
+         -2137.55,
+         -20468.75,
+-        650.02
++        650.52
+        ],
+        [
+         -2127.85,
+         -20470.77,
+-        649.91
++        650.41
+        ],
+        [
+         -2118.14,
+         -20472.79,
+-        649.8
++        650.3
+        ],
+        [
+         -2108.44,
+         -20474.81,
+-        649.69
++        650.19
+        ],
+        [
+         -2098.74,
+         -20476.84,
+-        649.58
++        650.08
+        ],
+        [
+         -2089.03,
+         -20478.86,
+-        649.47
++        649.97
+        ],
+        [
+         -2079.33,
+         -20480.88,
+-        649.36
++        649.86
+        ],
+        [
+         -2069.63,
+         -20482.91,
+-        649.26
++        649.76
+        ],
+        [
+         -2059.92,
+         -20484.93,
+-        649.15
++        649.65
+        ],
+        [
+         -2050.22,
+         -20486.95,
+-        649.04
++        649.54
+        ],
+        [
+         -2040.51,
+         -20488.97,
+-        648.93
++        649.43
+        ],
+        [
+         -2030.81,
+         -20491.0,
+-        648.82
++        649.32
+        ],
+        [
+         -2021.11,
+         -20493.02,
+-        648.71
++        649.21
+        ],
+        [
+         -2011.4,
+         -20495.04,
+-        648.6
++        649.1
+        ],
+        [
+         -2001.7,
+         -20497.07,
+-        648.49
++        648.99
+        ],
+        [
+         -1991.99,
+         -20499.09,
+-        648.38
++        648.88
+        ],
+        [
+         -1982.29,
+         -20501.11,
+-        648.27
++        648.77
+        ],
+        [
+         -1972.59,
+         -20503.14,
+-        648.17
++        648.67
+        ],
+        [
+         -1962.88,
+         -20505.16,
+-        648.06
++        648.56
+        ],
+        [
+         -1953.18,
+         -20507.18,
+-        647.95
++        648.45
+        ],
+        [
+         -1943.47,
+         -20509.2,
+-        647.84
++        648.34
+        ],
+        [
+         -1933.77,
+         -20511.23,
+-        647.73
++        648.23
+        ],
+        [
+         -1924.07,
+         -20513.25,
+-        647.62
++        648.12
+        ],
+        [
+         -1914.36,
+         -20515.27,
+-        647.51
++        648.01
+        ],
+        [
+         -1904.66,
+         -20517.3,
+-        647.4
++        647.9
+        ],
+        [
+         -1894.96,
+         -20519.32,
+-        647.29
++        647.79
+        ],
+        [
+         -1885.25,
+         -20521.34,
+-        647.18
++        647.68
+        ],
+        [
+         -1875.55,
+         -20523.36,
+-        647.07
++        647.57
+        ],
+        [
+         -1865.84,
+         -20525.39,
+-        646.97
++        647.47
+        ],
+        [
+         -1856.14,
+         -20527.41,
+-        646.86
++        647.36
+        ],
+        [
+         -1846.44,
+         -20529.43,
+-        646.75
++        647.25
+        ]
+       ],
+       "struct": [
+@@ -38996,472 +38996,472 @@
+        [
+         -2925.0,
+         -20360.0,
+-        647.0
++        648.2
+        ],
+        [
+         -2735.01,
+         -20360.0,
+-        647.0
++        648.2
+        ],
+        [
+         -2726.48,
+         -20360.07,
+-        647.0
++        648.2
+        ],
+        [
+         -2717.96,
+         -20360.29,
+-        647.0
++        648.2
+        ],
+        [
+         -2709.45,
+         -20360.66,
+-        647.0
++        648.2
+        ],
+        [
+         -2700.94,
+         -20361.17,
+-        647.0
++        648.2
+        ],
+        [
+         -2692.45,
+         -20361.82,
+-        647.03
++        648.23
+        ],
+        [
+         -2683.97,
+         -20362.62,
+-        647.13
++        648.32
+        ],
+        [
+         -2675.5,
+         -20363.57,
+-        647.22
++        648.41
+        ],
+        [
+         -2667.05,
+         -20364.66,
+-        647.32
++        648.49
+        ],
+        [
+         -2658.62,
+         -20365.9,
+-        647.41
++        648.58
+        ],
+        [
+         -2650.21,
+         -20367.28,
+-        647.51
++        648.67
+        ],
+        [
+         -2641.83,
+         -20368.8,
+-        647.6
++        648.76
+        ],
+        [
+         -2633.46,
+         -20370.47,
+-        647.7
++        648.85
+        ],
+        [
+         -2623.77,
+         -20372.49,
+-        647.81
++        648.95
+        ],
+        [
+         -2614.06,
+         -20374.52,
+-        647.92
++        649.05
+        ],
+        [
+         -2604.36,
+         -20376.54,
+-        648.02
++        649.15
+        ],
+        [
+         -2594.65,
+         -20378.56,
+-        648.13
++        649.26
+        ],
+        [
+         -2584.95,
+         -20380.58,
+-        648.24
++        649.36
+        ],
+        [
+         -2575.25,
+         -20382.61,
+-        648.35
++        649.46
+        ],
+        [
+         -2565.54,
+         -20384.63,
+-        648.46
++        649.56
+        ],
+        [
+         -2555.84,
+         -20386.65,
+-        648.57
++        649.66
+        ],
+        [
+         -2546.14,
+         -20388.68,
+-        648.68
++        649.77
+        ],
+        [
+         -2536.43,
+         -20390.7,
+-        648.79
++        649.87
+        ],
+        [
+         -2526.73,
+         -20392.72,
+-        648.9
++        649.97
+        ],
+        [
+         -2517.02,
+         -20394.75,
+-        649.01
++        650.07
+        ],
+        [
+         -2507.32,
+         -20396.77,
+-        649.12
++        650.17
+        ],
+        [
+         -2497.62,
+         -20398.79,
+-        649.23
++        650.28
+        ],
+        [
+         -2487.91,
+         -20400.81,
+-        649.34
++        650.38
+        ],
+        [
+         -2478.21,
+         -20402.84,
+-        649.45
++        650.48
+        ],
+        [
+         -2468.5,
+         -20404.86,
+-        649.56
++        650.58
+        ],
+        [
+         -2458.8,
+         -20406.88,
+-        649.67
++        650.68
+        ],
+        [
+         -2449.1,
+         -20408.91,
+-        649.78
++        650.79
+        ],
+        [
+         -2439.39,
+         -20410.93,
+-        649.89
++        650.89
+        ],
+        [
+         -2429.69,
+         -20412.95,
+-        650.0
++        650.99
+        ],
+        [
+         -2419.98,
+         -20414.97,
+-        650.11
++        651.09
+        ],
+        [
+         -2410.28,
+         -20417.0,
+-        650.22
++        651.2
+        ],
+        [
+         -2400.58,
+         -20419.02,
+-        650.33
++        651.3
+        ],
+        [
+         -2390.87,
+         -20421.04,
+-        650.44
++        651.4
+        ],
+        [
+         -2381.17,
+         -20423.07,
+-        650.55
++        651.5
+        ],
+        [
+         -2361.76,
+         -20427.11,
+-        650.77
++        651.6
+        ],
+        [
+         -2352.06,
+         -20429.14,
+-        650.88
++        651.6
+        ],
+        [
+         -2342.35,
+         -20431.16,
+-        650.99
++        651.6
+        ],
+        [
+         -2332.65,
+         -20433.18,
+-        651.1
++        651.6
+        ],
+        [
+         -2322.95,
+         -20435.2,
+-        651.1
++        651.6
+        ],
+        [
+         -2313.24,
+         -20437.23,
+-        651.1
++        651.6
+        ],
+        [
+         -2303.54,
+         -20439.25,
+-        651.1
++        651.6
+        ],
+        [
+         -2293.83,
+         -20441.27,
+-        651.1
++        651.6
+        ],
+        [
+         -2284.13,
+         -20443.3,
+-        651.1
++        651.6
+        ],
+        [
+         -2274.43,
+         -20445.32,
+-        651.1
++        651.6
+        ],
+        [
+         -2264.72,
+         -20447.34,
+-        651.1
++        651.6
+        ],
+        [
+         -2255.02,
+         -20449.36,
+-        651.1
++        651.6
+        ],
+        [
+         -2245.32,
+         -20451.39,
+-        651.1
++        651.6
+        ],
+        [
+         -2235.61,
+         -20453.41,
+-        651.1
++        651.6
+        ],
+        [
+         -2225.91,
+         -20455.43,
+-        651.0
++        651.5
+        ],
+        [
+         -2216.2,
+         -20457.46,
+-        650.89
++        651.39
+        ],
+        [
+         -2206.5,
+         -20459.48,
+-        650.78
++        651.28
+        ],
+        [
+         -2196.8,
+         -20461.5,
+-        650.67
++        651.17
+        ],
+        [
+         -2187.09,
+         -20463.53,
+-        650.56
++        651.06
+        ],
+        [
+         -2177.39,
+         -20465.55,
+-        650.45
++        650.95
+        ],
+        [
+         -2167.68,
+         -20467.57,
+-        650.35
++        650.85
+        ],
+        [
+         -2157.98,
+         -20469.59,
+-        650.24
++        650.74
+        ],
+        [
+         -2148.28,
+         -20471.62,
+-        650.13
++        650.63
+        ],
+        [
+         -2138.57,
+         -20473.64,
+-        650.02
++        650.52
+        ],
+        [
+         -2128.87,
+         -20475.66,
+-        649.91
++        650.41
+        ],
+        [
+         -2119.16,
+         -20477.69,
+-        649.8
++        650.3
+        ],
+        [
+         -2109.46,
+         -20479.71,
+-        649.69
++        650.19
+        ],
+        [
+         -2099.76,
+         -20481.73,
+-        649.58
++        650.08
+        ],
+        [
+         -2090.05,
+         -20483.75,
+-        649.47
++        649.97
+        ],
+        [
+         -2080.35,
+         -20485.78,
+-        649.36
++        649.86
+        ],
+        [
+         -2070.65,
+         -20487.8,
+-        649.26
++        649.76
+        ],
+        [
+         -2060.94,
+         -20489.82,
+-        649.15
++        649.65
+        ],
+        [
+         -2051.24,
+         -20491.85,
+-        649.04
++        649.54
+        ],
+        [
+         -2041.53,
+         -20493.87,
+-        648.93
++        649.43
+        ],
+        [
+         -2031.83,
+         -20495.89,
+-        648.82
++        649.32
+        ],
+        [
+         -2022.13,
+         -20497.92,
+-        648.71
++        649.21
+        ],
+        [
+         -2012.42,
+         -20499.94,
+-        648.6
++        649.1
+        ],
+        [
+         -2002.72,
+         -20501.96,
+-        648.49
++        648.99
+        ],
+        [
+         -1993.01,
+         -20503.98,
+-        648.38
++        648.88
+        ],
+        [
+         -1983.31,
+         -20506.01,
+-        648.27
++        648.77
+        ],
+        [
+         -1973.61,
+         -20508.03,
+-        648.17
++        648.67
+        ],
+        [
+         -1963.9,
+         -20510.05,
+-        648.06
++        648.56
+        ],
+        [
+         -1954.2,
+         -20512.08,
+-        647.95
++        648.45
+        ],
+        [
+         -1944.5,
+         -20514.1,
+-        647.84
++        648.34
+        ],
+        [
+         -1934.79,
+         -20516.12,
+-        647.73
++        648.23
+        ],
+        [
+         -1925.09,
+         -20518.14,
+-        647.62
++        648.12
+        ],
+        [
+         -1915.38,
+         -20520.17,
+-        647.51
++        648.01
+        ],
+        [
+         -1905.68,
+         -20522.19,
+-        647.4
++        647.9
+        ],
+        [
+         -1895.98,
+         -20524.21,
+-        647.29
++        647.79
+        ],
+        [
+         -1886.27,
+         -20526.24,
+-        647.18
++        647.68
+        ],
+        [
+         -1876.57,
+         -20528.26,
+-        647.07
++        647.57
+        ],
+        [
+         -1866.86,
+         -20530.28,
+-        646.97
++        647.47
+        ],
+        [
+         -1857.16,
+         -20532.31,
+-        646.86
++        647.36
+        ],
+        [
+         -1847.46,
+         -20534.33,
+-        646.75
++        647.25
+        ]
+       ],
+       "struct": [
+@@ -39483,23 +39483,23 @@
+     "rail_head_y": [
+      [
+       0.0,
+-      647.0
++      648.2
+      ],
+      [
+       230.0,
+-      647.0
++      648.2
+      ],
+      [
+-      600.0,
+-      651.1
++      560.0,
++      651.6
+      ],
+      [
+       700.0,
+-      651.1
++      651.6
+      ],
+      [
+       1095.7,
+-      646.75
++      647.25
+      ]
+     ],
+     "ends": [
+@@ -39514,7 +39514,7 @@
+      {
+       "x": -1846.9,
+       "z": -20531.9,
+-      "y": 646.75,
++      "y": 647.25,
+       "to": "Алматы-1: остальные 12,4 км 1-й очереди — вне города (за восточной границей района)"
+      }
+     ],
+@@ -40341,7 +40341,7 @@
+      ]
+     ],
+     "source": "реестр rail_agglomeration и agglo_rail_station_1 (ГП727, S03: 1-я очередь Алматы-1 → станция у БАКАД/А-3, 13,2 км, 0,8 км в черте города, 2030); трасса не опубликована (geom None) — модель qTwin",
+-    "why": "модель qTwin: двухпутная линия (колея 1520) приходит с востока через коридор Турксиба и входит в город на его восточной границе южнее БАКАД; развязку А-3 × БАКАД (А-3, её съезды, улица ТПУ) проходит по эстакаде, поэтому станция эстакадная: пути вдоль северной стороны участка станции (сторона к магистралям, как у w44), боковая платформа со стороны вокзала на уровне его второго этажа, упоры в западном конце — тупиковая станция 1-й очереди до продления линии (53,5 км к 2050). Кривая R 500 м, поворот 11,8°; головка рельса 647,0 м на станции, до 651,1 м над А-3, уклоны ≤ 11 ‰; низ пролёта над каждой дорогой ≥ 5,0 м (bridges.road_clearance_m)"
++    "why": "модель qTwin: двухпутная линия (колея 1520) приходит с востока через коридор Турксиба и входит в город на его восточной границе южнее БАКАД; развязку А-3 × БАКАД (А-3, её съезды, улица ТПУ) проходит по эстакаде, поэтому станция эстакадная: пути вдоль северной стороны участка станции (сторона к магистралям, как у w44), боковая платформа со стороны вокзала, вход с его второго этажа лестницами и лифтами, упоры в западном конце — тупиковая станция 1-й очереди до продления линии (53,5 км к 2050). Кривая R 500 м, поворот 11,8°; головка рельса 648,2 м на станции, до 651,6 м над А-3, уклоны ≤ 11 ‰; низ пролёта (головка рельса − 1,8 м, 2,6 м в каждую сторону от оси пути) над каждой проезжей частью ≥ 5,0 м (bridges.road_clearance_m), над проездами и площадками ≥ 4,5 м (fire_access.arches.height_min_m), с запасом 0,3 м; на станции — над самой высокой землёй под пролётом (641,6 м)"
+    }
+   ],
+   "platforms": [
+@@ -40371,7 +40371,7 @@
+       -20361.75
+      ]
+     ],
+-    "y": 648.1,
++    "y": 649.3,
+     "length_m": 130.0,
+     "width_m": 8.0,
+     "years": [
+@@ -43050,6 +43050,23 @@
+    "why": "по источнику: завод PepsiCo в мкр Ынтымақ строится — его корпус есть в OSM (здание двойника bid 48572, 28 041 м², 347 × 82 м); точка реестра стояла среди домов Ынтымака — объект на своём корпусе, корпус остаётся существующим зданием; вокруг — зона i_pepsico (промышленность)",
+    "basis": "по источнику"
+   },
++  {
++   "registry_id": "interchange_a3_km18_5",
++   "name_ru": "Развязка А-3 (съезды OSM), км ≈ 18.5",
++   "action": "keep",
++   "from": [
++    -3240.3,
++    -23782.9
++   ],
++   "to": [
++    -3302.0,
++    -23824.0
++   ],
++   "yaw": null,
++   "accuracy": "point_50m",
++   "why": "по источнику: существующая развязка OSM (узел ic_a3_gatecity, ромб); в Gate её западные съезды fd499b4d и 86370d28 — к Проспекту Gate City; восточные съезды c1053ec1 и 0229484f и проезд 4d44246d с узла А-3 ведут за границу города на обрывок базовой карты (зданий нет, дальше улицы только 2099 г.) — сняты (retire_existing)",
++   "basis": "по источнику"
++  },
+   {
+    "registry_id": "hospitals_stage1",
+    "name_ru": "Больницы 1-й очереди (по 500 коек)",
+@@ -46487,33 +46504,6 @@
+    "axis": null,
+    "why": "существующая дорога OSM, как есть"
+   },
+-  {
+-   "id": "k_0229484f",
+-   "class": "ramp",
+-   "line": [
+-    [
+-     -3163.7,
+-     -23641.2
+-    ],
+-    [
+-     -3140.2,
+-     -23542.8
+-    ]
+-   ],
+-   "name_ru": "съезд развязки",
+-   "years": [
+-    2025,
+-    2025,
+-    2025,
+-    2025
+-   ],
+-   "oneway": true,
+-   "profile": {},
+-   "struct": [],
+-   "source": "keep_existing:0229484f-016f-4280-b5dd-576941e15c15",
+-   "axis": null,
+-   "why": "существующая дорога OSM/Overture, как есть (направление линии = направление движения)"
+-  },
+   {
+    "id": "t_03583699",
+    "class": "village_main",
+@@ -51032,37 +51022,6 @@
+    "axis": null,
+    "why": "существующая дорога OSM, как есть"
+   },
+-  {
+-   "id": "k_c1053ec1",
+-   "class": "ramp",
+-   "line": [
+-    [
+-     -3303.2,
+-     -23858.3
+-    ],
+-    [
+-     -3271.7,
+-     -23828.3
+-    ],
+-    [
+-     -3263.8,
+-     -23822.4
+-    ]
+-   ],
+-   "name_ru": "съезд развязки",
+-   "years": [
+-    2025,
+-    2025,
+-    2025,
+-    2025
+-   ],
+-   "oneway": true,
+-   "profile": {},
+-   "struct": [],
+-   "source": "keep_existing:c1053ec1-be68-4d2b-ac7e-c411cbeb94ef",
+-   "axis": null,
+-   "why": "существующая дорога OSM/Overture, как есть (направление линии = направление движения)"
+-  },
+   {
+    "id": "k_c3d8f394",
+    "class": "expressway",
+@@ -52541,6 +52500,61 @@
+    "axis": null,
+    "why": "существующая дорога OSM/Overture, как есть (направление линии = направление движения)"
+   },
++  {
++   "id": "s_a3_sb_edge",
++   "class": "expressway",
++   "line": [
++    [
++     -3596.5,
++     -24272.4
++    ],
++    [
++     -3599.1,
++     -24270.6
++    ],
++    [
++     -3680.9,
++     -24385.6
++    ]
++   ],
++   "name_ru": "А-3 Алматы – Өскемен",
++   "years": [
++    2025,
++    2025,
++    2025,
++    2025
++   ],
++   "oneway": true,
++   "profile": {
++    "carriageways": 1,
++    "oneway": true,
++    "lanes": [
++     2,
++     0
++    ],
++    "median_w": 0.0,
++    "verge_w": [
++     0.0,
++     10.0
++    ],
++    "sidewalk_w": [
++     0.0,
++     0.0
++    ],
++    "bike_w": [
++     0.0,
++     0.0
++    ],
++    "parking_w": [
++     0.0,
++     0.0
++    ]
++   },
++   "struct": [],
++   "source": "new",
++   "axis": "ax_a3",
++   "why": "существующая проезжая часть А-3 на юг (OSM fa5592e4), 141 м по самой границе района: граница города идёт по ней, и дорога OSM уходила из района и возвращалась; кусок проведён в 0,3 м внутри границы как продолжение той же проезжей части (профиль — как у соседних кусков: одна проезжая часть, 2 полосы), иначе южная часть А-3 в Gate начиналась на границе без связи с А-3 города (стык в 142 м от J025)"
++  },
+   {
+    "id": "v_09d8c252",
+    "class": "village_main",
+@@ -69736,7 +69750,14 @@
+      "effbde64-3e2f-4eee-bf4e-08448961a29e",
+      "f46e8f8f-edcd-48b8-a701-91915f5be751"
+     ],
+-    "why_ru": "существующий клевер с распределительными дорогами по А-3 (OSM/Overture), остаётся как есть; путепроводы БАКАД над А-3"
++    "why_ru": "существующий клевер с распределительными дорогами по А-3 (OSM/Overture), остаётся как есть; путепроводы БАКАД над А-3",
++    "ramps": {
++     "А-3 S → БАКАД E": {
++      "lanes": 2,
++      "from_year": 2035,
++      "why_ru": "реконструкция петли: спрос выше 1 200 авт./ч (норма второй полосы), модель qTwin"
++     }
++    }
+    }
+   },
+   {
+@@ -69786,14 +69807,12 @@
+    ],
+    "params": {
+     "keep_existing": true,
+-    "registry_id": "interchange_a3_km16_5",
++    "registry_id": "interchange_a3_km18_5",
+     "osm_ids": [
+      "fd499b4d-9b45-4d37-ae5e-8b4a6266d494",
+-     "86370d28-face-46d4-be2e-99d73076ebbd",
+-     "c1053ec1-be68-4d2b-ac7e-c411cbeb94ef",
+-     "0229484f-016f-4280-b5dd-576941e15c15"
++     "86370d28-face-46d4-be2e-99d73076ebbd"
+     ],
+-    "why_ru": "существующий съезд А-3 у ЖК Gate City (OSM); Проспект Gate City приходит к его концевому узлу"
++    "why_ru": "существующий съезд А-3 у ЖК Gate City (OSM, реестр interchange_a3_km18_5 в 74 м); Проспект Gate City приходит к его концевому узлу; восточные съезды (c1053ec1, 0229484f) за границей города сняты (retire_existing)"
+    }
+   }
+  ],
+@@ -72734,6 +72753,20 @@
+   "fb1bfb90-558c-4e2d-8d5d-7663484506a6",
+   "ffb2b599-40b0-4827-b1b7-19c51c182ffe"
+  ],
++ "retire_existing": [
++  {
++   "osm": "0229484f-016f-4280-b5dd-576941e15c15",
++   "why_ru": "съезд / проезд ведёт за границу города на обрывок базовой карты двойника (петля и тупики к востоку от А-3, зданий нет, дальше улицы только 2099 г.): машин нет ни в одном году — снят; развязка у ЖК Gate City работает западными съездами"
++  },
++  {
++   "osm": "4d44246d-66ed-47a2-90ed-c09d54522cb5",
++   "why_ru": "съезд / проезд ведёт за границу города на обрывок базовой карты двойника (петля и тупики к востоку от А-3, зданий нет, дальше улицы только 2099 г.): машин нет ни в одном году — снят; развязка у ЖК Gate City работает западными съездами"
++  },
++  {
++   "osm": "c1053ec1-be68-4d2b-ac7e-c411cbeb94ef",
++   "why_ru": "съезд / проезд ведёт за границу города на обрывок базовой карты двойника (петля и тупики к востоку от А-3, зданий нет, дальше улицы только 2099 г.): машин нет ни в одном году — снят; развязка у ЖК Gate City работает западными съездами"
++  }
++ ],
+  "scheme_changes": [
+   {
+    "id": "residential_low, logistics, industry",
+@@ -72825,7 +72858,7 @@
+  "checks": {
+   "loads": {
+    "ok": true,
+-   "n": 656,
++   "n": 655,
+    "issues": []
+   },
+   "inside_area": {
+@@ -72841,13 +72874,13 @@
+   },
+   "street_ends": {
+    "ok": true,
+-   "n": 1136,
++   "n": 1134,
+    "issues": [],
+    "note": "свободных концов 0"
+   },
+   "keep_not_crossed": {
+    "ok": true,
+-   "n": 568,
++   "n": 567,
+    "issues": []
+   },
+   "registry_present": {
+@@ -73026,24 +73059,24 @@
+     "arterial_regulated": 10.2,
+     "boulevard": 0.3,
+     "district_transport": 32.7,
+-    "expressway": 31.7,
++    "expressway": 31.8,
+     "industrial": 7.1,
+     "local": 143.1,
+     "local_secondary": 0.1,
+     "pedestrian_street": 1.3,
+-    "ramp": 8.3,
++    "ramp": 8.1,
+     "village_lane": 7.7,
+     "village_main": 7.9,
+     "village_secondary": 3.0
+    },
+-   "streets": 568
++   "streets": 567
+   },
+   "passed": true,
+   "build_log": [
+    {
+     "what": "местные улицы сгенерированы",
+     "n": 218,
+-    "s": 10.2
++    "s": 2.1
+    },
+    {
+     "what": "улица каркаса продолжена до ближайшей улицы",
+diff --git a/tools/map/spec/gate_trial.json b/tools/map/spec/gate_trial.json
+index 3cdbf31..ff0fba8 100644
+--- a/tools/map/spec/gate_trial.json
++++ b/tools/map/spec/gate_trial.json
+@@ -7039,537 +7039,537 @@
+        [
+         -2925.0,
+         -20355.0,
+-        647.0
++        648.2
+        ],
+        [
+         -2735.0,
+         -20355.0,
+-        647.0
++        648.2
+        ],
+        [
+         -2734.98,
+         -20355.0,
+-        647.0
++        648.2
+        ],
+        [
+         -2726.42,
+         -20355.07,
+-        647.0
++        648.2
+        ],
+        [
+         -2726.37,
+         -20355.07,
+-        647.0
++        648.2
+        ],
+        [
+         -2717.81,
+         -20355.29,
+-        647.0
++        648.2
+        ],
+        [
+         -2717.77,
+         -20355.3,
+-        647.0
++        648.2
+        ],
+        [
+         -2709.21,
+         -20355.66,
+-        647.0
++        648.2
+        ],
+        [
+         -2709.17,
+         -20355.66,
+-        647.0
++        648.2
+        ],
+        [
+         -2700.62,
+         -20356.18,
+-        647.0
++        648.2
+        ],
+        [
+         -2700.58,
+         -20356.18,
+-        647.0
++        648.2
+        ],
+        [
+         -2692.04,
+         -20356.84,
+-        647.03
++        648.23
+        ],
+        [
+         -2692.0,
+         -20356.84,
+-        647.03
++        648.23
+        ],
+        [
+         -2683.47,
+         -20357.65,
+-        647.13
++        648.32
+        ],
+        [
+         -2683.43,
+         -20357.65,
+-        647.13
++        648.32
+        ],
+        [
+         -2674.92,
+         -20358.6,
+-        647.22
++        648.41
+        ],
+        [
+         -2674.88,
+         -20358.61,
+-        647.22
++        648.41
+        ],
+        [
+         -2666.39,
+         -20359.71,
+-        647.32
++        648.49
+        ],
+        [
+         -2666.34,
+         -20359.71,
+-        647.32
++        648.49
+        ],
+        [
+         -2657.87,
+         -20360.95,
+-        647.41
++        648.58
+        ],
+        [
+         -2657.83,
+         -20360.96,
+-        647.41
++        648.58
+        ],
+        [
+         -2649.38,
+         -20362.35,
+-        647.51
++        648.67
+        ],
+        [
+         -2649.34,
+         -20362.36,
+-        647.51
++        648.67
+        ],
+        [
+         -2640.91,
+         -20363.89,
+-        647.6
++        648.76
+        ],
+        [
+         -2640.87,
+         -20363.9,
+-        647.6
++        648.76
+        ],
+        [
+         -2632.47,
+         -20365.57,
+-        647.7
++        648.85
+        ],
+        [
+         -2632.45,
+         -20365.58,
+-        647.7
++        648.85
+        ],
+        [
+         -2622.75,
+         -20367.6,
+-        647.81
++        648.95
+        ],
+        [
+         -2613.04,
+         -20369.62,
+-        647.92
++        649.05
+        ],
+        [
+         -2603.34,
+         -20371.64,
+-        648.02
++        649.15
+        ],
+        [
+         -2593.63,
+         -20373.67,
+-        648.13
++        649.26
+        ],
+        [
+         -2583.93,
+         -20375.69,
+-        648.24
++        649.36
+        ],
+        [
+         -2574.23,
+         -20377.71,
+-        648.35
++        649.46
+        ],
+        [
+         -2564.52,
+         -20379.74,
+-        648.46
++        649.56
+        ],
+        [
+         -2554.82,
+         -20381.76,
+-        648.57
++        649.66
+        ],
+        [
+         -2545.11,
+         -20383.78,
+-        648.68
++        649.77
+        ],
+        [
+         -2535.41,
+         -20385.8,
+-        648.79
++        649.87
+        ],
+        [
+         -2525.71,
+         -20387.83,
+-        648.9
++        649.97
+        ],
+        [
+         -2516.0,
+         -20389.85,
+-        649.01
++        650.07
+        ],
+        [
+         -2506.3,
+         -20391.87,
+-        649.12
++        650.17
+        ],
+        [
+         -2496.6,
+         -20393.9,
+-        649.23
++        650.28
+        ],
+        [
+         -2486.89,
+         -20395.92,
+-        649.34
++        650.38
+        ],
+        [
+         -2477.19,
+         -20397.94,
+-        649.45
++        650.48
+        ],
+        [
+         -2467.48,
+         -20399.97,
+-        649.56
++        650.58
+        ],
+        [
+         -2457.78,
+         -20401.99,
+-        649.67
++        650.68
+        ],
+        [
+         -2448.08,
+         -20404.01,
+-        649.78
++        650.79
+        ],
+        [
+         -2438.37,
+         -20406.03,
+-        649.89
++        650.89
+        ],
+        [
+         -2428.67,
+         -20408.06,
+-        650.0
++        650.99
+        ],
+        [
+         -2418.96,
+         -20410.08,
+-        650.11
++        651.09
+        ],
+        [
+         -2409.26,
+         -20412.1,
+-        650.22
++        651.2
+        ],
+        [
+         -2399.56,
+         -20414.13,
+-        650.33
++        651.3
+        ],
+        [
+         -2389.85,
+         -20416.15,
+-        650.44
++        651.4
+        ],
+        [
+         -2380.15,
+         -20418.17,
+-        650.55
++        651.5
+        ],
+        [
+         -2360.74,
+         -20422.22,
+-        650.77
++        651.6
+        ],
+        [
+         -2351.04,
+         -20424.24,
+-        650.88
++        651.6
+        ],
+        [
+         -2341.33,
+         -20426.26,
+-        650.99
++        651.6
+        ],
+        [
+         -2331.63,
+         -20428.29,
+-        651.1
++        651.6
+        ],
+        [
+         -2321.93,
+         -20430.31,
+-        651.1
++        651.6
+        ],
+        [
+         -2312.22,
+         -20432.33,
+-        651.1
++        651.6
+        ],
+        [
+         -2302.52,
+         -20434.36,
+-        651.1
++        651.6
+        ],
+        [
+         -2292.81,
+         -20436.38,
+-        651.1
++        651.6
+        ],
+        [
+         -2283.11,
+         -20438.4,
+-        651.1
++        651.6
+        ],
+        [
+         -2273.41,
+         -20440.42,
+-        651.1
++        651.6
+        ],
+        [
+         -2263.7,
+         -20442.45,
+-        651.1
++        651.6
+        ],
+        [
+         -2254.0,
+         -20444.47,
+-        651.1
++        651.6
+        ],
+        [
+         -2244.29,
+         -20446.49,
+-        651.1
++        651.6
+        ],
+        [
+         -2234.59,
+         -20448.52,
+-        651.1
++        651.6
+        ],
+        [
+         -2224.89,
+         -20450.54,
+-        651.0
++        651.5
+        ],
+        [
+         -2215.18,
+         -20452.56,
+-        650.89
++        651.39
+        ],
+        [
+         -2205.48,
+         -20454.58,
+-        650.78
++        651.28
+        ],
+        [
+         -2195.78,
+         -20456.61,
+-        650.67
++        651.17
+        ],
+        [
+         -2186.07,
+         -20458.63,
+-        650.56
++        651.06
+        ],
+        [
+         -2176.37,
+         -20460.65,
+-        650.45
++        650.95
+        ],
+        [
+         -2166.66,
+         -20462.68,
+-        650.35
++        650.85
+        ],
+        [
+         -2156.96,
+         -20464.7,
+-        650.24
++        650.74
+        ],
+        [
+         -2147.26,
+         -20466.72,
+-        650.13
++        650.63
+        ],
+        [
+         -2137.55,
+         -20468.75,
+-        650.02
++        650.52
+        ],
+        [
+         -2127.85,
+         -20470.77,
+-        649.91
++        650.41
+        ],
+        [
+         -2118.14,
+         -20472.79,
+-        649.8
++        650.3
+        ],
+        [
+         -2108.44,
+         -20474.81,
+-        649.69
++        650.19
+        ],
+        [
+         -2098.74,
+         -20476.84,
+-        649.58
++        650.08
+        ],
+        [
+         -2089.03,
+         -20478.86,
+-        649.47
++        649.97
+        ],
+        [
+         -2079.33,
+         -20480.88,
+-        649.36
++        649.86
+        ],
+        [
+         -2069.63,
+         -20482.91,
+-        649.26
++        649.76
+        ],
+        [
+         -2059.92,
+         -20484.93,
+-        649.15
++        649.65
+        ],
+        [
+         -2050.22,
+         -20486.95,
+-        649.04
++        649.54
+        ],
+        [
+         -2040.51,
+         -20488.97,
+-        648.93
++        649.43
+        ],
+        [
+         -2030.81,
+         -20491.0,
+-        648.82
++        649.32
+        ],
+        [
+         -2021.11,
+         -20493.02,
+-        648.71
++        649.21
+        ],
+        [
+         -2011.4,
+         -20495.04,
+-        648.6
++        649.1
+        ],
+        [
+         -2001.7,
+         -20497.07,
+-        648.49
++        648.99
+        ],
+        [
+         -1991.99,
+         -20499.09,
+-        648.38
++        648.88
+        ],
+        [
+         -1982.29,
+         -20501.11,
+-        648.27
++        648.77
+        ],
+        [
+         -1972.59,
+         -20503.14,
+-        648.17
++        648.67
+        ],
+        [
+         -1962.88,
+         -20505.16,
+-        648.06
++        648.56
+        ],
+        [
+         -1953.18,
+         -20507.18,
+-        647.95
++        648.45
+        ],
+        [
+         -1943.47,
+         -20509.2,
+-        647.84
++        648.34
+        ],
+        [
+         -1933.77,
+         -20511.23,
+-        647.73
++        648.23
+        ],
+        [
+         -1924.07,
+         -20513.25,
+-        647.62
++        648.12
+        ],
+        [
+         -1914.36,
+         -20515.27,
+-        647.51
++        648.01
+        ],
+        [
+         -1904.66,
+         -20517.3,
+-        647.4
++        647.9
+        ],
+        [
+         -1894.96,
+         -20519.32,
+-        647.29
++        647.79
+        ],
+        [
+         -1885.25,
+         -20521.34,
+-        647.18
++        647.68
+        ],
+        [
+         -1875.55,
+         -20523.36,
+-        647.07
++        647.57
+        ],
+        [
+         -1865.84,
+         -20525.39,
+-        646.97
++        647.47
+        ],
+        [
+         -1856.14,
+         -20527.41,
+-        646.86
++        647.36
+        ],
+        [
+         -1846.44,
+         -20529.43,
+-        646.75
++        647.25
+        ]
+       ],
+       "struct": [
+@@ -7587,472 +7587,472 @@
+        [
+         -2925.0,
+         -20360.0,
+-        647.0
++        648.2
+        ],
+        [
+         -2735.01,
+         -20360.0,
+-        647.0
++        648.2
+        ],
+        [
+         -2726.48,
+         -20360.07,
+-        647.0
++        648.2
+        ],
+        [
+         -2717.96,
+         -20360.29,
+-        647.0
++        648.2
+        ],
+        [
+         -2709.45,
+         -20360.66,
+-        647.0
++        648.2
+        ],
+        [
+         -2700.94,
+         -20361.17,
+-        647.0
++        648.2
+        ],
+        [
+         -2692.45,
+         -20361.82,
+-        647.03
++        648.23
+        ],
+        [
+         -2683.97,
+         -20362.62,
+-        647.13
++        648.32
+        ],
+        [
+         -2675.5,
+         -20363.57,
+-        647.22
++        648.41
+        ],
+        [
+         -2667.05,
+         -20364.66,
+-        647.32
++        648.49
+        ],
+        [
+         -2658.62,
+         -20365.9,
+-        647.41
++        648.58
+        ],
+        [
+         -2650.21,
+         -20367.28,
+-        647.51
++        648.67
+        ],
+        [
+         -2641.83,
+         -20368.8,
+-        647.6
++        648.76
+        ],
+        [
+         -2633.46,
+         -20370.47,
+-        647.7
++        648.85
+        ],
+        [
+         -2623.77,
+         -20372.49,
+-        647.81
++        648.95
+        ],
+        [
+         -2614.06,
+         -20374.52,
+-        647.92
++        649.05
+        ],
+        [
+         -2604.36,
+         -20376.54,
+-        648.02
++        649.15
+        ],
+        [
+         -2594.65,
+         -20378.56,
+-        648.13
++        649.26
+        ],
+        [
+         -2584.95,
+         -20380.58,
+-        648.24
++        649.36
+        ],
+        [
+         -2575.25,
+         -20382.61,
+-        648.35
++        649.46
+        ],
+        [
+         -2565.54,
+         -20384.63,
+-        648.46
++        649.56
+        ],
+        [
+         -2555.84,
+         -20386.65,
+-        648.57
++        649.66
+        ],
+        [
+         -2546.14,
+         -20388.68,
+-        648.68
++        649.77
+        ],
+        [
+         -2536.43,
+         -20390.7,
+-        648.79
++        649.87
+        ],
+        [
+         -2526.73,
+         -20392.72,
+-        648.9
++        649.97
+        ],
+        [
+         -2517.02,
+         -20394.75,
+-        649.01
++        650.07
+        ],
+        [
+         -2507.32,
+         -20396.77,
+-        649.12
++        650.17
+        ],
+        [
+         -2497.62,
+         -20398.79,
+-        649.23
++        650.28
+        ],
+        [
+         -2487.91,
+         -20400.81,
+-        649.34
++        650.38
+        ],
+        [
+         -2478.21,
+         -20402.84,
+-        649.45
++        650.48
+        ],
+        [
+         -2468.5,
+         -20404.86,
+-        649.56
++        650.58
+        ],
+        [
+         -2458.8,
+         -20406.88,
+-        649.67
++        650.68
+        ],
+        [
+         -2449.1,
+         -20408.91,
+-        649.78
++        650.79
+        ],
+        [
+         -2439.39,
+         -20410.93,
+-        649.89
++        650.89
+        ],
+        [
+         -2429.69,
+         -20412.95,
+-        650.0
++        650.99
+        ],
+        [
+         -2419.98,
+         -20414.97,
+-        650.11
++        651.09
+        ],
+        [
+         -2410.28,
+         -20417.0,
+-        650.22
++        651.2
+        ],
+        [
+         -2400.58,
+         -20419.02,
+-        650.33
++        651.3
+        ],
+        [
+         -2390.87,
+         -20421.04,
+-        650.44
++        651.4
+        ],
+        [
+         -2381.17,
+         -20423.07,
+-        650.55
++        651.5
+        ],
+        [
+         -2361.76,
+         -20427.11,
+-        650.77
++        651.6
+        ],
+        [
+         -2352.06,
+         -20429.14,
+-        650.88
++        651.6
+        ],
+        [
+         -2342.35,
+         -20431.16,
+-        650.99
++        651.6
+        ],
+        [
+         -2332.65,
+         -20433.18,
+-        651.1
++        651.6
+        ],
+        [
+         -2322.95,
+         -20435.2,
+-        651.1
++        651.6
+        ],
+        [
+         -2313.24,
+         -20437.23,
+-        651.1
++        651.6
+        ],
+        [
+         -2303.54,
+         -20439.25,
+-        651.1
++        651.6
+        ],
+        [
+         -2293.83,
+         -20441.27,
+-        651.1
++        651.6
+        ],
+        [
+         -2284.13,
+         -20443.3,
+-        651.1
++        651.6
+        ],
+        [
+         -2274.43,
+         -20445.32,
+-        651.1
++        651.6
+        ],
+        [
+         -2264.72,
+         -20447.34,
+-        651.1
++        651.6
+        ],
+        [
+         -2255.02,
+         -20449.36,
+-        651.1
++        651.6
+        ],
+        [
+         -2245.32,
+         -20451.39,
+-        651.1
++        651.6
+        ],
+        [
+         -2235.61,
+         -20453.41,
+-        651.1
++        651.6
+        ],
+        [
+         -2225.91,
+         -20455.43,
+-        651.0
++        651.5
+        ],
+        [
+         -2216.2,
+         -20457.46,
+-        650.89
++        651.39
+        ],
+        [
+         -2206.5,
+         -20459.48,
+-        650.78
++        651.28
+        ],
+        [
+         -2196.8,
+         -20461.5,
+-        650.67
++        651.17
+        ],
+        [
+         -2187.09,
+         -20463.53,
+-        650.56
++        651.06
+        ],
+        [
+         -2177.39,
+         -20465.55,
+-        650.45
++        650.95
+        ],
+        [
+         -2167.68,
+         -20467.57,
+-        650.35
++        650.85
+        ],
+        [
+         -2157.98,
+         -20469.59,
+-        650.24
++        650.74
+        ],
+        [
+         -2148.28,
+         -20471.62,
+-        650.13
++        650.63
+        ],
+        [
+         -2138.57,
+         -20473.64,
+-        650.02
++        650.52
+        ],
+        [
+         -2128.87,
+         -20475.66,
+-        649.91
++        650.41
+        ],
+        [
+         -2119.16,
+         -20477.69,
+-        649.8
++        650.3
+        ],
+        [
+         -2109.46,
+         -20479.71,
+-        649.69
++        650.19
+        ],
+        [
+         -2099.76,
+         -20481.73,
+-        649.58
++        650.08
+        ],
+        [
+         -2090.05,
+         -20483.75,
+-        649.47
++        649.97
+        ],
+        [
+         -2080.35,
+         -20485.78,
+-        649.36
++        649.86
+        ],
+        [
+         -2070.65,
+         -20487.8,
+-        649.26
++        649.76
+        ],
+        [
+         -2060.94,
+         -20489.82,
+-        649.15
++        649.65
+        ],
+        [
+         -2051.24,
+         -20491.85,
+-        649.04
++        649.54
+        ],
+        [
+         -2041.53,
+         -20493.87,
+-        648.93
++        649.43
+        ],
+        [
+         -2031.83,
+         -20495.89,
+-        648.82
++        649.32
+        ],
+        [
+         -2022.13,
+         -20497.92,
+-        648.71
++        649.21
+        ],
+        [
+         -2012.42,
+         -20499.94,
+-        648.6
++        649.1
+        ],
+        [
+         -2002.72,
+         -20501.96,
+-        648.49
++        648.99
+        ],
+        [
+         -1993.01,
+         -20503.98,
+-        648.38
++        648.88
+        ],
+        [
+         -1983.31,
+         -20506.01,
+-        648.27
++        648.77
+        ],
+        [
+         -1973.61,
+         -20508.03,
+-        648.17
++        648.67
+        ],
+        [
+         -1963.9,
+         -20510.05,
+-        648.06
++        648.56
+        ],
+        [
+         -1954.2,
+         -20512.08,
+-        647.95
++        648.45
+        ],
+        [
+         -1944.5,
+         -20514.1,
+-        647.84
++        648.34
+        ],
+        [
+         -1934.79,
+         -20516.12,
+-        647.73
++        648.23
+        ],
+        [
+         -1925.09,
+         -20518.14,
+-        647.62
++        648.12
+        ],
+        [
+         -1915.38,
+         -20520.17,
+-        647.51
++        648.01
+        ],
+        [
+         -1905.68,
+         -20522.19,
+-        647.4
++        647.9
+        ],
+        [
+         -1895.98,
+         -20524.21,
+-        647.29
++        647.79
+        ],
+        [
+         -1886.27,
+         -20526.24,
+-        647.18
++        647.68
+        ],
+        [
+         -1876.57,
+         -20528.26,
+-        647.07
++        647.57
+        ],
+        [
+         -1866.86,
+         -20530.28,
+-        646.97
++        647.47
+        ],
+        [
+         -1857.16,
+         -20532.31,
+-        646.86
++        647.36
+        ],
+        [
+         -1847.46,
+         -20534.33,
+-        646.75
++        647.25
+        ]
+       ],
+       "struct": [
+@@ -8074,23 +8074,23 @@
+     "rail_head_y": [
+      [
+       0.0,
+-      647.0
++      648.2
+      ],
+      [
+       230.0,
+-      647.0
++      648.2
+      ],
+      [
+-      600.0,
+-      651.1
++      560.0,
++      651.6
+      ],
+      [
+       700.0,
+-      651.1
++      651.6
+      ],
+      [
+       1095.7,
+-      646.75
++      647.25
+      ]
+     ],
+     "ends": [
+@@ -8105,7 +8105,7 @@
+      {
+       "x": -1846.9,
+       "z": -20531.9,
+-      "y": 646.75,
++      "y": 647.25,
+       "to": "Алматы-1: остальные 12,4 км 1-й очереди — вне города (за восточной границей пробной зоны)"
+      }
+     ],
+@@ -8932,7 +8932,7 @@
+      ]
+     ],
+     "source": "реестр rail_agglomeration и agglo_rail_station_1 (ГП727, S03: 1-я очередь Алматы-1 → станция у БАКАД/А-3, 13,2 км, 0,8 км в черте города, 2030); трасса не опубликована (geom None) — модель qTwin",
+-    "why": "модель qTwin: двухпутная линия (колея 1520) приходит с востока через коридор Турксиба и входит в город на его восточной границе южнее БАКАД; развязку А-3 × БАКАД (А-3, её съезды, улица ТПУ) проходит по эстакаде, поэтому станция эстакадная: пути вдоль северной стороны участка станции (сторона к магистралям, как у w44), боковая платформа со стороны вокзала на уровне его второго этажа, упоры в западном конце — тупиковая станция 1-й очереди до продления линии (53,5 км к 2050). Кривая R 500 м, поворот 11,8°; головка рельса 647,0 м на станции, до 651,1 м над А-3, уклоны ≤ 11 ‰; низ пролёта над каждой дорогой ≥ 5,0 м (bridges.road_clearance_m)"
++    "why": "модель qTwin: двухпутная линия (колея 1520) приходит с востока через коридор Турксиба и входит в город на его восточной границе южнее БАКАД; развязку А-3 × БАКАД (А-3, её съезды, улица ТПУ) проходит по эстакаде, поэтому станция эстакадная: пути вдоль северной стороны участка станции (сторона к магистралям, как у w44), боковая платформа со стороны вокзала, вход с его второго этажа лестницами и лифтами, упоры в западном конце — тупиковая станция 1-й очереди до продления линии (53,5 км к 2050). Кривая R 500 м, поворот 11,8°; головка рельса 648,2 м на станции, до 651,6 м над А-3, уклоны ≤ 11 ‰; низ пролёта (головка рельса − 1,8 м, 2,6 м в каждую сторону от оси пути) над каждой проезжей частью ≥ 5,0 м (bridges.road_clearance_m), над проездами и площадками ≥ 4,5 м (fire_access.arches.height_min_m), с запасом 0,3 м; на станции — над самой высокой землёй под пролётом (641,6 м)"
+    }
+   ],
+   "platforms": [
+@@ -8962,7 +8962,7 @@
+       -20361.75
+      ]
+     ],
+-    "y": 648.1,
++    "y": 649.3,
+     "length_m": 130.0,
+     "width_m": 8.0,
+     "years": [
+@@ -19425,7 +19425,14 @@
+      "effbde64-3e2f-4eee-bf4e-08448961a29e",
+      "f46e8f8f-edcd-48b8-a701-91915f5be751"
+     ],
+-    "why_ru": "существующий клевер с распределительными дорогами по А-3 (OSM/Overture), остаётся как есть; путепроводы БАКАД над А-3"
++    "why_ru": "существующий клевер с распределительными дорогами по А-3 (OSM/Overture), остаётся как есть; путепроводы БАКАД над А-3",
++    "ramps": {
++     "А-3 S → БАКАД E": {
++      "lanes": 2,
++      "from_year": 2035,
++      "why_ru": "реконструкция петли: спрос выше 1 200 авт./ч (норма второй полосы), модель qTwin"
++     }
++    }
+    }
+   }
+  ],

@@ -1,0 +1,23 @@
+# w45 round 5 frames (view x z dist yaw pitch: what it proves)
+-2608 -19252 140 0 15: docks and truck fronts of b00092
+-2608 -19072 100 0 20: docks of b00093
+-2470 -19106 150 270 35: ring joined to the yard, plain yard (85/87)
+-2608 -18930 160 180 15: pilasters on b00093's north wall
+-4080 -20090 140 200 20: barn pilasters
+-2830 -19005 120 200 18: b00062 pilasters
+-3500 -18800 260 200 32: park alley s269 with no trees on paving
+-2838 -20604 120 30 18 and -3316 -20534 140 30 25: zebras s88/s89 clear of trees
+-3122 -20478 60 30 20 and -3192 -20393 60 30 20: road signs at village junctions 10538 and 10540
+-2950 -20600 400 180 40: a single LRT station at the TPU
+-3421 -19434 80 200 25: no walkers at the Iconic retaining wall
+traffic module 2050: -3500 -19500 900 200 50, Iconic ring and loaded streets
+infra 2050: facility markers at (-1883, -20213), (-2721, -18454), (-2706, -18390), none on a lot or a road
+# w45 round 5b (year ≥ 2032, busy hour)
+-3468 -18852 45 30 35: SW corner of park loop 7, walkers keep to paving
+-3496 -18869 40 200 35: bend of alley 4, no corner cut
+-3368 -18760 120 200 30: whole park, park_off=0 in log
+-2608 -19262 70 0 35: b2534 dock wall, yellow bays 4 m, plain yard
+-2608 -19082 70 0 35: b2535 bays; pad at east end same surface
+-2608 -19200 300 0 30: both yards from afar, lines fade
+-2470 -19106 150 270 35: ring and drive into yard 2, only bays
+log: «N truck yards, M with dock bays» = 2, 2; counters park_people / park_off = 0

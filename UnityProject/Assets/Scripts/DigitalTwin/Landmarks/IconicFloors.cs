@@ -150,7 +150,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
         {
             int m = l.Parts != null ? l.Main : -1;                  // a complex: the dates of its tower
             if (m >= 0) { var t = l.Parts[m]; return t.A + p * (t.B - t.A); }
-            return (l.StartYear - 1f) + p * (l.EndYear - l.StartYear + 1f);
+            return l.Begin + p * (l.Finish - l.Begin);
         }
         static readonly string[] Mon = { "янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек" };
         public static string MonthYear(float y) { int yi = Mathf.FloorToInt(y); int m = Mathf.Clamp(Mathf.FloorToInt((y - yi) * 12f), 0, 11); return Mon[m] + " " + yi; }

@@ -1,9 +1,11 @@
 // Roads of the film look: ribbons built by FilmRoads.cs from the road graph of the twin (roads.json).
 // uv  = (metres across from the centre line, metres along the edge, along of a T-junction in the middle of the road, set back of its
 //        crossings or 0)
-// uv2 = (half width of the carriageway, 0 = pavement ribbon / 1 = carriageway ribbon, length of the edge, lanes per direction;
+// uv2 = (half width of the carriageway, 0 = pavement ribbon / 1 = carriageway ribbon / 2 grass median / 3 concrete of structures / 4 bike path
+//        / 5 truck yard or turnaround pad (uv = along the dock side, out from it, door pitch, dock length: bay lines; pitch 0 none), length of the edge, lanes per direction;
 //        negative = a one-way carriageway with that many lanes: no centre line, lane lines across the whole width)
 // uv2 (TEXCOORD2) = year of opening in the four scenarios (picked by _AlatauScenIdx); the ribbon appears with the timeline like the buildings.
+//        A ribbon that a later cross-section replaces (a reconstruction, roads.json `ps`) carries year + 10000 × (until − 2000): gone from 'until'.
 // uv3 (TEXCOORD3) = (lamp spacing m, lamp placement mode + 8 * class, crossing set back from the start, from the end; 0 = none):
 //        street lamps by FilmLamps.Rule (mode 1 median mast, 2 both sides, 3 right of a one-way carriageway, 4 one side of a street,
 //        5 = a junction patch; class 0 street, 1 main, 2 motorway): their light lies on the asphalt at night (_AlatauLampOn);
@@ -51,9 +53,10 @@ Shader "AlatauCity/Road"
         }
         void surf(Input IN, inout SurfaceOutput o)
         {
-            float yr = IN.years[(int)clamp(_AlatauScenIdx, 0.0, 3.0)];
+            float yr = IN.years[(int)clamp(_AlatauScenIdx, 0.0, 3.0)], until = floor(yr / 10000.0 + 1e-4); yr -= until * 10000.0;
             float now = _AlatauGrow > 0.5 ? _AlatauYearF + 1.0 : (_AlatauYear < 1 ? 2050.0 : _AlatauYear);
             clip(now + 0.5 - yr);
+            if (until > 0.5) clip(until + 1999.5 - now);                     // replaced by its reconstruction from 'until' on
             if (AlatauOnPad(IN.worldPos) > 0.5) clip(-1.0);                  // no road through a landmark's plot
             float x = IN.road.x, v = IN.road.y, hw = IN.dims.x, oneWay = step(IN.dims.w, -0.5), lanes = max(abs(IN.dims.w), 1.0), len = IN.dims.z;
             float ax = abs(x), xw = fwidth(x), vw = fwidth(v);
@@ -61,7 +64,40 @@ Shader "AlatauCity/Road"
             float3 c; float3 em = 0;
             float cls = floor(IN.lamp.y / 8.0 + 0.01), crW = cls > 0.5 && cls < 1.5 ? 5.0 : 4.0;
             float cA = IN.lamp.z, cB = IN.lamp.w, vA = v - cA, vB = (len - v) - cB;
-            if (IN.dims.y > 0.5)
+            if (IN.dims.y > 4.5)
+            {
+                // 5: a truck yard or a turnaround pad (FilmRoads): plain asphalt in world space, one surface with no repairs, cracks or
+                // wheel tracks (no seams where a pad or a drive meets a yard). A yard whose shed has dock doors in the data gets its bays:
+                // 0.15 m yellow lines square to the dock wall at each door boundary, from 0.3 m to 18 m out, closed by a line across
+                // (uv = metres along the dock side, out from it, door pitch, dock length; pitch 0 = no bays); they fade before they alias
+                c = float3(0.355, 0.35, 0.345) * lerp(float3(1, 1, 1), pa, 0.7) * (0.96 + 0.06 * ANoise(IN.worldPos.xz * 0.02 + 5.0));
+                float pitch = IN.road.z;
+                if (pitch > 0.5)
+                {
+                    float sx = IN.road.x, t = IN.road.y, dl = IN.road.w, sxw = fwidth(sx), tw = fwidth(t);
+                    float k = sx / pitch, d = (k - floor(k + 0.5)) * pitch;          // metres to the nearest door boundary
+                    float along = Band(sx, -0.08, dl + 0.08, sxw);
+                    float bays = (Line(d, 0.075, sxw) * Band(t, 0.3, 18.0, tw) + Band(t, 17.85, 18.0, tw)) * along;
+                    c = lerp(c, float3(0.84, 0.76, 0.34), saturate(bays) * saturate(1.5 - max(sxw, tw) * 5.0) * 0.85);
+                }
+            }
+            else if (IN.dims.y > 1.5)
+            {
+                // the redrawn map (FilmRoads, film_roads v2): 2 green median of a boulevard, 3 concrete (deck edges, retaining walls, piers,
+                // abutments), 4 bike path; procedural only (the material maps are sampled above, outside every branch)
+                float n1 = ANoise(IN.worldPos.xz * 0.35), n2 = ANoise(IN.worldPos.xz * 0.06 + 7.0);
+                if (IN.dims.y > 3.5)
+                {
+                    c = float3(0.47, 0.30, 0.27) * (0.92 + 0.12 * n2);
+                    float dash = step(0.5, frac(v / 6.0));
+                    c = lerp(c, float3(0.86, 0.86, 0.82), Line(x, 0.06, xw) * dash * saturate(1.5 - xw * 4.0));
+                }
+                else if (IN.dims.y > 2.5)
+                    c = float3(0.62, 0.61, 0.58) * (0.90 + 0.10 * n1) * (0.95 + 0.08 * n2);
+                else
+                    c = float3(0.26, 0.36, 0.17) * (0.80 + 0.30 * n1) * (0.92 + 0.12 * n2);
+            }
+            else if (IN.dims.y > 0.5)
             {
                 // carriageway: asphalt, a lighter wheel track, markings that fade where a line is thinner than a pixel and at junctions
                 c = float3(0.355, 0.35, 0.345) * lerp(float3(1, 1, 1), pa, 0.7) * (0.94 + 0.10 * ANoise(IN.worldPos.xz * 0.08)) * (0.97 + 0.06 * ANoise(IN.worldPos.xz * 0.011 + 3.0));

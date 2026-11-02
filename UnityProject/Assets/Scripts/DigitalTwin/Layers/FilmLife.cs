@@ -8,7 +8,8 @@ namespace AlatauCity.DigitalTwin
     /// <summary>The living city of the film look: people on the pavements and on the squares of the landmarks, flags at their entrances,
     /// small flocks of birds by day, and the tower cranes of the landmark sites at work (LandmarkSite.CraneMotion).
     /// People walk along the pavements of the film roads (FilmRoads ways, open in the year shown), never on a carriageway, a landmark plot
-    /// or under a building; on the squares, campus alleys and forecourts they stand in small groups or stroll. How many there are follows
+    /// or under a building; on the squares, campus alleys and forecourts they stand in small groups or stroll, never on a cell next to a
+    /// wall or a height step (each cell's corners must land on the same level floor). How many there are follows
     /// the floor area built round them in the year shown and the hour (busy at midday and in the evening, few at night).
     /// Everything is drawn instanced near the camera (Windows/film: up to 3 000 people, WebGL: up to 600) and nothing above 1.5 km.
     /// The crowd, its clothes and its places are a model, not data.</summary>
@@ -17,11 +18,14 @@ namespace AlatauCity.DigitalTwin
         const float Cell = 320f, Step = 4f;
         static bool High => Application.platform != RuntimePlatform.WebGLPlayer;
         public static FilmLife Instance;
+        /// <summary>People drawn this frame, 0 when none were (read by the bench mode, AlatauBench).</summary>
+        public static int ShownNow => shownFrame == Time.frameCount ? shownLast : 0;
+        static int shownLast, shownFrame = -1;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         static void Boot() { if (Instance == null) new GameObject("Film life").AddComponent<FilmLife>(); }
 
-        class Run { public Vector3[] P; public float Len; public Vector4 Years; public bool Main; }
+        class Run { public Vector3[] P; public float Len, St = Step; public Vector4 Years; public bool Main, Park; }       // St: metres between points
         struct Person { public int Run; public float S0, Speed, Lat, Rank, Scale, Phase, Yaw; public bool Rev; public Vector3 Pos; public int Mesh; public Vector4 Top, Bot; }
         class Crowd { public Run[] Runs; public Person[] People; public Vector3 Centre; public float Radius; public int ActYear = -1, ActSc = -1; public float Act; public List<BuildingInfo> Blds; }
         class Site { public string Id; public Landmark L; public bool Gate, Tried; public Crowd C; public Vector3 Centre; public float Radius; public Matrix4x4[] Poles, Cloth; public Vector4[] ClothA, ClothB, ClothC; public int[] Tex; }
@@ -31,13 +35,20 @@ namespace AlatauCity.DigitalTwin
         readonly Dictionary<long, List<BuildingInfo>> blds = new Dictionary<long, List<BuildingInfo>>();
         readonly Dictionary<Collider, bool> isGround = new Dictionary<Collider, bool>();
         readonly List<Site> sites = new List<Site>();
+        // the alleys and loops of the parks (Resources/Map/map_walks.json, ground.py): points every WalkStep m (a bend's chord stays
+        // within 0.35 m of the line), cut by cell; W = the walk's width
+        const float WalkStep = 1f, Body = 0.3f;
+        class Walk { public Vector2[] P; public Vector4 Years; public bool Alley; public float W; }
+        [System.Serializable] class WalkJ { public int[] y; public float w; public int k; public float[] p; }
+        [System.Serializable] class WalksJ { public int v; public WalkJ[] walks; }
+        readonly Dictionary<long, List<Walk>> parkWalks = new Dictionary<long, List<Walk>>();
         FilmRoads.Way[] ways; float[] wayHalf, wayWalk;
         bool ready, cranesHooked; Camera mainCam; MapCamera mc;
         Material matPerson, matFlag, matBird, matPole, matBanner; Mesh[] people = new Mesh[3]; Mesh cloth, pole, bird;
         static readonly int AId = Shader.PropertyToID("_LifeA"), BId = Shader.PropertyToID("_LifeB"), CId = Shader.PropertyToID("_LifeC");
 
         // draw batches: per person mesh, a few arrays of 1023, filled each frame for the camera that renders (no allocation)
-        class Batch { public Matrix4x4[] M = new Matrix4x4[1023]; public Vector4[] A = new Vector4[1023], B = new Vector4[1023], C = new Vector4[1023]; public MaterialPropertyBlock P = new MaterialPropertyBlock(); public int N; }
+        class Batch { public Matrix4x4[] M = new Matrix4x4[1023]; public Vector4[] A = new Vector4[1023], B = new Vector4[1023], C = new Vector4[1023]; public bool[] Site = new bool[1023], Park = new bool[1023]; public MaterialPropertyBlock P = new MaterialPropertyBlock(); public int N; }
         Batch[][] batches; Batch flagBatch, poleBatch, bannerBatch, birdBatch;
         readonly List<long> near = new List<long>(); readonly List<long> wanted = new List<long>();
 
@@ -99,7 +110,15 @@ namespace AlatauCity.DigitalTwin
             {
                 var W = ways[w] = FilmRoads.GetWay(w);
                 FilmRoads.Dims(W.Cls, out float half, out float walk, out _, out _);
-                if (W.Ramp) { half = 4f; walk = 0f; }
+                if (W.Edge >= 0 && W.Half >= 0f)
+                {
+                    // the redrawn map: the street profile's carriageway and pavements; a pedestrian street or a bike path is walked across its
+                    // width (half 0); ramps and roads without sidewalks (expressways: verges only) have nobody on them
+                    half = W.Half; walk = W.Walk;
+                    var sec = FilmRoads.Profile(W.Edge);
+                    if (W.Ramp || (!W.NoCars && sec.Has && sec.SidewalkL + sec.SidewalkR <= 0f)) walk = 0f;
+                }
+                else if (W.Ramp) { half = 4f; walk = 0f; }
                 else if (W.OneWay) half = W.Cls == TwinData.RoadClass.Highway ? 6f : W.Cls == TwinData.RoadClass.Ring ? 5.5f : W.Cls == TwinData.RoadClass.Main ? 3.8f : 3.2f;
                 wayHalf[w] = half; wayWalk[w] = walk;
                 if (W.P == null) continue;
@@ -113,7 +132,7 @@ namespace AlatauCity.DigitalTwin
                 }
             }
             var db = CityDatabase.Instance;
-            if (db != null) foreach (var b in db.Buildings) if (b != null) { long k = Key(C(b.X), C(b.Z)); if (!blds.TryGetValue(k, out var l)) blds[k] = l = new List<BuildingInfo>(); l.Add(b); }
+            if (db != null) foreach (var b in db.Counted) if (b != null) { long k = Key(C(b.X), C(b.Z)); if (!blds.TryGetValue(k, out var l)) blds[k] = l = new List<BuildingInfo>(); l.Add(b); }     // with the landmark lots' own floor area
 
             // the squares: the plaza and gardens of Iconic Complex, the Gate District round it, the KAIST campus, the forecourts of the
             // medical cluster, K-Park and L7
@@ -125,6 +144,45 @@ namespace AlatauCity.DigitalTwin
             var ic = ls.Get("iconic");
             if (ic != null && QTwinData.Gate() != null) sites.Add(new Site { Id = "gate", L = ic, Gate = true, Centre = new Vector3(ic.X, 0f, ic.Z), Radius = QTwinData.Gate().Half });
             Debug.Log($"[Alatau] film life: {n} ways, {sites.Count} squares, quality {(High ? "high" : "light")}");
+            ParkWalks();
+        }
+
+        /// <summary>The walks of the parks (map_walks.json: alleys k 0, loops k 1, `y` per scenario, `w` width) resampled every WalkStep m
+        /// and cut by cell; people walk them like pavements (Street), within w/2 of the line. No file: none.</summary>
+        void ParkWalks()
+        {
+            var ta = Resources.Load<TextAsset>("Map/map_walks"); if (ta == null) return;
+            WalksJ j = null; try { j = JsonUtility.FromJson<WalksJ>(ta.text); } catch (System.Exception ex) { Debug.LogWarning("[Alatau] film life: map_walks.json unreadable: " + ex.Message); }
+            if (j?.walks == null) return;
+            int nw = 0, np = 0; float km = 0f; var pts = new List<Vector2>(); long cur = 0; Vector4 yv = Vector4.zero; bool alley = false; float ww = 0f;
+            void Flush()
+            {
+                if (pts.Count >= 3)
+                {
+                    if (!parkWalks.TryGetValue(cur, out var l)) parkWalks[cur] = l = new List<Walk>();
+                    l.Add(new Walk { P = pts.ToArray(), Years = yv, Alley = alley, W = ww }); np++;
+                }
+                pts.Clear();
+            }
+            foreach (var w in j.walks)
+            {
+                if (w.p == null || w.p.Length < 4) continue;
+                yv = w.y != null && w.y.Length >= 4 ? new Vector4(w.y[0], w.y[1], w.y[2], w.y[3]) : new Vector4(2025, 2025, 2025, 2025);
+                alley = w.k == 0; ww = w.w > 0f ? w.w : 3.5f; nw++; pts.Clear(); float carry = 0f;
+                for (int i = 2; i + 1 < w.p.Length; i += 2)
+                {
+                    Vector2 a = new Vector2(w.p[i - 2], w.p[i - 1]), b = new Vector2(w.p[i], w.p[i + 1]); float len = (b - a).magnitude; if (len < 0.01f) continue;
+                    km += len / 1000f;
+                    for (float t = carry; t < len; t += WalkStep)
+                    {
+                        var q = Vector2.Lerp(a, b, t / len); long k = Key(C(q.x), C(q.y));
+                        if (pts.Count > 0 && k != cur) Flush();
+                        cur = k; pts.Add(q); carry = t + WalkStep - len;
+                    }
+                }
+                Flush();
+            }
+            Debug.Log($"[Alatau] film life: {nw} park walks ({km:0.0} km, map_walks.json) in {np} paths for people");
         }
 
         /// <summary>Every tower crane of the landmark sites gets its work cycle (slewing, trolley, hook).</summary>
@@ -145,6 +203,9 @@ namespace AlatauCity.DigitalTwin
             if (!isGround.TryGetValue(hit.collider, out bool g)) isGround[hit.collider] = g = hit.collider.name.StartsWith("Terrain");
             return g;
         }
+
+        /// <summary>Paving at q: hard ground of the data (GroundTypes: a park alley, a court, a playground …) or a drawn film road surface.</summary>
+        static bool Paved(GroundTypes gt, Vector2 q) => gt.HardAt(q.x, q.y) || FilmRoads.OnSurface(new Vector3(q.x, CityGround.HeightAt(q.x, q.y), q.y), 0f, false);
 
         bool Walkable(Vector2 q, int self, List<Vector2Int> segs)
         {
@@ -187,6 +248,7 @@ namespace AlatauCity.DigitalTwin
                         foreach (int i in kv.Value)
                         {
                             if (i != prev + 1) { Flush(); carry = 0f; }
+                            int seg = i - 1;
                             prev = i;
                             Vector2 a = W.P[i - 1], b = W.P[i]; float len = (b - a).magnitude; if (len < 0.01f) continue;
                             Vector2 d = (b - a) / len, left = new Vector2(-d.y, d.x) * side;
@@ -194,7 +256,7 @@ namespace AlatauCity.DigitalTwin
                             {
                                 var q = a + d * t + left * off;
                                 bool inCell = q.x >= x0 && q.x < x0 + Cell && q.y >= z0 && q.y < z0 + Cell;
-                                if (inCell && Walkable(q, w, segs)) pts.Add(new Vector3(q.x, CityGround.HeightAt(q.x, q.y) + 0.14f, q.y));
+                                if (inCell && Walkable(q, w, segs)) pts.Add(new Vector3(q.x, FilmRoads.SurfaceY(w, seg, t / len, q, 0.14f), q.y));     // the terrain, or the deck / embankment of the redrawn map
                                 else Flush();
                                 carry = t + Step - len;
                             }
@@ -208,6 +270,33 @@ namespace AlatauCity.DigitalTwin
                     var r = runs[ri]; float spacing = (r.Main ? 8f : 13f) * (High ? 1f : 1.7f);
                     int np = Mathf.Max(1, Mathf.RoundToInt(r.Len / spacing));
                     for (int i = 0; i < np; i++) crowd.Add(NewPerson(rng, ri, r.Len * (float)rng.NextDouble(), 0.9f));
+                }
+            }
+            // the parks' alleys and loops: someone every 11 m of an alley and 16 m of a loop at the busiest (Fill: a share of their own)
+            if (parkWalks.TryGetValue(key, out var pw))
+            {
+                // a walker keeps within w/2 of the line, a body's width inside the edge (the chord of a bend: 0.35 m more); the run is
+                // cut where the ground drawn there is not paved at the line or at the walker's reach on either side (a walk the drawing
+                // breaks for a tree or a building, its link over the verge where nothing is drawn): nobody on the grass beside a walk
+                int r0 = runs.Count; var gt = GroundTypes.Instance; var wp = new List<Vector3>(); var wh = new List<float>();
+                foreach (var w in pw)
+                {
+                    float lat = Mathf.Max(0f, w.W * 0.5f - Body - 0.35f), reach = lat + Body; wp.Clear();
+                    void Cut() { if (wp.Count >= 4) { runs.Add(new Run { P = wp.ToArray(), St = WalkStep, Len = (wp.Count - 1) * WalkStep, Years = w.Years, Main = w.Alley, Park = true }); wh.Add(lat); } wp.Clear(); }
+                    for (int i = 0; i < w.P.Length; i++)
+                    {
+                        var q = w.P[i];
+                        var d = w.P[Mathf.Min(i + 1, w.P.Length - 1)] - w.P[Mathf.Max(i - 1, 0)]; var n = new Vector2(-d.y, d.x).normalized * reach;
+                        if (gt != null && !(Paved(gt, q) && Paved(gt, q + n) && Paved(gt, q - n))) { Cut(); continue; }
+                        wp.Add(new Vector3(q.x, CityGround.HeightAt(q.x, q.y) + 0.03f, q.y));
+                    }
+                    Cut();
+                }
+                for (int ri = r0; ri < runs.Count; ri++)
+                {
+                    var r = runs[ri]; float spacing = (r.Main ? 11f : 16f) * (High ? 1f : 1.7f), lat = wh[ri - r0];
+                    int np = Mathf.Max(1, Mathf.RoundToInt(r.Len / spacing));
+                    for (int i = 0; i < np; i++) { var p = NewPerson(rng, ri, r.Len * (float)rng.NextDouble(), 0.8f); p.Lat = Mathf.Clamp(p.Lat, -lat, lat); crowd.Add(p); }
                 }
             }
             blds.TryGetValue(key, out var bl);
@@ -265,7 +354,9 @@ namespace AlatauCity.DigitalTwin
         void MakeSite(Site s)
         {
             s.Tried = true;
-            float step = s.Gate ? 5f : 3f;
+            // the Gate district's paving is the narrow pavements of its streets and round the ring (2.5–5 m wide, the blocks are gardens):
+            // a 2.5 m grid, people stand where a cell and its four neighbours are paving and walk the way the pavement runs
+            float step = s.Gate ? 2.5f : 3f;
             Collider col = null; Mesh cm = null; GameObject tmp = null; int[] tris = null; List<Vector2> uv1 = null; byte[] tags = null;
             Transform frame = LandmarkSystem.Instance.ModelOf(s.L.Id); if (frame == null) return;
             float halfW, halfD;
@@ -287,7 +378,8 @@ namespace AlatauCity.DigitalTwin
                 tris = mesh.triangles; uv1 = new List<Vector2>(); mesh.GetUVs(1, uv1); halfW = s.L.PadW * 0.5f; halfD = s.L.PadD * 0.5f;
             }
             int gw = Mathf.CeilToInt(2f * halfW / step), gd = Mathf.CeilToInt(2f * halfD / step);
-            var ok = new bool[gw * gd]; var hy = new float[gw * gd]; int nOk = 0;
+            var ok = new bool[gw * gd]; var hy = new float[gw * gd]; int nOk = 0, nWall = 0;
+            float pr = step * 0.5f + 0.3f;      // a cell's corners and a body's width beyond them
             for (int j = 0; j < gd; j++) for (int i = 0; i < gw; i++)
             {
                 float lx = -halfW + (i + 0.5f) * step, lz = -halfD + (j + 0.5f) * step;
@@ -298,12 +390,25 @@ namespace AlatauCity.DigitalTwin
                 if (s.Gate) walk = WalkTags.Contains(tags[vi]) && hit.point.y - CityGround.HeightAt(hit.point.x, hit.point.z) < 0.8f;
                 else { var u = uv1[vi]; int mat = Mathf.RoundToInt(u.x), tg = Mathf.RoundToInt(u.y); walk = (mat == LM.Paving || (mat == LM.QTwin && WalkTags.Contains(tg))) && hit.point.y - frame.position.y < 2f; }     // the ground of the plot, not a roof
                 if (!walk) continue;
+                // nobody next to a wall or a height step (a retaining wall, a sloped roof's foot, a terrace edge, a building): the four
+                // corners of the cell, a body's width beyond it, land on a level floor too (an upward face within 0.25 m of the centre's
+                // height; lawn or paving alike, a kerb passes)
+                bool clear = true;
+                for (int c = 0; c < 4 && clear; c++)
+                {
+                    var pt = (s.Gate ? tmp.transform : frame).TransformPoint(new Vector3(lx + ((c & 1) == 0 ? -pr : pr), 0f, lz + ((c & 2) == 0 ? -pr : pr))); pt.y = top.y;
+                    clear = col.Raycast(new Ray(pt, Vector3.down), out var ph, 2000f) && ph.normal.y >= 0.92f && Mathf.Abs(ph.point.y - hit.point.y) < 0.25f;
+                }
+                if (!clear) { nWall++; continue; }
                 ok[j * gw + i] = true; hy[j * gw + i] = hit.point.y + 0.02f; nOk++;
             }
             if (tmp != null) { Destroy(tmp); Destroy(cm); }
             Transform fr = frame;
             Vector3 W(float lx, float lz, float y) { var p = fr.TransformPoint(new Vector3(lx, 0f, lz)); p.y = y; return p; }
             bool Inner(int i, int j) { for (int b = -1; b <= 1; b++) for (int a = -1; a <= 1; a++) { int x = i + a, z = j + b; if (x < 0 || z < 0 || x >= gw || z >= gd || !ok[z * gw + x]) return false; } return true; }
+            bool OkAt(int i, int j) => i >= 0 && j >= 0 && i < gw && j < gd && ok[j * gw + i];
+            bool Room(int i, int j) => s.Gate ? OkAt(i, j) && OkAt(i - 1, j) && OkAt(i + 1, j) && OkAt(i, j - 1) && OkAt(i, j + 1) : Inner(i, j);
+            bool Path(int i, int j) => s.Gate ? OkAt(i, j) : Inner(i, j);
             var rng = new System.Random(s.Id.GetHashCode());
             var runs = new List<Run>(); var crowd = new List<Person>();
             if (nOk > 0)
@@ -313,7 +418,7 @@ namespace AlatauCity.DigitalTwin
                 int strolls = Mathf.Min(High ? 320 : 110, Mathf.RoundToInt(nOk * cell2 / (s.Gate ? 300f : 120f)));
                 for (int g = 0, tries = 0; g < groups && tries < groups * 20; tries++)
                 {
-                    int i = rng.Next(gw), j = rng.Next(gd); if (!Inner(i, j)) continue;
+                    int i = rng.Next(gw), j = rng.Next(gd); if (!Room(i, j)) continue;
                     float lx = -halfW + (i + 0.5f) * step + ((float)rng.NextDouble() - 0.5f) * step, lz = -halfD + (j + 0.5f) * step + ((float)rng.NextDouble() - 0.5f) * step;
                     var c = W(lx, lz, hy[j * gw + i]); float rr = (float)rng.NextDouble(); int n = rr < 0.3f ? 1 : rr < 0.65f ? 2 : rr < 0.85f ? 3 : 4;
                     float a0 = (float)rng.NextDouble() * 360f;
@@ -327,19 +432,27 @@ namespace AlatauCity.DigitalTwin
                     }
                     g++;
                 }
-                var pts = new List<Vector3>();
+                var pts = new List<Vector3>(); var best = new List<Vector3>();
                 for (int g = 0, tries = 0; g < strolls && tries < strolls * 20; tries++)
                 {
-                    int i = rng.Next(gw), j = rng.Next(gd); if (!Inner(i, j)) continue;
-                    float ang = (float)rng.NextDouble() * Mathf.PI * 2f, L = 15f + 55f * (float)rng.NextDouble();
-                    Vector2 a = new Vector2(-halfW + (i + 0.5f) * step, -halfD + (j + 0.5f) * step), d = new Vector2(Mathf.Cos(ang), Mathf.Sin(ang));
-                    pts.Clear(); float lastY = hy[j * gw + i];
-                    for (float t = 0f; t <= L; t += Step)
+                    int i = rng.Next(gw), j = rng.Next(gd); if (!Path(i, j)) continue;
+                    float ang0 = (float)rng.NextDouble() * Mathf.PI * 2f, L = 15f + 55f * (float)rng.NextDouble();
+                    Vector2 a = new Vector2(-halfW + (i + 0.5f) * step, -halfD + (j + 0.5f) * step);
+                    best.Clear();
+                    for (int hd = 0, nh = s.Gate ? 16 : 1; hd < nh; hd++)       // the Gate: the longest of 16 headings (along its pavement)
                     {
-                        var q = a + d * t; int qi = Mathf.FloorToInt((q.x + halfW) / step), qj = Mathf.FloorToInt((q.y + halfD) / step);
-                        if (qi < 0 || qj < 0 || qi >= gw || qj >= gd || !Inner(qi, qj) || Mathf.Abs(hy[qj * gw + qi] - lastY) > 0.6f) break;
-                        lastY = hy[qj * gw + qi]; pts.Add(W(q.x, q.y, lastY));
+                        float ang = ang0 + hd * Mathf.PI / 8f; var d = new Vector2(Mathf.Cos(ang), Mathf.Sin(ang));
+                        pts.Clear(); float lastY = hy[j * gw + i];
+                        for (float t = 0f; t <= L; t += Step)
+                        {
+                            var q = a + d * t; int qi = Mathf.FloorToInt((q.x + halfW) / step), qj = Mathf.FloorToInt((q.y + halfD) / step);
+                            var h = a + d * Mathf.Max(0f, t - Step * 0.5f); int hi = Mathf.FloorToInt((h.x + halfW) / step), hj = Mathf.FloorToInt((h.y + halfD) / step);     // and half way from the last point (no corner cut)
+                            if (!Path(qi, qj) || !Path(hi, hj) || Mathf.Abs(hy[qj * gw + qi] - lastY) > 0.6f) break;
+                            lastY = hy[qj * gw + qi]; pts.Add(W(q.x, q.y, lastY));
+                        }
+                        if (pts.Count > best.Count) { best.Clear(); best.AddRange(pts); }
                     }
+                    pts.Clear(); pts.AddRange(best);
                     if (pts.Count < 4) continue;
                     var r = new Run { P = pts.ToArray(), Len = (pts.Count - 1) * Step, Years = Vector4.zero }; runs.Add(r);
                     int np = 1 + (rng.Next(3) == 0 ? 1 : 0);
@@ -349,7 +462,7 @@ namespace AlatauCity.DigitalTwin
             }
             s.C = new Crowd { Runs = runs.ToArray(), People = crowd.ToArray(), Centre = s.Centre, Radius = s.Radius, Act = 1f, ActYear = int.MaxValue };
             if (!s.Gate) Flags(s, fr, ok, hy, gw, gd, step, halfW, halfD, Inner);
-            Debug.Log($"[Alatau] film life: {s.Id}: {nOk} walkable cells, {crowd.Count} people, {runs.Count} paths");
+            Debug.Log($"[Alatau] film life: {s.Id}: {nOk} walkable cells ({nWall} next to a wall or step left out), {crowd.Count} people, {runs.Count} paths");
         }
 
         // ------------------------------------------------------------------ flags at the entrance
@@ -432,8 +545,9 @@ namespace AlatauCity.DigitalTwin
                 while (j >= 0 && D2(near[j], cp) > dk) { near[j + 1] = near[j]; j--; }
                 near[j + 1] = k;
             }
-            foreach (var s in sites) if (s.C != null && Done(s) && Flat(s.Centre - cp) < Rd + s.Radius) shown = Fill(s.C, cp, Rd, t, hs * 0.85f, year, sc, cap, shown, true);
-            foreach (var k in near) { if (shown >= cap) break; var c = cells[k]; shown = Fill(c, cp, Rd, t, hs * Activity(c), year, sc, cap, shown, false); }
+            foreach (var s in sites) if (s.C != null && Done(s) && Flat(s.Centre - cp) < Rd + s.Radius) shown = Fill(s.C, cp, Rd, t, hs * 0.85f, hs * 0.6f, year, sc, cap, shown, true);
+            foreach (var k in near) { if (shown >= cap) break; var c = cells[k]; shown = Fill(c, cp, Rd, t, hs * Activity(c), hs * 0.6f, year, sc, cap, shown, false); }
+            shownLast = shown; shownFrame = Time.frameCount;
             for (int m = 0; m < 3; m++)
                 foreach (var b in batches[m])
                 {
@@ -445,16 +559,40 @@ namespace AlatauCity.DigitalTwin
             DrawBirds(cam, cp, t, hour);
         }
         int wantedNow;
+
+        /// <summary>Run counters (RoadCounters, every 10 s): the street people drawn in the last frame, and how many of them stand off every
+        /// pavement, pedestrian street and bike path (FilmRoads.OnSurface; the people of the landmark squares and of the park walks are not
+        /// counted). No allocation.</summary>
+        public void Counters(out int alive, out int off) => Counters(out alive, out off, out _, out _);
+        /// <summary>The same, and the people of the park walks drawn in the last frame with how many of them stand where the ground drawn
+        /// under their feet is not paved (GroundTypes.HardAt, or a film road surface): on the grass beside a walk.</summary>
+        public void Counters(out int alive, out int off, out int parkAlive, out int parkOff)
+        {
+            alive = 0; off = 0; parkAlive = 0; parkOff = 0;
+            if (!ready || batches == null || Time.frameCount - shownFrame > 2) return;
+            var gt = GroundTypes.Instance;
+            for (int m = 0; m < 3; m++)
+                foreach (var b in batches[m])
+                    for (int i = 0; i < b.N; i++)
+                    {
+                        var c = b.M[i].GetColumn(3);
+                        if (b.Park[i]) { parkAlive++; if (gt != null && !Paved(gt, new Vector2(c.x, c.z))) parkOff++; continue; }
+                        if (b.Site[i]) continue;
+                        alive++;
+                        if (!FilmRoads.OnSurface(new Vector3(c.x, c.y, c.z), 0.6f, false)) off++;
+                    }
+        }
         static float Flat(Vector3 d) => Mathf.Sqrt(d.x * d.x + d.z * d.z);
 
-        int Fill(Crowd c, Vector3 cp, float Rd, float t, float share, int year, int sc, int cap, int shown, bool site)
+        int Fill(Crowd c, Vector3 cp, float Rd, float t, float share, float parkShare, int year, int sc, int cap, int shown, bool site)
         {
             if (Flat(c.Centre - cp) > Rd + c.Radius) return shown;
             var runs = c.Runs; var ppl = c.People;
             for (int i = 0; i < ppl.Length && shown < cap; i++)
             {
                 ref var p = ref ppl[i];
-                if (p.Rank > share) continue;
+                bool park = p.Run >= 0 && runs[p.Run].Park;            // a park's walk: busy by the hour, not by the floor area round it
+                if (p.Rank > (park ? parkShare : share)) continue;
                 Vector3 pos; float yaw, fade = 1f, walk = p.Speed > 0f ? 1f : 0f;
                 if (p.Run >= 0)
                 {
@@ -462,7 +600,7 @@ namespace AlatauCity.DigitalTwin
                     // walk to the end of the path, turn round and walk back (no one appears or vanishes on the way)
                     float u2 = p.Speed > 0f ? Mathf.Repeat(p.S0 + p.Speed * t, 2f * r.Len) : p.S0; bool back = u2 > r.Len;
                     float s = back ? 2f * r.Len - u2 : u2; if (p.Rev) s = r.Len - s; bool rev = p.Rev ^ back;
-                    float fi = s / Step; int k = Mathf.Min((int)fi, r.P.Length - 2); float u = fi - k;
+                    float fi = s / r.St; int k = Mathf.Min((int)fi, r.P.Length - 2); float u = fi - k;
                     Vector3 a = r.P[k], b = r.P[k + 1], dir = b - a; if (rev) dir = -dir;
                     pos = Vector3.Lerp(a, b, u); var side = new Vector3(b.z - a.z, 0f, a.x - b.x).normalized; pos += side * p.Lat;     // keeps its side of the path both ways
                     yaw = p.Speed > 0f ? Mathf.Atan2(dir.x, dir.z) * Mathf.Rad2Deg : p.Yaw;
@@ -476,7 +614,7 @@ namespace AlatauCity.DigitalTwin
                 int n = bt.N++;
                 bt.M[n] = Matrix4x4.TRS(pos, Quaternion.Euler(0f, yaw, 0f), new Vector3(p.Scale, p.Scale, p.Scale));
                 bt.A[n] = new Vector4(walk, p.Phase, 6.283f * p.Speed / 1.45f / Mathf.Max(p.Scale, 0.5f), fade);
-                bt.B[n] = p.Top; bt.C[n] = p.Bot; shown++;
+                bt.B[n] = p.Top; bt.C[n] = p.Bot; bt.Site[n] = site || park; bt.Park[n] = park; shown++;
             }
             return shown;
         }

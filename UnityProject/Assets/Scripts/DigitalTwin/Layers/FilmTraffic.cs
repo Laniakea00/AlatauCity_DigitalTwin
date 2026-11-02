@@ -58,6 +58,12 @@ namespace AlatauCity.DigitalTwin
         {
             public Vector2[] P, R, T; public float[] Cum, YC, YL, YR; public bool[] Plot, Gate; public float Half; public int Lanes; public bool OneWay, GateRoad, GateRing, GateInner;
             public TwinData.RoadClass Cls; public Vector4 Years; public float Len, Speed, Weight, Lift; public int A, B;
+            // the redrawn map (FilmRoads.Way.Edge ≥ 0): Fixed = runs in point order (never turned round), NewRamp = an interchange ramp that
+            // is driven, Raised = leaves the terrain somewhere, Inner = half width of a boulevard's median (lanes start beyond it), Kind = norms class
+            public bool Fixed, NewRamp, Raised; public float Inner; public string Kind;
+            // a reconstruction (FilmRoads.Way.StageYears, roads.json `ps`): Half / Lanes / Inner of the year the lanes are built for, from
+            // the opening values (Half0, Lanes0, Inner0) or the latest stage open then (StY per scenario, StHalf, StLanes, StInner)
+            public Vector4[] StY; public float[] StHalf, StInner; public int[] StLanes; public float Half0, Inner0; public int Lanes0;
         }
         WayD[] ways;
         class Lane
@@ -112,16 +118,40 @@ namespace AlatauCity.DigitalTwin
         void OnDestroy() { Camera.onPreCull -= PreCull; }
 
         // ------------------------------------------------------------------ building the lanes
+        int staged;
+        /// <summary>The cross-section of each reconstructed way in the year and scenario the lanes are built for: its lanes, half width
+        /// and median (the ribbon heights at its kerbs follow).</summary>
+        void ApplyStages(int year, int sc)
+        {
+            if (staged == 0) return;
+            sc = Mathf.Clamp(sc, 0, 3);
+            for (int i = 0; i < ways.Length; i++)
+            {
+                var w = ways[i]; if (w == null || w.StY == null) continue;
+                float half = w.Half0, inner = w.Inner0; int n = w.Lanes0;
+                for (int k = 0; k < w.StY.Length; k++) if (w.StY[k][sc] <= year) { half = w.StHalf[k]; n = w.StLanes[k]; inner = w.StInner[k]; }
+                if (half == w.Half && n == w.Lanes) continue;
+                w.Half = half; w.Lanes = n; w.Inner = inner;
+                for (int j = 0; j < w.P.Length; j++)
+                {
+                    Vector2 p = w.P[j], r = w.R[j] * half;
+                    w.YR[j] = FilmRoads.SurfaceY(i, j, 0f, p + r, w.Lift); w.YL[j] = FilmRoads.SurfaceY(i, j, 0f, p - r, w.Lift);
+                }
+            }
+        }
         void BuildStatic()
         {
-            int n = FilmRoads.WayCount; ways = new WayD[n];
+            int n = FilmRoads.WayCount; ways = new WayD[n]; staged = 0;
             var ls = Landmarks.LandmarkSystem.Instance;
             for (int i = 0; i < n; i++)
             {
                 var w = FilmRoads.GetWay(i);
-                if (w.Ramp || w.P == null || w.P.Count < 2) continue;
+                bool fresh = w.Edge >= 0;                    // the redrawn map: its ramps are driven, no cars on pedestrian streets and bike paths
+                if ((w.Ramp && !fresh) || w.NoCars || w.Drive || w.P == null || w.P.Count < 2) continue;     // drives: access only, no film cars
                 FilmRoads.Dims(w.Cls, out float half, out _, out int lanesN, out float lift);
-                if (w.OneWay)
+                if (fresh && w.Half >= 0f) { half = w.Half; lanesN = Mathf.Max(1, w.Lanes); if (w.Ramp) lift -= 0.05f; }
+                else if (fresh && w.Ramp) { half = 4f; lanesN = 1; lift -= 0.05f; }
+                else if (w.OneWay)
                     switch (w.Cls)
                     {
                         case TwinData.RoadClass.Highway: half = 6f; lanesN = 3; break;
@@ -130,9 +160,21 @@ namespace AlatauCity.DigitalTwin
                         default: half = 3.2f; lanesN = 1; break;
                     }
                 int m = w.P.Count; var d = new WayD { P = new Vector2[m], R = new Vector2[m], T = new Vector2[m], Cum = new float[m], YC = new float[m], YL = new float[m], YR = new float[m],
-                    Plot = new bool[m], Gate = new bool[m], Half = half, Lanes = lanesN, OneWay = w.OneWay, Cls = w.Cls, Years = w.Years, A = w.A, B = w.B };
+                    Plot = new bool[m], Gate = new bool[m], Half = half, Lanes = lanesN, OneWay = w.OneWay || (fresh && w.Ramp), Cls = w.Cls, Years = w.Years, A = w.A, B = w.B,
+                    Fixed = fresh, NewRamp = fresh && w.Ramp, Raised = w.HasHeights, Kind = w.Kind, Inner = fresh && w.Median > 0.5f && !w.OneWay ? Mathf.Min(w.Median * 0.5f, half - 1f) : 0f };
                 for (int j = 0; j < m; j++) d.P[j] = w.P[j];
                 d.Lift = lift; ways[i] = d;
+                if (fresh && w.Half >= 0f && w.StageYears != null && w.StageHalf != null && w.StageLanes != null)
+                {
+                    int ns = w.StageYears.Length; d.StY = w.StageYears; d.StHalf = new float[ns]; d.StLanes = new int[ns]; d.StInner = new float[ns];
+                    for (int k = 0; k < ns; k++)
+                    {
+                        d.StHalf[k] = w.StageHalf[k]; d.StLanes[k] = Mathf.Max(1, w.StageLanes[k]);
+                        float md = w.StageMedian != null && k < w.StageMedian.Length ? w.StageMedian[k] : 0f;
+                        d.StInner[k] = md > 0.5f && !w.OneWay ? Mathf.Min(md * 0.5f, d.StHalf[k] - 1f) : 0f;
+                    }
+                    d.Half0 = d.Half; d.Lanes0 = d.Lanes; d.Inner0 = d.Inner; staged++;
+                }
             }
             OrientOneWays();
             for (int i = 0; i < n; i++)
@@ -145,9 +187,12 @@ namespace AlatauCity.DigitalTwin
                     d.T[j] = t; d.R[j] = new Vector2(t.y, -t.x);                    // right of the point order
                     if (j > 0) d.Cum[j] = d.Cum[j - 1] + (d.P[j] - d.P[j - 1]).magnitude;
                     Vector2 p = d.P[j], r = d.R[j] * half;
-                    // the ribbon: centre and both edges lie on the ground + lift, flat in between
-                    d.YC[j] = CityGround.HeightAt(p.x, p.y) + lift; d.YR[j] = CityGround.HeightAt(p.x + r.x, p.y + r.y) + lift; d.YL[j] = CityGround.HeightAt(p.x - r.x, p.y - r.y) + lift;
-                    d.Plot[j] = OnLandmarkPlot(ls, p.x, p.y) || (d.Cls != TwinData.RoadClass.Highway && d.Cls != TwinData.RoadClass.Ring && FilmRoads.InInterchange(p.x, p.y));
+                    // the ribbon: centre and both edges lie on the ground + lift, flat in between (on an embankment or a deck of the redrawn
+                    // map: on its surface, FilmRoads.SurfaceY; the same as the ground for every other road)
+                    d.YC[j] = FilmRoads.SurfaceY(i, j, 0f, p, lift); d.YR[j] = FilmRoads.SurfaceY(i, j, 0f, p + r, lift); d.YL[j] = FilmRoads.SurfaceY(i, j, 0f, p - r, lift);
+                    // inside an interchange zone the old plan's street scribbles carry no cars; the redrawn map has none (its ramps of class
+                    // street, e.g. a partial cloverleaf on a district avenue, and its streets near the zone are driven)
+                    d.Plot[j] = OnLandmarkPlot(ls, p.x, p.y) || (!d.Fixed && d.Cls != TwinData.RoadClass.Highway && d.Cls != TwinData.RoadClass.Ring && FilmRoads.InInterchange(p.x, p.y));
                     d.Gate[j] = Landmarks.IconicDistrict.InGate(p.x, p.y);
                 }
                 d.Len = d.Cum[m - 1];
@@ -157,6 +202,15 @@ namespace AlatauCity.DigitalTwin
                     case TwinData.RoadClass.Ring: d.Speed = 19.5f; d.Weight = 1f / 30f; break;      // 70 km/h
                     case TwinData.RoadClass.Main: d.Speed = 14f; d.Weight = 1f / 32f; break;        // 50 km/h
                     default: d.Speed = 8.5f; d.Weight = 1f / 60f; break;                           // 30 km/h
+                }
+                switch (d.Fixed ? d.Kind : null)                                                       // the redrawn map: by norms class
+                {
+                    case "expressway": d.Speed = 25f; d.Weight = 1f / 28f; break;
+                    case "ramp": d.Speed = 14f; d.Weight = 1f / 45f; break;                            // 50 km/h
+                    case "arterial_road_regulated": case "arterial_continuous": case "arterial_regulated": d.Speed = 14f; d.Weight = 1f / 32f; break;
+                    case "district_transport": case "district_pedestrian": case "industrial": d.Speed = 11f; d.Weight = 1f / 40f; break;
+                    case "driveway_main": case "driveway_secondary": case "village_lane": case "park_road": d.Speed = 5.5f; d.Weight = 1f / 150f; break;
+                    case "village_main": case "village_secondary": d.Speed = 8f; d.Weight = 1f / 90f; break;
                 }
             }
             FindTwins();
@@ -182,6 +236,7 @@ namespace AlatauCity.DigitalTwin
             for (int i = 0; i < ways.Length; i++)
             {
                 var w = ways[i]; if (w == null || !w.OneWay) continue;
+                if (w.Fixed) { conf[i] = 1f; continue; }                         // the redrawn map: the point order is the direction of travel
                 int left = 0, right = 0, seen = 0;
                 for (int k = 0; k + 1 < w.P.Length; k++)
                 {
@@ -217,7 +272,7 @@ namespace AlatauCity.DigitalTwin
             const float G = 10f; var eg = new Dictionary<long, List<int>>(); var ow = new List<int>();
             for (int i = 0; i < ways.Length; i++)
             {
-                var w = ways[i]; if (w == null || !w.OneWay || w.P.Length < 2) continue; ow.Add(i);
+                var w = ways[i]; if (w == null || !w.OneWay || w.P.Length < 2) continue; if (!w.Fixed) ow.Add(i);
                 foreach (var p in new[] { w.P[0], w.P[w.P.Length - 1] })
                 {
                     long key = Key(Mathf.FloorToInt(p.x / G), Mathf.FloorToInt(p.y / G));
@@ -528,17 +583,49 @@ namespace AlatauCity.DigitalTwin
             return moves;
         }
         /// <summary>Move a post off the asphalt: out to the side (≤ maxOut) and back along its road (≤ maxBack), as little as it takes;
-        /// false when it cannot be placed. 'outMoved' = how far it went out to the side.</summary>
-        bool OffAsphalt(ref Vector2 p, Vector2 outward, Vector2 back, float maxOut, float maxBack, out float outMoved)
+        /// false when it cannot be placed. Rule 20: where it then stands ('at': its foot dy above the ground of way wi, as FilmSignals.Item.P)
+        /// is neither on a drawn carriageway nor inside a building, by the street furniture count's own test (RoadCounters.Blocked).
+        /// 'outMoved' = how far it went out to the side.</summary>
+        bool OffAsphalt(ref Vector2 p, Vector2 outward, Vector2 back, float maxOut, float maxBack, int wi, float dy, out float outMoved, out Vector3 at)
         {
-            outMoved = 0f;
+            outMoved = 0f; at = default;
             foreach (var mv in Moves())
             {
                 if (mv.x > maxBack || mv.y > maxOut) continue;
                 var q = p + back * mv.x + outward * mv.y;
-                if (!OnAsphalt(q, 0.6f)) { p = q; outMoved = mv.y; return true; }
+                if (OnAsphalt(q, 0.6f)) continue;
+                var a = new Vector3(q.x, FootY(wi, q) + dy, q.y); if (RoadCounters.Blocked(a)) continue;
+                p = q; outMoved = mv.y; at = a; return true;
             }
             return false;
+        }
+
+        /// <summary>Foot of a post beside way wi at p: the terrain, or the embankment / deck the way of the redrawn map lies on there.</summary>
+        float FootY(int wi, Vector2 p)
+        {
+            float g = CityGround.HeightAt(p.x, p.y); var w = wi >= 0 && wi < ways.Length ? ways[wi] : null; if (w == null || !w.Raised) return g;
+            int best = 0; float bd = float.MaxValue;
+            for (int k = 0; k < w.P.Length; k++) { float d = (w.P[k] - p).sqrMagnitude; if (d < bd) { bd = d; best = k; } }
+            float sfc = w.YC[best] - w.Lift; return sfc > g + 0.3f ? sfc : g;
+        }
+        int rampLinks;
+        /// <summary>Cars that turned from a road onto a ramp of the redrawn map since the start (run counters).</summary>
+        public static int RampEntries;
+        /// <summary>Run counters (RoadCounters, every 10 s): of the cars alive, how many stand off every drawn carriageway or junction patch
+        /// (or more than 0.8 m above / below its surface), how many are on a ramp of the redrawn map, how many on a raised road.</summary>
+        public void Counters(out int alive, out int off, out int onRamp, out int raised)
+        {
+            alive = 0; off = 0; onRamp = 0; raised = 0; if (cars == null || ways == null) return;
+            for (int i = 0; i < cars.Length; i++)
+            {
+                if (!cars[i].alive || cars[i].lane < 0 || cars[i].lane >= lanes.Count) continue;
+                var L = lanes[cars[i].lane]; var w = ways[L.W]; int k = cars[i].k; alive++;
+                if (w.NewRamp) onRamp++;
+                if (w.Raised) raised++;
+                if (w.GateRoad) continue;                                    // the Gate district's streets are its own model, not film roads
+                Pose(L, cars[i].s, ref k, out var pos, out _);
+                if (!FilmRoads.OnSurface(pos, 0.6f, true)) off++;
+            }
         }
 
         static bool OnLandmarkPlot(Landmarks.LandmarkSystem ls, float x, float z)
@@ -566,6 +653,7 @@ namespace AlatauCity.DigitalTwin
         {
             lanes.Clear(); samples.Clear(); grid.Clear();
             builtYear = year; builtSc = sc; builtGate = gate;
+            ApplyStages(year, sc);                                   // a widened ramp drives its new lanes from its year
             if (gate && !gateAdded) AddGateWays();
             for (int wi = 0; wi < ways.Length; wi++)
             {
@@ -603,10 +691,18 @@ namespace AlatauCity.DigitalTwin
                         var M = lanes[j]; if (M.W == L.W) continue;
                         if ((M.SP - L.EP).sqrMagnitude > 14f * 14f) continue;
                         float turn = Vector2.SignedAngle(L.ED, M.SD); if (Mathf.Abs(turn) > 125f) continue;
+                        // ramps of the redrawn map: only the right lane leaves for a ramp, a ramp joins the right lane (speed-change lanes)
+                        bool rl = ways[L.W].NewRamp, rm = ways[M.W].NewRamp;
+                        if (rm && !rl && L.Idx != L.Count - 1) continue;
+                        if (rl && !rm && M.Idx != M.Count - 1) continue;
+                        if (rm || rl) rampLinks++;
                         L.Next.Add(j); L.Turn.Add(turn);
                     }
                 }
             }
+            int rampLanes = 0; foreach (var L in lanes) if (ways[L.W].NewRamp) rampLanes++;
+            if (rampLanes > 0 || rampLinks > 0) Debug.Log($"[Alatau] film traffic: {rampLanes} ramp lanes of the redrawn map open in {year} (scenario {sc}), {rampLinks} merge/diverge links" + (staged > 0 ? $", {staged} ways with a reconstruction (lanes by year)" : ""));
+            rampLinks = 0;
             var sig = SignalSteps(items); while (sig.MoveNext()) yield return true;
             // samples every 20 m for placing cars, weighted by how busy the road class is
             for (int i = 0; i < lanes.Count; i++)
@@ -694,7 +790,7 @@ namespace AlatauCity.DigitalTwin
         /// on the middle of a road counts that road as two arms. Every approach gets a stop line (FilmSignals.State says when to stop) and
         /// a signal post at its right kerb; the street lamps of the Gate district are placed here too (its streets are not film roads).</summary>
         void BuildSignals() { var it = SignalSteps(FilmSignals.Items); while (it.MoveNext()) { } }
-        bool signalsLogged;
+        int signalsLogged;
         IEnumerator<bool> SignalSteps(List<FilmSignals.Item> items)
         {
             items.Clear();
@@ -742,7 +838,7 @@ namespace AlatauCity.DigitalTwin
                 }
             }
             var arms = new List<(int g, bool through, float s, Vector2 dir)>(); var endW = new HashSet<long>(); var thrSeen = new HashSet<int>();
-            int nJ = 0, nHeads = 0;
+            int nJ = 0, nHeads = 0, nData = 0, nDataOff = 0, nSigns = 0, nSignDropped = 0; var dsig = FilmRoads.DataSignals();
             for (int c = 0; c < cen.Count; c++)
             {
                 if ((c & 7) == 7) yield return true;
@@ -786,7 +882,31 @@ namespace AlatauCity.DigitalTwin
                     float rank = (w.Cls == TwinData.RoadClass.Main ? 100f : 0f) + w.Half * (w.OneWay ? 2f : 1f) + (a.through ? 1f : 0f);
                     if (rank > axisRank) { axisRank = rank; axis = a.dir; }
                 }
-                if (!main && nArms < 4) continue;
+                // the redrawn map says which of its junctions have lights (network nodes of kind crossing_signal, by the norms): there the
+                // data decides, both ways; the old data keeps the rule above
+                bool fresh = false; foreach (var a in arms) { var fw = ways[lanes[a.g].W]; if (fw.Fixed && !fw.GateRoad) fresh = true; }
+                bool lights;
+                if (fresh && dsig != null) { lights = NearAny(dsig, cc, 18f); if (lights) nData++; else nDataOff++; }
+                else lights = main || nArms >= 4;
+                if (!lights)
+                {
+                    // a junction without lights: priority-road signs on the approaches along its axis, give-way signs on the others (rule 20),
+                    // each at the right kerb where the stop line would be, moved off the asphalt as the signal posts are
+                    foreach (var a in arms)
+                    {
+                        var L0 = lanes[a.g]; var w = ways[L0.W];
+                        float other = 0f;
+                        foreach (var b in arms) { var o = ways[lanes[b.g].W]; if (lanes[b.g].W == L0.W) continue; FilmRoads.Dims(o.Cls, out _, out float walk, out _, out _); other = Mathf.Max(other, o.Half + (o.GateRoad ? 2f : walk)); }
+                        float s = a.through ? a.s - Mathf.Clamp(other + 2f, 6f, 30f) : a.s + Vector2.Dot(cc - L0.EP, L0.ED) - Mathf.Clamp(other + 2f, 6f, 30f);
+                        if (s < 4f) continue;
+                        Vector2 cp = LanePoint(L0, s, w.Half + 1.2f, out var dir);
+                        if (!OffAsphalt(ref cp, new Vector2(dir.y, -dir.x), -dir, 8f, Mathf.Min(12f, Mathf.Max(s - 4f, 0f)), L0.W, w.GateRoad ? 0.57f : 0.15f, out _, out var at)) { nSignDropped++; continue; }
+                        bool major = Mathf.Abs(Vector2.Dot(a.dir, axis)) >= 0.6f;
+                        var face = -dir; items.Add(new FilmSignals.Item { P = at, Yaw = Mathf.Atan2(face.x, face.y) * Mathf.Rad2Deg, Type = (byte)(major ? FilmSignals.SignPriority : FilmSignals.SignGiveWay) });
+                        nSigns++;
+                    }
+                    continue;
+                }
                 nJ++;
                 // phase offset: neighbours within ≈150 m share it (both carriageways of a dual road, a short block)
                 int hx = Mathf.FloorToInt(cc.x / 150f), hz = Mathf.FloorToInt(cc.y / 150f);
@@ -806,19 +926,30 @@ namespace AlatauCity.DigitalTwin
                     // the post at the right kerb, by the stop line (before the zebra), facing the drivers; where the kerb flares out
                     // (a junction's asphalt, another road) it moves out to the side or back along the road until it stands off the asphalt
                     Vector2 cp = LanePoint(L0, Mathf.Max(s - 0.5f, 0f), w.Half + 1.5f, out var dir);
-                    if (!OffAsphalt(ref cp, new Vector2(dir.y, -dir.x), -dir, 12f, Mathf.Min(16f, Mathf.Max(s - 4f, 0f)), out float pushed)) { nDropped++; continue; }
+                    if (!OffAsphalt(ref cp, new Vector2(dir.y, -dir.x), -dir, 12f, Mathf.Min(16f, Mathf.Max(s - 4f, 0f)), L0.W, w.GateRoad ? 0.57f : 0.15f, out float pushed, out var at)) { nDropped++; continue; }
                     if (pushed > 0f) nMoved++;
                     bool mast = (w.Lanes >= 2 || w.Half >= 5f) && pushed <= 1.5f;
-                    float y = CityGround.HeightAt(cp.x, cp.y) + (w.GateRoad ? 0.57f : 0.15f);
-                    var face = -dir; items.Add(new FilmSignals.Item { P = new Vector3(cp.x, y, cp.y), Yaw = Mathf.Atan2(face.x, face.y) * Mathf.Rad2Deg, Off = off, Grp = (byte)grp, Type = (byte)(mast ? 1 : 0) });
+                    var face = -dir; items.Add(new FilmSignals.Item { P = at, Yaw = Mathf.Atan2(face.x, face.y) * Mathf.Rad2Deg, Off = off, Grp = (byte)grp, Type = (byte)(mast ? 1 : 0) });
                     nHeads++;
                 }
             }
             foreach (var L in lanes) SortStops(L);
             int nLamps = GateLamps(items);
             if (items == FilmSignals.Items) FilmSignals.Changed();
-            // once: a log line in the editor costs more than the year change it reports
-            if (!signalsLogged) { signalsLogged = true; Debug.Log("[Alatau] film traffic: " + nJ + " signalled junctions, " + nHeads + " signal posts (" + nMoved + " moved off the asphalt, " + nDropped + " with no place), " + nLamps + " lamps in the Gate district"); }
+            // once with the Gate district standing and once without (a log line in the editor costs more than the year change it reports)
+            int bit = builtGate ? 2 : 1;
+            if ((signalsLogged & bit) == 0)
+            {
+                signalsLogged |= bit; int gw = 0, gl = 0; foreach (var w in ways) if (w != null && w.GateRoad) gw++; foreach (var L in lanes) if (ways[L.W].GateRoad) gl++;
+                Debug.Log("[Alatau] film traffic: " + nJ + " signalled junctions" + (dsig != null ? " (" + nData + " of the redrawn map where its data has lights, " + nDataOff + " of its junctions without; " + dsig.Count + " in the data)" : "") +
+                          ", " + nHeads + " signal posts (" + nMoved + " moved off the asphalt, " + nDropped + " with no place), " + nSigns + " road signs at junctions without lights (" + nSignDropped + " with no place), " + nLamps + " lamps in the Gate district" +
+                          (builtGate ? " (" + gw + " of its streets, " + gl + " lanes)" : " (the district is not standing in this build)"));
+            }
+        }
+        static bool NearAny(List<Vector2> pts, Vector2 p, float r)
+        {
+            foreach (var q in pts) if ((q - p).sqrMagnitude < r * r) return true;
+            return false;
         }
         static void AddStop(Lane L, float s, float off, int grp)
         {
@@ -866,11 +997,11 @@ namespace AlatauCity.DigitalTwin
                     Vector2 p = LanePoint(L, s, side * (w.Half + 1.3f), out var dir);
                     var arm = new Vector2(dir.y, -dir.x) * -side;              // from the kerb over the road
                     // never on the asphalt (a junction's, a crossing street's): a little further out or along, else no lamp here
-                    if (!OffAsphalt(ref p, -arm, i * 2 <= cnt ? dir : -dir, 4f, 8f, out _)) continue;      // away from the nearer end
+                    // (and, rule 20, never on a film road's carriageway or inside a building)
+                    if (!OffAsphalt(ref p, -arm, i * 2 <= cnt ? dir : -dir, 4f, 8f, L.W, 0.57f, out _, out var at)) continue;      // away from the nearer end
                     bool near = false; for (int q = 0; q < nSig && !near; q++) { var o = items[q].P; near = (new Vector2(o.x, o.z) - p).sqrMagnitude < 9f; }
                     if (near) continue;                                       // not against a signal post
-                    float y = CityGround.HeightAt(p.x, p.y) + 0.57f;
-                    items.Add(new FilmSignals.Item { P = new Vector3(p.x, y, p.y), Yaw = Mathf.Atan2(arm.x, arm.y) * Mathf.Rad2Deg, Type = 2 }); n++;
+                    items.Add(new FilmSignals.Item { P = at, Yaw = Mathf.Atan2(arm.x, arm.y) * Mathf.Rad2Deg, Type = 2 }); n++;
                 }
             }
             return n;
@@ -884,7 +1015,7 @@ namespace AlatauCity.DigitalTwin
                 bool rev = dir == 1; int first = lanes.Count;
                 for (int i = 0; i < n; i++)
                 {
-                    float off = w.OneWay ? -w.Half + (i + 0.5f) * 2f * w.Half / n : (i + 0.5f) * w.Half / n;   // right of the travel direction
+                    float off = w.OneWay ? -w.Half + (i + 0.5f) * 2f * w.Half / n : w.Inner + (i + 0.5f) * (w.Half - w.Inner) / n;   // right of the travel direction
                     var L = new Lane { W = wi, Rev = rev, I0 = a, I1 = b, Off = off, Len = len, Idx = i, Count = n };
                     L.SP = rev ? w.P[b] : w.P[a]; L.EP = rev ? w.P[a] : w.P[b];
                     L.SD = rev ? -w.T[b] : w.T[a]; L.ED = rev ? -w.T[a] : w.T[b];
@@ -1122,8 +1253,8 @@ namespace AlatauCity.DigitalTwin
             c.alive = true; c.dying = false; c.lane = lane; c.s = s; c.next = -1; c.leader = -1; c.k = L.I0; c.wait = 0f; c.carry = Vector3.zero; c.scale = scale; c.brake = false;
             c.life = Random.value * 100f;
             var P = L.EP; float r = Random.value;
-            // what drives here: buses on the main roads, trucks on the motorways and near the industrial zone (PepsiCo plant)
-            bool ind = (P - new Vector2(8500f, 940f)).sqrMagnitude < 4000f * 4000f;
+            // what drives here: buses on the main roads, trucks on the motorways and near the plants and logistics hubs
+            bool ind = NearIndustry(P, builtYear);
             float pBus = w.Cls == TwinData.RoadClass.Main ? 0.05f : w.Cls == TwinData.RoadClass.Ring ? 0.03f : 0f;
             float pTruck = w.Cls == TwinData.RoadClass.Highway ? (ind ? 0.22f : 0.08f) : w.Cls == TwinData.RoadClass.Ring ? 0.05f : ind ? 0.10f : 0.01f;
             if (L.Count > 1 && L.Idx == L.Count - 1 && pBus > 0f) pBus *= 2.2f;          // buses keep to the outer lane
@@ -1133,6 +1264,29 @@ namespace AlatauCity.DigitalTwin
             c.col = kind == Bus ? BusPal[Random.Range(0, BusPal.Length)] : kind == Truck ? TruckPal[Random.Range(0, TruckPal.Length)] : kind == Van ? VanPal[Random.Range(0, VanPal.Length)] : PickCarColour();
             float vf = kind == Bus ? 0.78f : kind == Truck ? 0.82f : Random.Range(0.9f, 1.1f);
             c.vMax = w.Speed * vf; c.v = c.vMax * 0.7f;
+        }
+        /// <summary>The plants and logistics hubs of the landmark list (LandmarkCapacity: Industrial), each as (x, z, opening year)
+        /// with its reach (site radius + 500 m) squared: more trucks within it from the year its works start. Read once.</summary>
+        static Vector4[] industry;
+        static bool NearIndustry(Vector2 p, int year)
+        {
+            if (industry == null)
+            {
+                var r = new List<Vector4>();
+                foreach (var l in Landmarks.LandmarkCatalog.All())
+                {
+                    var c = Landmarks.LandmarkCapacity.Of(l.Id);
+                    if (c == null || !c.Industrial) continue;
+                    float reach = l.Radius + 500f; r.Add(new Vector4(l.X, l.Z, l.StartYear, reach * reach));
+                }
+                industry = r.ToArray();
+            }
+            for (int i = 0; i < industry.Length; i++)
+            {
+                var q = industry[i];
+                if (q.z <= year && (p - new Vector2(q.x, q.y)).sqrMagnitude < q.w) return true;
+            }
+            return false;
         }
         static Color PickCarColour()
         {
@@ -1268,6 +1422,7 @@ namespace AlatauCity.DigitalTwin
                         float over = c.s - L.Len; int old = c.lane;
                         if (lanes[old].Tail == i) lanes[old].Tail = -1;
                         c.lane = c.next; c.next = -1; c.s = Mathf.Min(over, M.Len * 0.5f); c.k = M.I0; c.wait = 0f;
+                        if (ways[M.W].NewRamp && !ways[lanes[old].W].NewRamp) RampEntries++;
                         if (c.leader >= 0 && !(cars[c.leader].alive && cars[c.leader].lane == c.lane)) c.leader = -1;
                         if (c.leader < 0 && tail >= 0 && cars[tail].alive && cars[tail].lane == c.lane && cars[tail].s >= c.s) c.leader = tail;
                         M.Tail = i;

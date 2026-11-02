@@ -92,7 +92,7 @@ namespace AlatauCity.DigitalTwin
             Sc(Pick(all, s => s.Seg == 0 && !s.Grow, 0), "Почему Alatau City", 0f, () => ("до 30 лет", "налоговые льготы для новых проектов", InvestRegistry.Np)),
             Sc(Pick(all, s => s.Seg == 3 && s.Story == null && s.Module == "overview", 8), "На перекрёстке коридоров", 0f, () => ("67", "инвестпроектов · ≈ $6,9 млрд", Sources.GovSummary)),
             Sc(Pick(all, s => s.Seg == 1 && s.Module == "construction", 3), "Gate и Iconic Complex", 0f, () => ("> $800 млн", "инвестиции в Iconic Complex", InvestRegistry.AtIconic)),
-            Sc(new Step { Seg = 1, Zone = 0, Module = "objects", Year = 2026, Enter = () => { TwinState.SetDistrict(0); Fly(new Vector2(-3170f, -19080f), 4200f, 40f); } },
+            Sc(new Step { Seg = 1, Zone = 0, Module = "objects", Year = 2026, Enter = () => { TwinState.SetDistrict(0); Fly(Landmarks.IconicFrame.Centre, 4200f, 40f); } },
                "Куда вложить: реестр и калькулятор", 0f, () => ("до 10 %", "стоимости проекта — потолок льготы", InvestRegistry.MorganLewis), "w26-cols"),
             Sc(PitchInside(), "Контроль стройки Iconic", 22f, () => ("конец 2029", "сдача башни по плану", InvestRegistry.AtIconic)),
             Sc(Pick(all, s => TitleOf(s).Contains("нерги"), 16), "Сети без сюрпризов: энергия 2034", 26f, () => ("за 8 лет", "до дефицита энергии — прогноз двойника", TwinModels.Loads), null, EnergyBeats),

@@ -9,7 +9,12 @@ namespace AlatauCity.DigitalTwin
     ///   along streets and main roads: a row on each pavement, about every 13 m (poplars and round crowns);
     ///   in the parks of the plan (green on the base map): dense groves; in built-up quarters: a few in the yards; on open land: rare.
     /// A tree never stands in a building (a ray from above must reach the ground, with room for the crown) or on a road, and it appears
-    /// in the year its place is developed (the base map's development year), like the ground under it. The placement is a model.</summary>
+    /// in the year its place is developed (the base map's development year), like the ground under it. The placement is a model.
+    /// On the ground of the redrawn map (GroundTypes) a tree never stands, nor reaches with its crown, on hard ground: sports grounds,
+    /// playgrounds, courts, squares, car parks, drives and their pads, concrete yards, park alleys; nor on what the film roads draw
+    /// (carriageways, pavements, pedestrian streets and alleys, pads, truck yards: FilmRoads.OnSurface), and no street tree stands at a
+    /// junction's pedestrian crossings (FilmRoads.NearCrossing). A log line counts the trees whose trunk still stands on any of these,
+    /// per district (it must read 0).</summary>
     public class FilmTrees : MonoBehaviour
     {
         const float Cell = 320f, Spacing = 13f;
@@ -17,16 +22,27 @@ namespace AlatauCity.DigitalTwin
         /// <summary>Set by the capture tool: place every tree in range at once instead of a few cells per frame.</summary>
         public static bool Sync;
 
-        class CellData { public Matrix4x4[][] m = new Matrix4x4[Species][]; public float[][] y = new float[Species][]; public Vector4[][] t = new Vector4[Species][]; public MaterialPropertyBlock[] props = new MaterialPropertyBlock[Species]; public Bounds bounds; public int count; }
-        struct Seg { public Vector2 a, b; public float half; }
+        class CellData { public Matrix4x4[][] m = new Matrix4x4[Species][]; public float[][] y = new float[Species][]; public Vector4[][] t = new Vector4[Species][]; public MaterialPropertyBlock[] props = new MaterialPropertyBlock[Species]; public Bounds bounds; public int count; public int[] hard; public int onData, refused, paved; }
+        /// <summary>A piece of a road corridor: no groves or yard trees within 'half' of it; no tree at all within 'carr' (the carriageway),
+        /// except inside 'gap' (a planted median along the centre line).</summary>
+        struct Seg { public Vector2 a, b; public float half, carr, gap; }
 
         readonly Dictionary<long, CellData> cells = new Dictionary<long, CellData>();
         readonly Dictionary<long, List<Vector3>> street = new Dictionary<long, List<Vector3>>();     // x, z, species
         readonly Dictionary<long, List<Seg>> corridors = new Dictionary<long, List<Seg>>();
         readonly Dictionary<long, List<Vector4>> hedges = new Dictionary<long, List<Vector4>>();     // x, z, direction in degrees, length
+        // the no-planting mask of the new map data (Resources/Landmarks/noplant.json: squares, plazas, parking, future asphalt), by cell
+        struct NoPlantRing { public Vector2[] r; public Rect b; }
+        readonly Dictionary<long, List<NoPlantRing>> noplant = new Dictionary<long, List<NoPlantRing>>();
+        static FilmTrees noplantOwner;
+        // the LRT is built after the trees may have been made: the corridors of its ground and elevated sections are added once it exists
+        bool lrtAdded; int nMedian, nNoPlant, roadsSeen;
         readonly Dictionary<Collider, bool> isGround = new Dictionary<Collider, bool>();
         readonly List<long> wanted = new List<long>();
-        Color32[] plan; byte[] dev; int mw, mh; float ua, ub, va, vb;
+        Color32[] plan; byte[] dev, dist; int mw, mh, dw, dh; float ua, ub, va, vb;
+        // trees on hard ground of the map data, per district (Gate, Golden, Growing, Green, outside), logged when the cells in view are made
+        static readonly string[] DistName = { "Gate", "Golden", "Growing", "Green", "outside the districts" };
+        string lastHardLog; float lastHardT = -100f;
         Mesh[] hi = new Mesh[Species], lo = new Mesh[Species], nearM = new Mesh[Species]; Material mat; bool ready, failed;
         readonly Plane[] planes = new Plane[6];
         readonly List<Matrix4x4>[] tmpM = { new List<Matrix4x4>(), new List<Matrix4x4>(), new List<Matrix4x4>(), new List<Matrix4x4>() };
@@ -140,6 +156,8 @@ namespace AlatauCity.DigitalTwin
         {
             if (failed || distance > 6500f) return;
             if (!ready) { if (!TwinData.Ready) return; Init(); if (failed) return; }
+            LateCorridors();
+            if (roadsSeen != FilmRoads.BuiltVersion) { roadsSeen = FilmRoads.BuiltVersion; if (cells.Count > 0) cells.Clear(); }   // the drawn roads are there now
             float R = Mathf.Clamp(distance * 2.6f, 1500f, 4600f);
             GeometryUtility.CalculateFrustumPlanes(cam, planes);
             Vector3 cp = cam.transform.position;
@@ -160,11 +178,25 @@ namespace AlatauCity.DigitalTwin
                         else Graphics.DrawMeshInstanced(near ? hi[s] : lo[s], 0, mat, cd.m[s], cd.m[s].Length, cd.props[s], sh, true, 0, null);
                     }
             }
-            if (wanted.Count == 0) { Sync = false; return; }
+            if (wanted.Count == 0) { Sync = false; LogHard(); return; }
             // place the missing cells, the nearest to the focus first; a few milliseconds per frame unless a capture asks for all
             wanted.Sort((a, b) => Dist2(a, focus).CompareTo(Dist2(b, focus)));
             float t0 = Time.realtimeSinceStartup;
             foreach (long k in wanted) { Generate(k); if (!Sync && Time.realtimeSinceStartup - t0 > 0.004f) break; }
+        }
+
+        /// <summary>The counter of trees on hard ground of the map data (must be 0), once the cells in view are all made and when it changes.</summary>
+        void LogHard()
+        {
+            if (GroundTypes.Instance == null || Time.realtimeSinceStartup - lastHardT < 10f) return;
+            var h = new int[5]; int on = 0, refused = 0, paved = 0;
+            foreach (var cd in cells.Values) { if (cd.hard == null) continue; for (int i = 0; i < 5; i++) h[i] += cd.hard[i]; on += cd.onData; refused += cd.refused; paved += cd.paved; }
+            var sb = new System.Text.StringBuilder("[Alatau] film trees on hard ground (map data): ");
+            for (int i = 0; i < 5; i++) sb.Append(i == 0 ? "" : " · ").Append(DistName[i]).Append(' ').Append(h[i]);
+            sb.Append($" (trunks on hard ground of the data, on a drawn carriageway, pavement, alley, pad or truck yard, or a street tree at a crossing; {on} trees on the data's ground in the cells made; {refused} places refused: sports grounds, playgrounds, courts, paving, drives, alleys, {paved} of them on drawn road surfaces or at crossings)");
+            string line = sb.ToString(); lastHardT = Time.realtimeSinceStartup;
+            if (line == lastHardLog) return;
+            lastHardLog = line; if (h[0] + h[1] + h[2] + h[3] + h[4] > 0) Debug.LogWarning(line); else Debug.Log(line);
         }
 
         static float Dist2(long k, Vector3 f)
@@ -182,6 +214,8 @@ namespace AlatauCity.DigitalTwin
             // the base map at about 20 m per pixel, readable: land use from its colour, and the year each place is developed
             mw = 2048; mh = Mathf.RoundToInt(2048f * planTex.height / planTex.width);
             plan = Read(planTex, mw, mh).GetPixels32(); var d32 = Read(devTex, mw, mh).GetPixels32(); dev = new byte[d32.Length]; for (int i = 0; i < dev.Length; i++) dev[i] = d32[i].r;
+            var distTex = Resources.Load<Texture2D>("Map/map_districts");                   // district ids (30 Gate, 90 Golden, 150 Growing, 210 Green) for the counter
+            if (distTex != null) { dw = distTex.width; dh = distTex.height; var t32 = Read(distTex, dw, dh).GetPixels32(); dist = new byte[t32.Length]; for (int i = 0; i < dist.Length; i++) dist[i] = t32[i].r; }
             // how the map lies on the ground: the terrain mesh carries map coordinates in its uv
             var mesh = terrain.GetComponent<MeshFilter>().sharedMesh; var vs = mesh.vertices; var uvs = mesh.uv; int last = vs.Length - 1;
             ua = (uvs[last].x - uvs[0].x) / (vs[last].x - vs[0].x); ub = uvs[0].x - ua * vs[0].x; va = (uvs[last].y - uvs[0].y) / (vs[last].z - vs[0].z); vb = uvs[0].y - va * vs[0].z;
@@ -196,26 +230,40 @@ namespace AlatauCity.DigitalTwin
             Physics.SyncTransforms();
             // street trees and road corridors, sorted into cells
             var rng = new System.Random(2050); int rows = 0;
+            var rngM = new System.Random(2051); var medianAt = new Dictionary<long, List<Vector2>>(); nMedian = 0;
             for (int ei = 0; ei < TwinData.Roads.Length; ei++)
             {
                 var e = TwinData.Roads[ei];
                 if (e.Geom == null || e.Geom.Length < 2) continue;
-                FilmRoads.Dims(e.Cls, out float half, out float walk, out _, out _);
-                bool planted = walk > 0f && !FilmRoads.Dropped(ei); float next = Spacing * (float)rng.NextDouble(), off = half + walk * 0.55f;
+                // the cross-section: the street profile of the new data when the road reader gives it, else today's class widths
+                var cor = RoadCorridors.Get(ei, e.Cls);
+                bool planted = cor.Row > 0f; float next = Spacing * (float)rng.NextDouble(), off = cor.Row;
+                // a planted median (boulevard, divided road): a row of trees down its middle, two rows when it is wide
+                float med = cor.Median >= 3f ? cor.Median : 0f, nextM = 0f; if (med > 0f) nextM = Spacing * (float)rngM.NextDouble();
                 for (int i = 1; i < e.Geom.Length; i++)
                 {
                     Vector2 a = e.Geom[i - 1], b = e.Geom[i]; float len = (b - a).magnitude; if (len < 0.01f) continue;
                     Vector2 d = (b - a) / len, left = new Vector2(-d.y, d.x);
                     for (float t = 0; t < len; t += 60f)
                     {
-                        Vector2 p = a + d * t, q = a + d * Mathf.Min(t + 60f, len); var sg = new Seg { a = p, b = q, half = half + walk + 1.2f };
-                        for (int cz = C(Mathf.Min(p.y, q.y) - sg.half); cz <= C(Mathf.Max(p.y, q.y) + sg.half); cz++) for (int cx = C(Mathf.Min(p.x, q.x) - sg.half); cx <= C(Mathf.Max(p.x, q.x) + sg.half); cx++)
-                        { long k = Key(cx, cz); if (!corridors.TryGetValue(k, out var l)) corridors[k] = l = new List<Seg>(); l.Add(sg); }
+                        Vector2 p = a + d * t, q = a + d * Mathf.Min(t + 60f, len);
+                        AddSeg(new Seg { a = p, b = q, half = cor.Outer + 1.2f, carr = cor.Carriage + 0.6f, gap = !cor.OneSide && med > 0f ? med * 0.5f - 0.8f : 0f });
+                    }
+                    if (med > 0f)
+                    {
+                        for (; nextM < len; nextM += Spacing * (0.9f + 0.2f * (float)rngM.NextDouble()))
+                        {
+                            if (cor.OneSide) MedianTree(a + d * nextM + left * (cor.Carriage + med * 0.5f), med, medianAt);
+                            else if (med < 9f) MedianTree(a + d * nextM, med, medianAt);
+                            else { MedianTree(a + d * nextM + left * (med * 0.25f), med, medianAt); MedianTree(a + d * nextM - left * (med * 0.25f), med, medianAt); }
+                        }
+                        nextM -= len;
                     }
                     if (!planted) continue;
                     for (; next < len; next += Spacing * (0.85f + 0.3f * (float)rng.NextDouble()))
                         for (int side = -1; side <= 1; side += 2)
                         {
+                            if (cor.OneSide && side > 0) continue;                          // one carriageway: its pavement is on the right
                             Vector2 p = a + d * next + left * (off * side); long k = Key(C(p.x), C(p.y));
                             if (!street.TryGetValue(k, out var l)) street[k] = l = new List<Vector3>();
                             l.Add(new Vector3(p.x, p.y, e.Cls == TwinData.RoadClass.Main ? 1 : (rows & 3) == 0 ? 1 : 0));
@@ -223,14 +271,15 @@ namespace AlatauCity.DigitalTwin
                     next -= len; rows++;
                 }
             }
+            if (RoadCorridors.FromProfiles > 0 || nMedian > 0) Debug.Log($"[Alatau] film trees: {RoadCorridors.FromProfiles} road edges with street profiles, {nMedian} trees on planted medians");
             // the clean road geometry (rebuilt motorways, interchange ramps) keeps trees off its ribbons too
             foreach (var (P, half) in FilmRoads.CleanLines())
                 for (int i = 1; i < P.Count; i++)
                 {
-                    var sg = new Seg { a = P[i - 1], b = P[i], half = half + 2f };
-                    for (int cz = C(Mathf.Min(sg.a.y, sg.b.y) - sg.half); cz <= C(Mathf.Max(sg.a.y, sg.b.y) + sg.half); cz++) for (int cx = C(Mathf.Min(sg.a.x, sg.b.x) - sg.half); cx <= C(Mathf.Max(sg.a.x, sg.b.x) + sg.half); cx++)
-                    { long k = Key(cx, cz); if (!corridors.TryGetValue(k, out var l)) corridors[k] = l = new List<Seg>(); l.Add(sg); }
+                    AddSeg(new Seg { a = P[i - 1], b = P[i], half = half + 2f, carr = half + 0.6f });
                 }
+            AddNoPlant();
+            LateCorridors();
             // house plots: every generated house gets a hedge round a plot a little larger than itself, with a gap for the gate,
             // and a tree or two in the garden. The house rectangles are read from the building meshes (the lowest corners of each house).
             int plots = 0; var uv2 = new List<Vector2>(); var corner = new Dictionary<int, List<Vector3>>();
@@ -328,18 +377,32 @@ namespace AlatauCity.DigitalTwin
             return 0;
         }
 
+        int DistrictIdx(float x, float z)
+        {
+            if (dist == null) return 4;
+            int px = Mathf.Clamp((int)((ua * x + ub) * dw), 0, dw - 1), py = Mathf.Clamp((int)((va * z + vb) * dh), 0, dh - 1); int v = dist[py * dw + px];
+            return v < 15 ? 4 : Mathf.Clamp(Mathf.RoundToInt((v - 30) / 60f), 0, 3);
+        }
+
         void Generate(long key)
         {
             int cx = (int)(key >> 32) - 100000, cz = (int)(uint)(key & 0xFFFFFFFF) - 100000;
+            var gtI = GroundTypes.Instance; var hardN = new int[5]; int onData = 0, refused = 0, paved = 0; bool rd = FilmRoads.Ready, streetTree = false;
             var rng = new System.Random(cx * 73856093 ^ cz * 19349663);
             for (int s = 0; s < Species; s++) { tmpM[s].Clear(); tmpY[s].Clear(); tmpT[s].Clear(); }
             corridors.TryGetValue(key, out var segs);
+            noplant.TryGetValue(key, out var np);
             float ymin = float.MaxValue, ymax = float.MinValue;
             void Try(float x, float z, int sp, float year, float size)
             {
                 if (tmpM[sp].Count >= 1023) return;
                 if (Landmarks.LandmarkSystem.OnPlot(x, z)) return;                        // a landmark's plot (airfield, campus…): its own planting
                 if (clearings.Count > 0 && Cleared(x, z)) return;
+                if (np != null && InNoPlant(np, x, z)) return;                           // a square, plaza, parking or future asphalt of the new data
+                // hard ground of the map data under the trunk or the crown (the yard cell the ground draws there, GroundTypes.CellKindAt)
+                if (gtI != null && gtI.HardNear(x, z, sp == 1 ? 1.6f * size : 3.0f * size)) { refused++; return; }
+                // what the film roads draw: carriageway, pavement, pedestrian street or alley, pad, truck yard (with a little room for the trunk)
+                if (rd) { var tp = new Vector3(x, CityGround.HeightAt(x, z), z); if (FilmRoads.OnSurface(tp, 0.5f, false) || FilmRoads.OnSurface(tp, 0.5f, true)) { refused++; paved++; return; } }
                 if (!Physics.Raycast(new Vector3(x, 6000f, z), Vector3.down, out var hit, 9000f, ~0, QueryTriggerInteraction.Ignore)) return;
                 if (!isGround.TryGetValue(hit.collider, out bool ground)) isGround[hit.collider] = ground = hit.collider.name.StartsWith("Terrain");
                 if (!ground) return;                                                       // a building stands here (in some year)
@@ -348,15 +411,30 @@ namespace AlatauCity.DigitalTwin
                 tmpM[sp].Add(Matrix4x4.TRS(new Vector3(x, y, z), Quaternion.Euler(0, (float)rng.NextDouble() * 360f, 0), new Vector3(size, size * (0.9f + 0.25f * (float)rng.NextDouble()), size)));
                 tmpY[sp].Add(year); float v = 0.86f + 0.26f * (float)rng.NextDouble(), w = (float)rng.NextDouble();
                 tmpT[sp].Add(new Vector4(v * (1f + 0.10f * w), v, v * (1f - 0.12f * w), 1f));
+                // the counter: the trunk on hard ground of the data or on a drawn road surface, a street tree at a crossing
+                bool onRoad = rd && (FilmRoads.OnSurface(new Vector3(x, y + 0.15f, z), 0f, false) || FilmRoads.OnSurface(new Vector3(x, y + 0.15f, z), 0f, true));
+                if (gtI != null && gtI.Covers(x, z)) onData++;
+                if ((gtI != null && gtI.Covers(x, z) && gtI.HardAt(x, z)) || onRoad || (rd && sp < 3 && streetTree && FilmRoads.NearCrossing(new Vector2(x, z), 0f))) hardN[DistrictIdx(x, z)]++;
             }
+            streetTree = true;
             if (street.TryGetValue(key, out var rows))
-                foreach (var p in rows) { int land = Land(p.x, p.y, out float yr); if (land != 3) Try(p.x, p.y, (int)p.z, yr, 0.8f + 0.3f * (float)rng.NextDouble()); }
+                foreach (var p in rows)
+                {
+                    int land = Land(p.x, p.y, out float yr); if (land == 3) continue;
+                    float sz = 0.8f + 0.3f * (float)rng.NextDouble();
+                    if (segs != null && OnCarriage(segs, p.x, p.y)) continue;                  // never on a carriageway (of this or a crossing road)
+                    if (rd && FilmRoads.NearCrossing(new Vector2(p.x, p.y), 2f)) { refused++; paved++; continue; }   // nor at a crossing or the corner
+                    Try(p.x, p.y, (int)p.z, yr, sz);
+                }
+            streetTree = false;
             if (hedges.TryGetValue(key, out var hs))
                 foreach (var hd in hs)
                 {
                     if (tmpM[3].Count >= 1023) break;
                     if (Land(hd.x, hd.y, out float yr) == 3) continue;
                     if (Landmarks.LandmarkSystem.OnPlot(hd.x, hd.y) || FilmRoads.InInterchange(hd.x, hd.y) || (clearings.Count > 0 && Cleared(hd.x, hd.y))) continue;
+                    if (np != null && InNoPlant(np, hd.x, hd.y)) continue;
+                    if (gtI != null && gtI.HardNear(hd.x, hd.y, 1f)) { refused++; continue; }                // no hedge across a court or an alley
                     if (segs != null) { bool onRoad = false; var q = new Vector2(hd.x, hd.y); foreach (var sg in segs) if (DistToSeg(q, sg.a, sg.b) < sg.half - 1f) { onRoad = true; break; } if (onRoad) continue; }
                     if (!Physics.Raycast(new Vector3(hd.x, 6000f, hd.y), Vector3.down, out var hit, 9000f, ~0, QueryTriggerInteraction.Ignore)) continue;
                     if (!isGround.TryGetValue(hit.collider, out bool ground)) isGround[hit.collider] = ground = hit.collider.name.StartsWith("Terrain");
@@ -377,7 +455,7 @@ namespace AlatauCity.DigitalTwin
                 if (segs != null) { bool onRoad = false; var q = new Vector2(x, z); foreach (var sg in segs) if (DistToSeg(q, sg.a, sg.b) < sg.half) { onRoad = true; break; } if (onRoad) continue; }
                 Try(x, z, land == 1 ? (kind < 0.58f ? 0 : kind < 0.82f ? 2 : 1) : (kind < 0.8f ? 0 : 1), yr, size);
             }
-            var cd = new CellData();
+            var cd = new CellData { hard = hardN, onData = onData, refused = refused, paved = paved };
             for (int s = 0; s < Species; s++)
             {
                 cd.m[s] = tmpM[s].ToArray(); cd.y[s] = tmpY[s].ToArray(); cd.t[s] = tmpT[s].ToArray(); cd.count += cd.m[s].Length;
@@ -385,6 +463,97 @@ namespace AlatauCity.DigitalTwin
             }
             if (cd.count > 0) cd.bounds = new Bounds(new Vector3((cx + 0.5f) * Cell, (ymin + ymax) * 0.5f + 8f, (cz + 0.5f) * Cell), new Vector3(Cell + 12f, ymax - ymin + 30f, Cell + 12f));
             cells[key] = cd;
+        }
+
+        // ---------------- road corridors, planted medians, the no-planting mask
+        void AddSeg(Seg sg)
+        {
+            float r = Mathf.Max(sg.half, sg.carr);
+            for (int cz = C(Mathf.Min(sg.a.y, sg.b.y) - r); cz <= C(Mathf.Max(sg.a.y, sg.b.y) + r); cz++) for (int cx = C(Mathf.Min(sg.a.x, sg.b.x) - r); cx <= C(Mathf.Max(sg.a.x, sg.b.x) + r); cx++)
+            { long k = Key(cx, cz); if (!corridors.TryGetValue(k, out var l)) corridors[k] = l = new List<Seg>(); l.Add(sg); }
+        }
+        /// <summary>On the carriageway of a road piece (and not on its planted median).</summary>
+        static bool OnCarriage(List<Seg> segs, float x, float z)
+        {
+            var q = new Vector2(x, z);
+            foreach (var sg in segs)
+            {
+                if (q.x < Mathf.Min(sg.a.x, sg.b.x) - sg.carr || q.x > Mathf.Max(sg.a.x, sg.b.x) + sg.carr || q.y < Mathf.Min(sg.a.y, sg.b.y) - sg.carr || q.y > Mathf.Max(sg.a.y, sg.b.y) + sg.carr) continue;
+                float d = DistToSeg(q, sg.a, sg.b); if (d < sg.carr && d >= sg.gap) return true;
+            }
+            return false;
+        }
+        /// <summary>A tree of a planted median; the other carriageway of the same boulevard may have put one at the same place.</summary>
+        void MedianTree(Vector2 p, float med, Dictionary<long, List<Vector2>> at)
+        {
+            long k = Key(C(p.x), C(p.y));
+            if (!at.TryGetValue(k, out var l)) at[k] = l = new List<Vector2>();
+            foreach (var q in l) if ((q - p).sqrMagnitude < 6.5f * 6.5f) return;
+            l.Add(p);
+            if (!street.TryGetValue(k, out var s)) street[k] = s = new List<Vector3>();
+            s.Add(new Vector3(p.x, p.y, med < 9f ? 1 : 0)); nMedian++;
+        }
+
+        [System.Serializable] class NoPlantPoly { public int[] y; public float[] p; }
+        [System.Serializable] class NoPlantJ { public int v; public NoPlantPoly[] polys; }
+        /// <summary>Resources/Landmarks/noplant.json (CONTRACT §6): no tree or hedge inside these polygons. A tree has a year it appears
+        /// but none it goes, so a polygon that is no-planting in any year up to 2050 keeps the place free in every year. No file: nothing.</summary>
+        void AddNoPlant()
+        {
+            noplantOwner = this; nNoPlant = 0;
+            int skipped = 0, solar = 0; float area = 0f;
+            void Ring(Vector2[] r)
+            {
+                var ring = new NoPlantRing { r = r, b = MapPolys.Bounds(r) }; nNoPlant++; area += Mathf.Abs(MapPolys.SignedArea(r));
+                for (int cz = C(ring.b.yMin); cz <= C(ring.b.yMax); cz++) for (int cx = C(ring.b.xMin); cx <= C(ring.b.xMax); cx++)
+                { long k = Key(cx, cz); if (!noplant.TryGetValue(k, out var l)) noplant[k] = l = new List<NoPlantRing>(); l.Add(ring); }
+            }
+            var txt = MapPolys.Load("noplant");
+            if (txt != null)
+            {
+                NoPlantJ j = null; try { j = JsonUtility.FromJson<NoPlantJ>(txt); } catch (System.Exception ex) { Debug.LogWarning("[Alatau] film trees: noplant.json unreadable: " + ex.Message); }
+                if (j?.polys != null)
+                    foreach (var pj in j.polys)
+                    {
+                        var r = MapPolys.Ring(pj.p); if (r == null) continue;
+                        if (MapPolys.FirstYear(pj.y) > 2050) { skipped++; continue; }
+                        Ring(r);
+                    }
+            }
+            // the solar fields of the new data are no place for trees either
+            foreach (var r in SolarLayer.FieldRings()) { Ring(r); solar++; }
+            if (nNoPlant > 0 || skipped > 0)
+                Debug.Log($"[Alatau] film trees: {nNoPlant - solar} noplant.json polygons and {solar} solar fields ({area / 10000f:0.0} ha) keep trees and hedges off" + (skipped > 0 ? $", {skipped} after 2050 ignored" : ""));
+        }
+        static bool InNoPlant(List<NoPlantRing> l, float x, float z)
+        {
+            foreach (var g in l) if (x >= g.b.xMin && x <= g.b.xMax && z >= g.b.yMin && z <= g.b.yMax && MapPolys.Inside(g.r, x, z)) return true;
+            return false;
+        }
+        /// <summary>Inside a polygon of noplant.json (false before the film trees are made or without the file): for other layers that
+        /// place props.</summary>
+        public static bool NoPlantAt(float x, float z)
+        {
+            var o = noplantOwner; if (o == null || o.noplant.Count == 0) return false;
+            return o.noplant.TryGetValue(Key(C(x), C(z)), out var l) && InNoPlant(l, x, z);
+        }
+        /// <summary>The LRT's ground and elevated sections keep trees off its track bed and from under its deck (a tunnel does not):
+        /// added once the LRT is built; trees placed before are placed again.</summary>
+        void LateCorridors()
+        {
+            if (lrtAdded) return;
+            var lrt = Landmarks.LrtLayer.Instance; if (lrt == null || !lrt.Built) return;
+            lrtAdded = true; int n = 0;
+            foreach (var r in lrt.Routes)
+                for (int i = 1; i < r.P.Length; i++)
+                {
+                    int kind = r.Sec != null && i - 1 < r.Sec.Length ? r.Sec[i - 1] : 1;
+                    if (kind == 2) continue;
+                    float carr = kind == 0 ? 7.5f : 6.5f;
+                    AddSeg(new Seg { a = new Vector2(r.P[i - 1].x, r.P[i - 1].z), b = new Vector2(r.P[i].x, r.P[i].z), half = carr + 2.5f, carr = carr }); n++;
+                }
+            if (n > 0 && cells.Count > 0) cells.Clear();
+            Debug.Log($"[Alatau] film trees: {n} LRT spans keep trees off the track and from under the deck");
         }
 
         static float DistToSeg(Vector2 p, Vector2 a, Vector2 b)

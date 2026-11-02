@@ -58,7 +58,7 @@ namespace AlatauCity.DigitalTwin
                 }
                 BuildMesh(TwinFiles.Bytes("gate_q1.bytes"));
                 Day = StatusDay;
-                Debug.Log($"[Alatau] BIM Gate Q1: {elements.Length} elements, {stages.Length} stages, from {Day0:dd.MM.yyyy}");
+                Debug.Log($"[Alatau] BIM Gate Q1: {elements.Length} elements, {stages.Length} stages, from {Day0:dd.MM.yyyy}, centre ({Center.x:0}, {Center.z:0}) moved by ({Landmarks.IconicFrame.Dx:0}, {Landmarks.IconicFrame.Dz:0})");
             }
             catch (Exception ex) { Debug.LogError("[Alatau] BIM Gate Q1: " + ex.Message); elements = null; }
         }
@@ -67,6 +67,8 @@ namespace AlatauCity.DigitalTwin
         {
             int o = 4; int nv = BitConverter.ToInt32(b, o); o += 4; int nt = BitConverter.ToInt32(b, o); o += 4;
             var v = new Vector3[nv]; for (int i = 0; i < nv; i++) { v[i] = new Vector3(BitConverter.ToSingle(b, o), BitConverter.ToSingle(b, o + 4), BitConverter.ToSingle(b, o + 8)); o += 12; }
+            // the file is in world coordinates of the old place of the Gate District quarter: it moves with Iconic (IconicFrame)
+            Landmarks.IconicFrame.Shift(v);
             tris = new int[nt * 3]; for (int i = 0; i < tris.Length; i++) { tris[i] = (int)BitConverter.ToUInt32(b, o); o += 4; }
             vertElem = new int[nv]; for (int i = 0; i < nv; i++) { vertElem[i] = BitConverter.ToInt32(b, o); o += 4; }
             // flat shading: unweld so every triangle gets its own normal

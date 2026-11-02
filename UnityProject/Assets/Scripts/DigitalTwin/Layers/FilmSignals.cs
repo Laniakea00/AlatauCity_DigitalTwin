@@ -13,13 +13,19 @@ namespace AlatauCity.DigitalTwin
     public class FilmSignals : MonoBehaviour
     {
         public static FilmSignals Instance;
-        /// <summary>A signal post (Type 0 a post by a street, 1 a mast with an arm over a main road) or a lamp (Type 2): position on the
-        /// ground, yaw of its local +z (a signal faces the drivers that approach, a lamp's arm points over the road), phase offset and group.</summary>
+        /// <summary>A signal post (Type 0 a post by a street, 1 a mast with an arm over a main road), a lamp (Type 2) or a road sign at a
+        /// junction without lights (SignGiveWay, SignPriority): position on the ground, yaw of its local +z (a signal or a sign faces the
+        /// drivers that approach, a lamp's arm points over the road), phase offset and group (signals only).</summary>
         public struct Item { public Vector3 P; public float Yaw, Off; public byte Type, Grp; }
+        /// <summary>Road signs (GOST R 52290, size II): 2.4 «Уступите дорогу» on the side approaches of a junction without lights, 2.1
+        /// «Главная дорога» on the approaches along its main axis.</summary>
+        public const byte SignGiveWay = 3, SignPriority = 4;
         public static readonly List<Item> Items = new List<Item>();
         static int version;
         /// <summary>FilmTraffic filled Items anew.</summary>
         public static void Changed() { version++; }
+        /// <summary>Changes whenever Items is filled anew (RoadCounters).</summary>
+        public static int Version => version;
 
         // ------------------------------------------------------------------ the cycle (AlatauSignal.shader computes the same: keep in step)
         public const float Cycle = 44f;
@@ -38,7 +44,7 @@ namespace AlatauCity.DigitalTwin
         void Awake() { Instance = this; }
 
         static readonly bool High = Application.platform != RuntimePlatform.WebGLPlayer;
-        const int Types = 3, Batch = 1023;
+        const int Types = 5, Batch = 1023;
         Mesh[] meshes; Material mat; bool failed;
         Matrix4x4[][][] mats; Vector4[][][] data; MaterialPropertyBlock[][] mpbs; readonly int[] counts = new int[Types]; int cap;
         int drawnVersion = -1; Vector2 lastFocus = new Vector2(1e9f, 1e9f); float lastR;
@@ -49,7 +55,7 @@ namespace AlatauCity.DigitalTwin
             var sh = Shader.Find("AlatauCity/Signal");
             if (sh == null) { failed = true; Debug.LogWarning("[Alatau] film signals: shader AlatauCity/Signal missing"); return; }
             mat = new Material(sh) { name = "Film signals", enableInstancing = true };
-            meshes = new[] { SignalMesh(false), SignalMesh(true), LampMesh() };
+            meshes = new[] { SignalMesh(false), SignalMesh(true), LampMesh(), SignMesh(false), SignMesh(true) };
             cap = High ? 3000 : 900;
             int nb = (cap + Batch - 1) / Batch;
             mats = new Matrix4x4[Types][][]; data = new Vector4[Types][][]; mpbs = new MaterialPropertyBlock[Types][];
@@ -158,8 +164,44 @@ namespace AlatauCity.DigitalTwin
             var m = b.Mesh("Gate street lamp"); var bb = m.bounds; bb.Expand(4f); m.bounds = bb; return m;
         }
 
+        static readonly Color SignRed = new Color(0.80f, 0.07f, 0.06f, 0f), SignWhite = new Color(0.93f, 0.93f, 0.91f, 0f),
+                              SignYellow = new Color(0.97f, 0.74f, 0.06f, 0f), SignBack = new Color(0.52f, 0.54f, 0.56f, 0f);
+        /// <summary>A road sign on a 76 mm post, its face (+z) 2.0 m above the ground at the lower edge: 2.4 an inverted triangle of 0.9 m,
+        /// red border, white field; 2.1 a 0.7 m square on its corner, white border, yellow field. The back is a grey plate.</summary>
+        static Mesh SignMesh(bool priority)
+        {
+            var b = new Builder();
+            float R = priority ? 0.70f * 0.7071f : 0.90f / Mathf.Sqrt(3f);        // circumradius of the plate
+            float cy = 2.0f + R, rot = priority ? 0f : -90f * Mathf.Deg2Rad;       // the low corner (centre − R) at 2.0 m
+            int n = priority ? 4 : 3;
+            b.Box(new Vector3(0, (cy + 0.25f) * 0.5f, 0), new Vector3(0.076f, cy + 0.25f, 0.076f), Pole);
+            var c = new Vector3(0f, cy, 0.06f);
+            b.Poly(c, R, n, rot, Vector3.back, SignBack, -0.006f);
+            b.Poly(c, R, n, rot, Vector3.forward, priority ? SignWhite : SignRed, 0f);
+            b.Poly(c, R * (priority ? 0.70f : 0.62f), n, rot, Vector3.forward, priority ? SignYellow : SignWhite, 0.004f);
+            return b.Mesh(priority ? "Sign main road" : "Sign give way");
+        }
+
         class Builder
         {
+            /// <summary>A flat regular polygon (n corners on a circle of radius r round c, the first at angle rot from +x, in the xy
+            /// plane) facing n0 (±z), shifted dz along +z.</summary>
+            public void Poly(Vector3 c, float r, int n, float rot, Vector3 n0, Color col, float dz)
+            {
+                int v0 = V.Count; c.z += dz;
+                V.Add(c); N.Add(n0); C.Add(col); U.Add(Vector3.zero);
+                for (int i = 0; i < n; i++)
+                {
+                    float a = rot + i * 2f * Mathf.PI / n;
+                    V.Add(c + new Vector3(Mathf.Cos(a) * r, Mathf.Sin(a) * r, 0f)); N.Add(n0); C.Add(col); U.Add(Vector3.zero);
+                }
+                for (int i = 0; i < n; i++)
+                {
+                    int p = v0 + 1 + i, q = v0 + 1 + (i + 1) % n;
+                    if (Vector3.Dot(Vector3.Cross(V[p] - V[v0], V[q] - V[v0]), n0) > 0f) { T.Add(v0); T.Add(p); T.Add(q); }
+                    else { T.Add(v0); T.Add(q); T.Add(p); }
+                }
+            }
             public readonly List<Vector3> V = new List<Vector3>(), N = new List<Vector3>(); public readonly List<Color> C = new List<Color>();
             public readonly List<Vector3> U = new List<Vector3>(); public readonly List<int> T = new List<int>();
             public void Box(Vector3 c, Vector3 s, Color col)

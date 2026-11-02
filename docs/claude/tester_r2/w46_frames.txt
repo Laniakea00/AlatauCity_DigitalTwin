@@ -1,0 +1,16 @@
+# w46 round 3 frames (view x z dist yaw pitch · year · module)
+1 -2950 -19450 2600 200 55 · 2026 · overview: «Зданий стоит» ≈ 13 000, hero «по плану», Griffin hoarding
+2 -2600 -19100 420 210 32 · 2026 and 2027: Griffin hoarding + shells ≈ 2/3; 2027 shells gone, sheds stand
+3 -2950 -19450 2600 200 55 · 2050 · overview: hero with late-sites figure; journal handed/late
+4 infra_2034 camera on Gate: network panel shows Gate
+5 tour_step2: Gate panel = tour card; trial zone «419,4 га», «33 649» in 2050
+6 -3500 -19500 300 230 30 · 2030: no crowns in roofs/walls; grates
+7 -3421 -19434 110 200 22 · 2030: item-90 spot
+8 -3544 -19447 70 230 40 · 2030: grates close up
+9 -3021 -19602 300 220 25 · 2031: L7 on spec lot
+10 -3078 -22541 600 200 30 · 2026: PepsiCo label on existing hall «Работает»
+11 8500 940 900 200 40 · 2030: no PepsiCo model at old site
+log: «ground figures … Gate 419.4 ha», «plan site griffin: …», «Iconic plaza trees: …»
+12 -3596 -19808 277 346 30 · 2050: model ground ends on a smooth arc, no shards (82)
+13 -3600 -19820 90 346 50 · 2050: close-up of the arc
+log: «Gate District (QTwin): … its ground cut on the round of its area (r 335.7 m): N pieces cut, 0 outside dropped»

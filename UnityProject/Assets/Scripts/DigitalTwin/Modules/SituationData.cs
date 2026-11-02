@@ -31,7 +31,7 @@ namespace AlatauCity.DigitalTwin.Modules
             return s;
         }
         static string Addr(BuildingInfo b) => $"№{b.Bid % 180 + 1}, квартал {b.Bid / 180 % 60 + 1}";
-        public static Vector2 DistrictCenter(int d) { var c = CityStats.DistrictBounds[d].center; return new Vector2(c.x, c.z); }
+        public static Vector2 DistrictCenter(int d) => CityStats.DistrictCentre(d);
 
         /// <summary>Midpoint of the open road of a class nearest to the populated centre of a district.</summary>
         static Vector2 RoadPoint(int d, TwinData.RoadClass cls, int s, int y, float shift = 0)

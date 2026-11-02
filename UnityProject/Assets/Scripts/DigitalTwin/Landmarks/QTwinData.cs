@@ -6,11 +6,14 @@ namespace AlatauCity.DigitalTwin.Landmarks
 {
     /// <summary>The models of the QTwin page of Iconic Complex (QTwin_IconicComplex_AlatauCity.html), converted by
     /// tools/build_gate_district.py into the local frame of the Iconic landmark: the BIM model of the complex
-    /// (Resources/Landmarks/iconic_bim.bytes) and the Gate District round it (gate_district.bytes, gzip: mesh, trees, the mask of its area).
+    /// (Resources/Landmarks/iconic_bim.bytes) and the Gate District round it (gate_district.bytes, gzip: mesh, trees, the mask of its area;
+    /// the six office buildings of the complex are added to it when it is read, IconicOffices).
     /// Each vertex carries the page's facade coordinate u, its surface tag (AlatauQTwin.cginc) and, on the complex, its building.</summary>
     public static class QTwinData
     {
-        public class QMesh { public Vector3[] P, N; public float[] U; public byte[] Tag, Part; public int[] I; }
+        /// <summary>Fy: the facade height the surfaces draw their storeys from (null: the vertex height P.y; IconicOffices sets it so its
+        /// 4.43 m storeys read as four).</summary>
+        public class QMesh { public Vector3[] P, N; public float[] U, Fy; public byte[] Tag, Part; public int[] I; }
         /// <summary>Trees: x, y, z (local) and size (a crown 8.6 × 10.5 m at 1); Kind: 0 round crown … 3 (the page's four).</summary>
         public class District { public QMesh Mesh; public Vector4[] Trees; public byte[] Kind; public int W; public float Half; public byte[] Mask; }
 
@@ -86,6 +89,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
                     int nt = r.ReadInt32(); d.Trees = new Vector4[nt]; d.Kind = new byte[nt];
                     for (int i = 0; i < nt; i++) { float x = r.ReadSingle(), y = r.ReadSingle(), zz = r.ReadSingle(), s = r.ReadSingle(), k = r.ReadSingle(); d.Trees[i] = new Vector4(x, y, zz, s); d.Kind[i] = (byte)Mathf.RoundToInt(k); }
                     d.W = r.ReadInt32(); d.Half = r.ReadSingle(); d.Mask = r.ReadBytes(d.W * d.W);
+                    IconicOffices.AddTo(d);                // the six office buildings of the complex (gate.json iconic_offices_6), its trees made room for them
                     gate = d;
                 }
             }

@@ -154,25 +154,77 @@ namespace AlatauCity.EditorTools
             GameObjectUtility.SetStaticEditorFlags(go, StaticEditorFlags.BatchingStatic);
         }
 
+        /// <summary>The files of a layer: the file itself, then its parts name_1.bytes, name_2.bytes … while they exist. The merge
+        /// (tools/map/export/merge_districts.py) writes the buildings layer in parts of at most 24 MB; older data is one file.</summary>
+        public static List<string> LayerParts(string path)
+        {
+            var l = new List<string>(); if (!File.Exists(path)) return l;
+            l.Add(path); string ext = Path.GetExtension(path), stem = path.Substring(0, path.Length - ext.Length);
+            for (int k = 1; File.Exists(stem + "_" + k + ext); k++) l.Add(stem + "_" + k + ext);
+            return l;
+        }
+
+        class AqlObj { public string Name; public Vector3[] V; public int[] T; public byte[] Col; public ushort[] Yr; public int[] Bid; }
+        /// <summary>A layer as one list of chunks, from one file or from its parts in order. A chunk cut across parts (its pieces have the
+        /// same name) is joined again, so the chunks are the same as from a single file. A building found in two parts means a stale
+        /// part from older data: an error, not a doubled city.</summary>
+        static List<AqlObj> ReadAql(string path)
+        {
+            var files = LayerParts(path); if (files.Count == 0) throw new FileNotFoundException(path + " missing");
+            var pieces = new List<AqlObj>(); var owner = files.Count > 1 ? new Dictionary<int, int>() : null;
+            for (int f = 0; f < files.Count; f++)
+                using (var br = new BinaryReader(File.OpenRead(files[f])))
+                {
+                    if (Encoding.ASCII.GetString(br.ReadBytes(4)) != "AQL1") throw new System.Exception(files[f] + ": bad header");
+                    int count = br.ReadInt32();
+                    for (int o = 0; o < count; o++)
+                    {
+                        var x = new AqlObj { Name = Encoding.UTF8.GetString(br.ReadBytes(br.ReadUInt16())) };
+                        br.ReadByte(); int nv = br.ReadInt32(), nt = br.ReadInt32();
+                        x.V = new Vector3[nv]; for (int i = 0; i < nv; i++) x.V[i] = new Vector3(br.ReadSingle(), br.ReadSingle(), br.ReadSingle());
+                        x.T = new int[nt * 3]; for (int i = 0; i < nt * 3; i++) x.T[i] = (int)br.ReadUInt32();
+                        x.Col = br.ReadBytes(nt);
+                        x.Yr = new ushort[nt]; for (int i = 0; i < nt; i++) x.Yr[i] = br.ReadUInt16();
+                        x.Bid = new int[nt]; for (int i = 0; i < nt; i++) x.Bid[i] = br.ReadInt32();
+                        if (owner != null)
+                            foreach (int b in x.Bid)
+                            {
+                                if (b < 0) continue;
+                                if (!owner.TryGetValue(b, out int g)) owner[b] = f;
+                                else if (g != f) throw new System.Exception($"{files[f]}: building {b} is also in {files[g]}. A part left from older data? " +
+                                    "Keep only the parts the current data has (see its manifest.json: layer_parts) and rebuild.");
+                            }
+                        pieces.Add(x);
+                    }
+                }
+            var res = new List<AqlObj>(); var at = new Dictionary<string, int>();
+            foreach (var x in pieces)
+            {
+                if (!at.TryGetValue(x.Name, out int i)) { at[x.Name] = res.Count; res.Add(x); continue; }
+                var a = res[i]; int nv0 = a.V.Length;
+                var T = new int[a.T.Length + x.T.Length]; a.T.CopyTo(T, 0); for (int k = 0; k < x.T.Length; k++) T[a.T.Length + k] = x.T[k] + nv0;
+                res[i] = new AqlObj { Name = a.Name, V = Cat(a.V, x.V), T = T, Col = Cat(a.Col, x.Col), Yr = Cat(a.Yr, x.Yr), Bid = Cat(a.Bid, x.Bid) };
+            }
+            if (files.Count > 1) Debug.Log($"[Alatau] {Path.GetFileName(path)}: {files.Count} parts, {pieces.Count} pieces → {res.Count} chunks");
+            return res;
+        }
+        static X[] Cat<X>(X[] a, X[] b) { var r = new X[a.Length + b.Length]; a.CopyTo(r, 0); b.CopyTo(r, a.Length); return r; }
+
         /// record: u16 nameLen, name utf8, u8 kind, i32 nv, i32 nt, f32 verts[nv*3], u32 tris[nt*3], u8 col[nt], u16 year[nt], i32 bid[nt]
+        /// (the buildings layer may come in parts: ReadAql)
         static void ReadLayer(string path, Color32[] pal, Material mat, Transform parent, string groupName, bool colliders, bool castShadows, float prog)
         {
             var group = new GameObject(groupName).transform; group.SetParent(parent);
             var subGroups = new Dictionary<string, Transform>();
-            using (var br = new BinaryReader(File.OpenRead(path)))
+            var objs = ReadAql(path);
             {
-                if (Encoding.ASCII.GetString(br.ReadBytes(4)) != "AQL1") throw new System.Exception(path + ": bad header");
-                int count = br.ReadInt32();
+                int count = objs.Count;
                 for (int o = 0; o < count; o++)
                 {
-                    string name = Encoding.UTF8.GetString(br.ReadBytes(br.ReadUInt16()));
+                    string name = objs[o].Name;
                     EditorUtility.DisplayProgressBar("Alatau City", $"{groupName}: {name}", prog + 0.75f * o / Mathf.Max(1, count) * (colliders ? 1f : 0.1f));
-                    br.ReadByte(); int nv = br.ReadInt32(), nt = br.ReadInt32();
-                    var V = new Vector3[nv]; for (int i = 0; i < nv; i++) V[i] = new Vector3(br.ReadSingle(), br.ReadSingle(), br.ReadSingle());
-                    var T = new int[nt * 3]; for (int i = 0; i < nt * 3; i++) T[i] = (int)br.ReadUInt32();
-                    var col = br.ReadBytes(nt);
-                    var yr = new ushort[nt]; for (int i = 0; i < nt; i++) yr[i] = br.ReadUInt16();
-                    var bid = new int[nt]; for (int i = 0; i < nt; i++) bid[i] = br.ReadInt32();
+                    var V = objs[o].V; var T = objs[o].T; var col = objs[o].Col; var yr = objs[o].Yr; var bid = objs[o].Bid; int nt = col.Length;
+                    objs[o] = null;                                   // the chunk's arrays are freed once it is meshed
                     if (nt == 0) continue;
                     // walls of one building that lie in one plane are measured together: where the wall starts and how long it is.
                     // The film look fits whole window bays into that length (uv = metres from the start, length; 0 = not a wall).

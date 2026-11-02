@@ -8,7 +8,11 @@ namespace AlatauCity.DigitalTwin.Landmarks
     /// <summary>The LRT of the master plan in 3D: a double-track viaduct along the planned line (trunk Gate → Green and two branches to
     /// the west), piers, overhead line, stations with canopies and lifts, and trains running between the stations.
     /// Opens by phase and year of the scenario (construction.json → lrt.phase_year): piers 2 years before, the deck 1 year before, trains
-    /// from the opening year. The route comes from the plan's LRT layer (Resources/Landmarks/lrt_routes.json).</summary>
+    /// from the opening year. The route comes from the plan's LRT layer (Resources/Landmarks/lrt_routes.json).
+    /// The new map data (tools/map CONTRACT §6) adds per route "sec" [from_m, to_m, code, …] (0 ground, 1 elevated, 2 tunnel, chainage
+    /// along pts), optional "h" (rail level per point) and "ends" [start, end] (0 terminus, 1 depot, 2 continues into a neighbour: nothing drawn): a ground section is a fenced track
+    /// bed on the ground (a ramp between retaining walls where it climbs to a viaduct), a tunnel is not drawn (a portal at each mouth,
+    /// trains hidden inside), stations stand only on ground and elevated sections. Without "sec" the whole route is the viaduct of today.</summary>
     public class LrtLayer : MonoBehaviour
     {
         public static LrtLayer Instance;
@@ -16,13 +20,30 @@ namespace AlatauCity.DigitalTwin.Landmarks
         /// <summary>Presentation: the whole line glows with light pulses running from Almaty to Konaev (all phases shown as built).</summary>
         public static bool Showcase;
         GameObject glow; Material glowMat; float glowA;
-        [Serializable] class RouteJ { public string name; public float[] pts; }
+        [Serializable] class RouteJ { public string name; public float[] pts; public float[] sec; public float[] h; public int[] ends; }
         [Serializable] class StationJ { public string name; public float x, z; public int phase; }
         [Serializable] class RoutesJ { public RouteJ[] routes; public StationJ[] stations; }
         StationJ[] extraStations = new StationJ[0];
 
-        public class Route { public string Name; public Vector3[] P; public float[] S; public int[] Phase; public int OpenIdx = -1; public List<float> Stops = new List<float>(); }
-        public class Station { public Vector3 P; public Vector3 Dir; public int Phase; public string Name; public int Index; }
+        public class Route
+        {
+            public string Name; public Vector3[] P; public float[] S; public int[] Phase; public int OpenIdx = -1; public List<float> Stops = new List<float>();
+            /// <summary>Section of each span (point i → i+1): Ground, Elevated or Tunnel; null = the whole route elevated (data without "sec").</summary>
+            public byte[] Sec;
+            /// <summary>What the start and the end of the route are: 0 terminus, 1 depot; null = not given (nothing drawn there).</summary>
+            public int[] Ends;
+            /// <summary>Metres into a tunnel at each point (0 outside a tunnel; null without sections).</summary>
+            public float[] Deep;
+        }
+        public class Station
+        {
+            public Vector3 P; public Vector3 Dir; public int Phase; public string Name; public int Index;
+            /// <summary>Section it stands on: Ground, Elevated or Tunnel (underground: no structure drawn, P at the street).</summary>
+            public int Kind = Elevated;
+        }
+        public const byte Ground = 0, Elevated = 1, Tunnel = 2;
+        /// <summary>True once the routes, stations and their meshes are made.</summary>
+        public bool Built => built;
         public readonly List<Route> Routes = new List<Route>();
         public readonly List<Station> Stations = new List<Station>();
 
@@ -61,6 +82,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
 
         Route MakeRoute(RouteJ j)
         {
+            if (j.sec != null && j.sec.Length >= 3 && j.pts != null && j.pts.Length >= 4) return MakeTyped(j);
             int n = j.pts.Length / 2; var r = new Route { Name = j.name, P = new Vector3[n], S = new float[n], Phase = new int[n] };
             var g = new float[n];
             for (int i = 0; i < n; i++) { float x = j.pts[i * 2], z = j.pts[i * 2 + 1]; g[i] = CityGround.HeightAt(x, z); r.P[i] = new Vector3(x, 0, z); }
@@ -81,14 +103,149 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 r.P[i].y = Mathf.Max(s / w + Above, gmax[i] + 7.0f);
             }
             for (int i = 1; i < n; i++) r.S[i] = r.S[i - 1] + Vector3.Distance(new Vector3(r.P[i].x, 0, r.P[i].z), new Vector3(r.P[i - 1].x, 0, r.P[i - 1].z));
-            // phase of each point = the phase of the nearest planned station
-            for (int i = 0; i < n; i++)
+            Phases(r);
+            return r;
+        }
+        // phase of each point = the phase of the nearest planned station
+        static void Phases(Route r)
+        {
+            for (int i = 0; i < r.P.Length; i++)
             {
                 float best = float.MaxValue; int ph = 0;
                 foreach (var st in TwinData.LrtStations) { float d = (st.x - r.P[i].x) * (st.x - r.P[i].x) + (st.y - r.P[i].z) * (st.y - r.P[i].z); if (d < best) { best = d; ph = Mathf.RoundToInt(st.z); } }
                 r.Phase[i] = ph;
             }
+        }
+
+        // ------------------------------------------------------------------ sections of the new map data
+        /// <summary>A route with sections: points are added at every section end (so each span is of one kind) and every 26 m on the
+        /// ground (the track follows the ground); rail levels from "h" when given, else computed: the viaduct as today, the ground
+        /// track on the ground, ramps of 4 % on the ground side up to a viaduct, tunnels down from their mouths at 4 % to 14 m.</summary>
+        Route MakeTyped(RouteJ j)
+        {
+            int n0 = j.pts.Length / 2;
+            var xz = new List<Vector2>(n0); for (int i = 0; i < n0; i++) xz.Add(new Vector2(j.pts[i * 2], j.pts[i * 2 + 1]));
+            var hh = j.h != null && j.h.Length == n0 ? new List<float>(j.h) : null;
+            if (j.h != null && j.h.Length > 0 && hh == null) Debug.LogWarning($"[Alatau] LRT {j.name}: \"h\" has {j.h.Length} values for {n0} points: rail levels computed instead");
+            var kinds = Sections(j.sec, xz, hh);
+            int n = xz.Count;
+            var r = new Route { Name = j.name, P = new Vector3[n], S = new float[n], Phase = new int[n], Sec = kinds.ToArray(), Deep = new float[n] };
+            if (j.ends != null && j.ends.Length >= 2) r.Ends = new[] { Mathf.Clamp(j.ends[0], 0, 2), Mathf.Clamp(j.ends[1], 0, 2) };
+            var g = new float[n];
+            for (int i = 0; i < n; i++) { g[i] = CityGround.HeightAt(xz[i].x, xz[i].y); r.P[i] = new Vector3(xz[i].x, 0, xz[i].y); }
+            for (int i = 1; i < n; i++) r.S[i] = r.S[i - 1] + (xz[i] - xz[i - 1]).magnitude;
+            // metres into a tunnel: from the nearer mouth
+            var fw = new float[n]; var bw = new float[n];
+            bool Inside(int i) => (i == 0 || r.Sec[i - 1] == Tunnel) && (i == n - 1 || r.Sec[i] == Tunnel);
+            for (int i = 0; i < n; i++) fw[i] = !Inside(i) ? 0f : i > 0 ? fw[i - 1] + r.S[i] - r.S[i - 1] : 1e5f;
+            for (int i = n - 1; i >= 0; i--) bw[i] = !Inside(i) ? 0f : i < n - 1 ? bw[i + 1] + r.S[i + 1] - r.S[i] : 1e5f;
+            for (int i = 0; i < n; i++) r.Deep[i] = Mathf.Min(fw[i], bw[i]);
+            // the kind of each point: on a viaduct span → elevated; at a tunnel mouth → on the ground; between two tunnel spans → tunnel
+            var pk = new byte[n];
+            for (int i = 0; i < n; i++)
+            {
+                byte a = i > 0 ? r.Sec[i - 1] : r.Sec[0], b = i < n - 1 ? r.Sec[i] : r.Sec[n - 2];
+                pk[i] = a == Tunnel && b == Tunnel ? Tunnel : a == Tunnel || b == Tunnel ? Ground : a == Elevated || b == Elevated ? Elevated : Ground;
+            }
+            string hFrom;
+            if (hh != null) { for (int i = 0; i < n; i++) r.P[i].y = hh[i] - 0.2f; hFrom = "rail levels from the data"; }          // P = the deck / bed top, rails 0.2 m above
+            else
+            {
+                hFrom = "rail levels computed";
+                var gmax = (float[])g.Clone();
+                for (int i = 0; i < n - 1; i++)
+                {
+                    var a = r.P[i]; var b = r.P[i + 1]; var dir = b - a; float L = dir.magnitude; if (L < 1f) continue;
+                    var side = Vector3.Cross(Vector3.up, dir / L) * (r.Sec[i] == Elevated ? 6f : 4.5f); int k = Mathf.CeilToInt(L / 8f); float m = float.MinValue;
+                    for (int q = 0; q <= k; q++) { var p = Vector3.Lerp(a, b, q / (float)k); m = Mathf.Max(m, Mathf.Max(CityGround.HeightAt(p.x, p.z), Mathf.Max(CityGround.HeightAt(p.x + side.x, p.z + side.z), CityGround.HeightAt(p.x - side.x, p.z - side.z)))); }
+                    gmax[i] = Mathf.Max(gmax[i], m); gmax[i + 1] = Mathf.Max(gmax[i + 1], m);
+                }
+                for (int i = 0; i < n; i++)
+                {
+                    if (pk[i] == Elevated)
+                    {
+                        float s = 0, w = 0; for (int k = -6; k <= 6; k++) { int q = Mathf.Clamp(i + k, 0, n - 1); float ww = 7 - Mathf.Abs(k); s += g[q] * ww; w += ww; }
+                        r.P[i].y = Mathf.Max(s / w + Above, gmax[i] + 7.0f);
+                    }
+                    else if (pk[i] == Tunnel) r.P[i].y = g[i] + 0.35f - Mathf.Min(r.Deep[i] * 0.04f, 14f);
+                    else r.P[i].y = gmax[i] + 0.35f;
+                }
+                // ramps: a ground point climbs towards a higher neighbour at no more than 4 % (fill between walls)
+                for (int pass = 0; pass < 2; pass++)
+                    for (int q = 1; q < n; q++)
+                    {
+                        int i = pass == 0 ? q : n - 1 - q, nb = pass == 0 ? i - 1 : i + 1;
+                        if (pk[i] != Ground) continue;
+                        r.P[i].y = Mathf.Max(r.P[i].y, r.P[nb].y - 0.04f * Mathf.Abs(r.S[i] - r.S[nb]));
+                    }
+                // a viaduct that runs straight into a tunnel: its deck comes down to the mouth at no more than 4 %
+                var low = new bool[n];
+                for (int i = 0; i < n; i++) low[i] = pk[i] == Ground && ((i > 0 && r.Sec[i - 1] == Tunnel) || (i < n - 1 && r.Sec[i] == Tunnel));
+                for (int pass = 0; pass < 2; pass++)
+                    for (int q = 1; q < n; q++)
+                    {
+                        int i = pass == 0 ? q : n - 1 - q, nb = pass == 0 ? i - 1 : i + 1;
+                        if (pk[i] != Elevated || !low[nb]) continue;
+                        float cap = r.P[nb].y + 0.04f * Mathf.Abs(r.S[i] - r.S[nb]);
+                        if (cap < r.P[i].y) { r.P[i].y = cap; low[i] = true; }
+                    }
+            }
+            Phases(r);
+            float[] km = new float[3]; for (int i = 0; i < n - 1; i++) km[r.Sec[i]] += (r.S[i + 1] - r.S[i]) / 1000f;
+            string End(int e) => r.Ends == null ? "-" : r.Ends[e] == 1 ? "depot" : r.Ends[e] == 2 ? "continues" : "terminus";
+            Debug.Log($"[Alatau] LRT {j.name}: sections ground {km[0]:0.0} km, elevated {km[1]:0.0} km, tunnel {km[2]:0.0} km; {n0} -> {n} points; {hFrom}; ends {End(0)} / {End(1)}");
             return r;
+        }
+
+        /// <summary>Splits the route at every section end and every 26 m of ground section; returns the kind of each span. Chainage
+        /// is measured along the points as given; spans outside every section stay elevated (the viaduct of today).</summary>
+        static List<byte> Sections(float[] sec, List<Vector2> xz, List<float> hh)
+        {
+            var from = new List<float>(); var to = new List<float>(); var code = new List<byte>();
+            for (int i = 0; i + 2 < sec.Length; i += 3) { float a = Mathf.Min(sec[i], sec[i + 1]), b = Mathf.Max(sec[i], sec[i + 1]); from.Add(a); to.Add(b); code.Add((byte)Mathf.Clamp(Mathf.RoundToInt(sec[i + 2]), 0, 2)); }
+            byte KindAt(float m) { byte k = Elevated; for (int q = 0; q < from.Count; q++) if (m >= from[q] && m < to[q]) k = code[q]; return k; }
+            var c = new List<float>(xz.Count) { 0f }; for (int i = 1; i < xz.Count; i++) c.Add(c[i - 1] + (xz[i] - xz[i - 1]).magnitude);
+            var cuts = new List<float>(from); cuts.AddRange(to); cuts.Sort();
+            var X = new List<Vector2>(); var H = hh != null ? new List<float>() : null; var C = new List<float>(); int ci = 0;
+            for (int i = 0; i < xz.Count; i++)
+            {
+                if (i > 0)
+                    for (; ci < cuts.Count && cuts[ci] < c[i]; ci++)
+                    {
+                        float m = cuts[ci]; if (m <= c[i - 1] + 1f || m >= c[i] - 1f) continue;
+                        float t = (m - c[i - 1]) / (c[i] - c[i - 1]); X.Add(Vector2.Lerp(xz[i - 1], xz[i], t)); H?.Add(Mathf.Lerp(hh[i - 1], hh[i], t)); C.Add(m);
+                    }
+                X.Add(xz[i]); H?.Add(hh[i]); C.Add(c[i]);
+            }
+            var kinds = new List<byte>(); var X2 = new List<Vector2>(); var H2 = H != null ? new List<float>() : null;
+            for (int i = 0; i < X.Count; i++)
+            {
+                if (i > 0)
+                {
+                    byte k = KindAt((C[i - 1] + C[i]) * 0.5f); float L = C[i] - C[i - 1];
+                    int parts = k == Ground && L > 30f ? Mathf.CeilToInt(L / 26f) : 1;
+                    for (int q = 1; q < parts; q++) { float t = q / (float)parts; kinds.Add(k); X2.Add(Vector2.Lerp(X[i - 1], X[i], t)); H2?.Add(Mathf.Lerp(H[i - 1], H[i], t)); }
+                    kinds.Add(k);
+                }
+                X2.Add(X[i]); H2?.Add(H[i]);
+            }
+            xz.Clear(); xz.AddRange(X2); if (hh != null) { hh.Clear(); hh.AddRange(H2); }
+            return kinds;
+        }
+        /// <summary>The section kind at point i (the kinds of the spans on both sides).</summary>
+        static int PointKind(Route r, int i)
+        {
+            if (r.Sec == null || r.Sec.Length == 0) return Elevated;
+            int n = r.P.Length; byte a = i > 0 ? r.Sec[i - 1] : r.Sec[0], b = i < n - 1 ? r.Sec[i] : r.Sec[n - 2];
+            return a == Tunnel && b == Tunnel ? Tunnel : a == Elevated || b == Elevated ? Elevated : Ground;
+        }
+        /// <summary>Metres into a tunnel at chainage s (0 outside).</summary>
+        static float DeepAt(Route r, float s)
+        {
+            if (r.Deep == null) return 0f;
+            int lo = 0, hi = r.S.Length - 1;
+            while (hi - lo > 1) { int m = (lo + hi) / 2; if (r.S[m] <= s) lo = m; else hi = m; }
+            return Mathf.Lerp(r.Deep[lo], r.Deep[hi], Mathf.InverseLerp(r.S[lo], r.S[hi], s));
         }
 
         void MakeStations()
@@ -100,7 +257,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 if (br == null || best > 400f * 400f) continue;
                 var dir = br.P[Mathf.Min(bi + 1, br.P.Length - 1)] - br.P[Mathf.Max(bi - 1, 0)]; dir.y = 0; dir.Normalize();
                 int ph = Mathf.RoundToInt(st.z);
-                Stations.Add(new Station { P = br.P[bi], Dir = dir, Phase = ph, Index = k, Name = "Станция ЛРТ · " + (ph < TwinData.LrtPhaseNames.Length ? TwinData.LrtPhaseNames[ph] : "") });
+                Stations.Add(new Station { P = br.P[bi], Dir = dir, Phase = ph, Index = k, Name = "Станция ЛРТ · " + (ph < TwinData.LrtPhaseNames.Length ? TwinData.LrtPhaseNames[ph] : ""), Kind = StationKind(br, bi) });
                 br.Stops.Add(br.S[bi]);
             }
             foreach (var ex in extraStations)
@@ -109,13 +266,23 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 foreach (var r in Routes) for (int i = 0; i < r.P.Length; i++) { float d = (r.P[i].x - ex.x) * (r.P[i].x - ex.x) + (r.P[i].z - ex.z) * (r.P[i].z - ex.z); if (d < best) { best = d; br = r; bi = i; } }
                 if (br == null || best > 400f * 400f) continue;
                 var dir = br.P[Mathf.Min(bi + 1, br.P.Length - 1)] - br.P[Mathf.Max(bi - 1, 0)]; dir.y = 0; dir.Normalize();
-                Stations.Add(new Station { P = br.P[bi], Dir = dir, Phase = ex.phase, Index = -1, Name = "Станция ЛРТ · " + ex.name });
+                Stations.Add(new Station { P = br.P[bi], Dir = dir, Phase = ex.phase, Index = -1, Name = "Станция ЛРТ · " + ex.name, Kind = StationKind(br, bi) });
                 br.Stops.Add(br.S[bi]);
             }
             foreach (var r in Routes) r.Stops.Sort();
+            // an underground station: its pin and camera at the street above
+            foreach (var st in Stations) if (st.Kind == Tunnel) st.P.y = CityGround.HeightAt(st.P.x, st.P.z) + 0.2f;
             // number the stations along the line, south to north
             Stations.Sort((a, b) => a.P.z.CompareTo(b.P.z));
             for (int i = 0; i < Stations.Count; i++) Stations[i].Name += " · ст. " + (i + 1);
+        }
+
+        /// <summary>Ground for a station on a ground section near the ground (a ramp point counts as elevated: platforms on a deck).</summary>
+        static int StationKind(Route r, int i)
+        {
+            int k = PointKind(r, i);
+            if (k == Ground && r.P[i].y - CityGround.HeightAt(r.P[i].x, r.P[i].z) > 1.2f) k = Elevated;
+            return k;
         }
 
         // ------------------------------------------------------------------ geometry
@@ -139,6 +306,16 @@ namespace AlatauCity.DigitalTwin.Landmarks
                     Vector3 p0 = r.P[i], p1 = r.P[i + 1], s0 = side[i], s1 = side[i + 1];
                     Vector3 fwd = (p1 - p0).normalized;
                     float L = Vector3.Distance(p0, p1), u0 = r.S[i], u1 = r.S[i + 1];
+                    int kind = r.Sec != null ? r.Sec[i] : Elevated;
+                    if (kind == Tunnel)
+                    {
+                        // nothing of a tunnel is seen but its mouths
+                        Vector3 h = fwd; h.y = 0; h.Normalize(); float hood = Mathf.Min(36f, L * 0.5f);
+                        if (i > 0 && r.Sec[i - 1] != Tunnel) Portal(deck, p0, h, hood);
+                        if (i < n - 2 && r.Sec[i + 1] != Tunnel) Portal(deck, p1, -h, hood);
+                        continue;
+                    }
+                    if (kind == Ground) { GroundSpan(deck, i, p0, p1, s0, s1, u0, u1); continue; }
                     // deck slab: top, soffit, both faces
                     Vector3 a = p0 - s0 * DeckW * 0.5f, b = p0 + s0 * DeckW * 0.5f, c = p1 + s1 * DeckW * 0.5f, d = p1 - s1 * DeckW * 0.5f; var dn = Vector3.down * DeckT;
                     deck.Quad(a, b, c, d, Vector3.up, Conc, LM.Paving, 1f, new Vector2(a.x, a.z), new Vector2(b.x, b.z), new Vector2(c.x, c.z), new Vector2(d.x, d.z));
@@ -177,10 +354,128 @@ namespace AlatauCity.DigitalTwin.Landmarks
                         piers.Beam(p0 - s0 * (DeckW * 0.42f) + Vector3.down * (DeckT + 0.55f), p0 + s0 * (DeckW * 0.42f) + Vector3.down * (DeckT + 0.55f), 1.6f, 1.1f, ConcD, LM.Solid);
                     }
                 }
+                if (r.Ends != null && EndsOf(r, ph, deck)) any = true;
                 if (!any) continue;
                 Add(deck.ToMesh("LRT deck " + r.Name + " " + ph), ph, 1, "LRT deck · " + r.Name + " · phase " + (ph + 1));
                 Add(piers.ToMesh("LRT piers " + r.Name + " " + ph), ph, 0, "LRT piers · " + r.Name + " · phase " + (ph + 1));
             }
+        }
+        /// <summary>A span on the ground: the ballast bed with sloped shoulders and a fence each side; where the bed stands more than
+        /// 1.2 m above the ground (a ramp up to a viaduct), a fill between retaining walls with parapets. Two tracks, overhead line.</summary>
+        static void GroundSpan(LandmarkKit k, int i, Vector3 p0, Vector3 p1, Vector3 s0, Vector3 s1, float u0, float u1)
+        {
+            float g0 = CityGround.HeightAt(p0.x, p0.z), g1 = CityGround.HeightAt(p1.x, p1.z); var up = Vector3.up;
+            Vector3 G(Vector3 p, float y) => new Vector3(p.x, y, p.z);
+            if (Mathf.Max(p0.y - g0, p1.y - g1) > 1.2f)
+            {
+                float hw = DeckW * 0.5f;
+                Top(k, p0, p1, s0, s1, hw, Conc, LM.Paving);
+                foreach (float sg in new[] { -1f, 1f })
+                {
+                    Vector3 e0 = p0 + s0 * sg * hw, e1 = p1 + s1 * sg * hw, i0 = p0 + s0 * sg * (hw - 0.3f), i1 = p1 + s1 * sg * (hw - 0.3f);
+                    k.Quad(G(e0, g0 - 0.8f), G(e1, g1 - 0.8f), e1 + up * 1.1f, e0 + up * 1.1f, s0 * sg, ConcD, LM.Solid, 3f, new Vector2(u0, g0 - 0.8f), new Vector2(u1, g1 - 0.8f), new Vector2(u1, p1.y + 1.1f), new Vector2(u0, p0.y + 1.1f));
+                    k.Quad(i0, i1, i1 + up * 1.1f, i0 + up * 1.1f, -s0 * sg, Conc, LM.Solid, 3f, new Vector2(u0, 0), new Vector2(u1, 0), new Vector2(u1, 1.1f), new Vector2(u0, 1.1f));
+                    k.Quad(e0 + up * 1.1f, e1 + up * 1.1f, i1 + up * 1.1f, i0 + up * 1.1f, up, Conc, LM.Solid, 3f, Vector2.zero, Vector2.right, Vector2.one, Vector2.up);
+                }
+            }
+            else
+            {
+                const float hw = 4.6f, sh = 1.6f, fence = 6.9f;
+                Top(k, p0, p1, s0, s1, hw, Ballast, LM.Roof);
+                foreach (float sg in new[] { -1f, 1f })
+                {
+                    Vector3 a = p0 + s0 * sg * hw, b = p1 + s1 * sg * hw, c = G(p1 + s1 * sg * (hw + sh), g1 - 0.3f), d = G(p0 + s0 * sg * (hw + sh), g0 - 0.3f);
+                    k.Quad(a, b, c, d, s0 * sg + up, Ballast, LM.Roof, 1f, new Vector2(a.x, a.z), new Vector2(b.x, b.z), new Vector2(c.x, c.z), new Vector2(d.x, d.z));
+                    Vector3 f0 = G(p0 + s0 * sg * fence, g0), f1 = G(p1 + s1 * sg * fence, g1);
+                    k.Quad(f0, f1, f1 + up * 1.8f, f0 + up * 1.8f, s0 * sg, Pole, LM.Solid, 3f, new Vector2(u0, 0), new Vector2(u1, 0), new Vector2(u1, 1.8f), new Vector2(u0, 1.8f));
+                    k.Quad(f0, f1, f1 + up * 1.8f, f0 + up * 1.8f, -s0 * sg, Pole, LM.Solid, 3f, new Vector2(u0, 0), new Vector2(u1, 0), new Vector2(u1, 1.8f), new Vector2(u0, 1.8f));
+                }
+            }
+            foreach (float tc in new[] { -2.15f, 2.15f })
+            {
+                Strip(k, p0, p1, s0, s1, tc, 2.8f, 0.06f, Ballast, LM.Roof);
+                Strip(k, p0, p1, s0, s1, tc - 0.72f, 0.14f, 0.2f, Rail, LM.Steel);
+                Strip(k, p0, p1, s0, s1, tc + 0.72f, 0.14f, 0.2f, Rail, LM.Steel);
+                k.Beam(p0 + s0 * tc + up * 6.0f, p1 + s1 * tc + up * 6.0f, 0.05f, 0.05f, Rail, LM.Steel);
+            }
+            if (i % 2 == 0)
+            {
+                k.Beam(p0 + up * -0.6f, p0 + up * 7.2f, 0.35f, 0.35f, Pole, LM.Steel);
+                k.Beam(p0 + up * 6.9f - s0 * 3.2f, p0 + up * 6.9f + s0 * 3.2f, 0.18f, 0.18f, Pole, LM.Steel);
+            }
+        }
+        static void Top(LandmarkKit k, Vector3 p0, Vector3 p1, Vector3 s0, Vector3 s1, float hw, Color32 col, int mat)
+        {
+            Vector3 a = p0 - s0 * hw, b = p0 + s0 * hw, c = p1 + s1 * hw, d = p1 - s1 * hw;
+            k.Quad(a, b, c, d, Vector3.up, col, mat, 1f, new Vector2(a.x, a.z), new Vector2(b.x, b.z), new Vector2(c.x, c.z), new Vector2(d.x, d.z));
+        }
+        /// <summary>A tunnel mouth at p, the tunnel running along 'into': a cut-and-cover hood (side walls, roof, headwall, dark inside)
+        /// the trains run into; they are hidden once 26 m inside.</summary>
+        static void Portal(LandmarkKit k, Vector3 p, Vector3 into, float len)
+        {
+            var s = Vector3.Cross(Vector3.up, into).normalized; var up = Vector3.up; Color32 dark = LM.C("#121417");
+            float g = Mathf.Min(p.y, CityGround.HeightAt(p.x, p.z));
+            foreach (float sg in new[] { -1f, 1f })
+            {
+                k.Beam(p + s * sg * 5.3f + up * 3.2f, p + into * len + s * sg * 5.3f + up * 3.2f, 0.9f, 8.6f, Conc, LM.Solid);
+                // wing walls, splayed back from the mouth
+                k.Beam(p + s * sg * 5.3f + up * 1.6f, p - into * 9f + s * sg * 8.6f + up * 1.0f, 0.7f, 4.4f, ConcD, LM.Solid);
+            }
+            k.Beam(p + up * 7.5f, p + into * len + up * 7.5f, 11.5f, 0.9f, ConcD, LM.Solid);                      // roof
+            k.Beam(p - s * 6.2f + up * 8.3f, p + s * 6.2f + up * 8.3f, 1.0f, 1.8f, Conc, LM.Solid);               // headwall over the opening
+            Vector3 b = p + into * (len - 1f);
+            k.Quad(b - s * 4.9f + up * (g - p.y), b + s * 4.9f + up * (g - p.y), b + s * 4.9f + up * 7.0f, b - s * 4.9f + up * 7.0f, -into, dark, LM.Solid, 3f, Vector2.zero, Vector2.right, Vector2.one, Vector2.up);
+            k.Quad(p - s * 4.9f + up * 0.05f, p + s * 4.9f + up * 0.05f, b + s * 4.9f + up * 0.05f, b - s * 4.9f + up * 0.05f, up, dark, LM.Solid, 3f, Vector2.zero, Vector2.right, Vector2.one, Vector2.up);
+        }
+        /// <summary>The route's ends of phase ph: buffer stops at a terminus, a fan of sidings and a shed at a depot (on the ground
+        /// beyond the end). An end inside a tunnel shows nothing.</summary>
+        bool EndsOf(Route r, int ph, LandmarkKit k)
+        {
+            int n = r.P.Length; bool any = false;
+            for (int e = 0; e < 2; e++)
+            {
+                int i0 = e == 0 ? 0 : n - 1, i1 = e == 0 ? 1 : n - 2;
+                if (r.Phase[i0] != ph || r.Sec[e == 0 ? 0 : n - 2] == Tunnel || r.Ends[e] == 2) continue;   // 2: the line continues in a neighbouring district
+                var p = r.P[i0]; var d = p - r.P[i1]; d.y = 0; if (d.sqrMagnitude < 1e-4f) continue; d.Normalize();
+                var s = Vector3.Cross(Vector3.up, d); any = true;
+                if (r.Ends[e] == 1) Depot(k, p, d, s, r.Sec[e == 0 ? 0 : n - 2] == Elevated, r.Name);
+                else
+                    foreach (float tc in new[] { -2.15f, 2.15f })
+                    {
+                        var c = p - d * 3f + s * tc;
+                        k.Beam(c - s * 1.3f + Vector3.up * 0.9f, c + s * 1.3f + Vector3.up * 0.9f, 0.6f, 0.9f, LM.C("#c8312a"), LM.Solid);
+                        foreach (float q in new[] { -0.8f, 0.8f }) k.Beam(c + s * q + Vector3.up * 0.8f, c - d * 3.2f + s * q + Vector3.up * 0.25f, 0.25f, 0.25f, Rail, LM.Steel);
+                        k.Beam(c + Vector3.up * 1.5f, c + Vector3.up * 1.8f, 0.3f, 0.3f, LM.C("#ff2a1a"), LM.Light);
+                    }
+            }
+            return any;
+        }
+        static void Depot(LandmarkKit k, Vector3 p, Vector3 d, Vector3 s, bool elevatedEnd, string route)
+        {
+            Vector3 Gr(Vector3 q) => new Vector3(q.x, CityGround.HeightAt(q.x, q.z) + 0.35f, q.z);
+            var up = Vector3.up; const int Tracks = 6;
+            void Track(Vector3 a, Vector3 b)
+            {
+                for (int q = 0; q < 4; q++)
+                {
+                    Vector3 a0 = Gr(Vector3.Lerp(a, b, q / 4f)), a1 = Gr(Vector3.Lerp(a, b, (q + 1) / 4f)); var sd = Vector3.Cross(Vector3.up, (a1 - a0).normalized);
+                    Strip(k, a0, a1, sd, sd, 0f, 3.2f, 0.06f, Ballast, LM.Roof);
+                    Strip(k, a0, a1, sd, sd, -0.72f, 0.14f, 0.2f, Rail, LM.Steel); Strip(k, a0, a1, sd, sd, 0.72f, 0.14f, 0.2f, Rail, LM.Steel);
+                }
+            }
+            var throat = p + d * 25f;
+            foreach (float tc in new[] { -2.15f, 2.15f }) Track(p + s * tc, throat + s * tc * 0.3f);
+            for (int t = 0; t < Tracks; t++)
+            {
+                float off = (t - (Tracks - 1) * 0.5f) * 4.6f;
+                Track(throat, p + d * 95f + s * off); Track(p + d * 95f + s * off, p + d * 240f + s * off);
+            }
+            // the shed over the inner four sidings
+            float w = 4 * 4.6f + 6f; var c0 = Gr(p + d * 185f);
+            var fp = new List<Vector2>();
+            foreach (var q in new[] { p + d * 130f - s * w * 0.5f, p + d * 240f - s * w * 0.5f, p + d * 240f + s * w * 0.5f, p + d * 130f + s * w * 0.5f }) fp.Add(new Vector2(q.x, q.z));
+            k.Prism(fp, c0.y - 1.5f, c0.y + 9f, LM.C("#b9bcbf"), LM.Metal, 3f, LM.C("#8f9499"), LM.Roof);
+            if (elevatedEnd) Debug.Log($"[Alatau] LRT {route}: the depot is drawn on the ground beyond the end of the viaduct");
         }
         static void Strip(LandmarkKit k, Vector3 p0, Vector3 p1, Vector3 s0, Vector3 s1, float off, float w, float h, Color32 col, int mat)
         {
@@ -192,8 +487,10 @@ namespace AlatauCity.DigitalTwin.Landmarks
         {
             var kits = new[] { new LandmarkKit(), new LandmarkKit(), new LandmarkKit() };
             Color32 glass = LM.C("#2a4256"), white = LM.C("#ecebe6"), red = LM.C("#e0261b");
+            int under = 0, onGround = 0;
             foreach (var st in Stations)
             {
+                if (st.Kind == Tunnel) { under++; continue; }                          // underground: no structure (the stop stays)
                 var k = kits[Mathf.Clamp(st.Phase, 0, 2)];
                 float yaw = Mathf.Atan2(st.Dir.x, st.Dir.z) * Mathf.Rad2Deg - 90f;
                 var p = st.P; var r = Quaternion.Euler(0, yaw, 0);
@@ -214,6 +511,14 @@ namespace AlatauCity.DigitalTwin.Landmarks
                     k.Quad(a, b, c, d, Vector3.up + (W(0, 0, sg) - p).normalized * 0.3f, glass, LM.Glass, 1.5f, new Vector2(0, 0), new Vector2(92f, 0), new Vector2(92f, 8.8f), new Vector2(0, 8.8f));
                 }
                 k.Beam(W(-46f, 8.45f, 0), W(46f, 8.45f, 0), 0.6f, 0.4f, white, LM.Solid);
+                if (st.Kind == Ground)
+                {
+                    // at street level: no lift tower; the red LRT sign on a post at the platform end
+                    onGround++;
+                    k.Beam(W(44f, 0f, 10.2f), W(44f, 4.6f, 10.2f), 0.3f, 0.3f, white, LM.Solid);
+                    k.Box(W(44f, 4.2f, 10.2f), new Vector3(0.4f, 1.6f, 3.2f), yaw, red, LM.Light, 1f, red, LM.Light);
+                    continue;
+                }
                 // lift and stair tower to the street, with the red LRT sign
                 float gy = CityGround.HeightAt(W(0, 0, 13f).x, W(0, 0, 13f).z);
                 var tb = W(0, 0, 13.5f); tb.y = gy;
@@ -221,6 +526,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 k.Box(W(0, 4.2f, 16.8f), new Vector3(3.2f, 1.6f, 0.4f), yaw, red, LM.Light, 1f, red, LM.Light);
             }
             for (int ph = 0; ph < 3; ph++) if (kits[ph].VertexCount > 0) Add(kits[ph].ToMesh("LRT stations " + ph), ph, 2, "LRT stations · phase " + (ph + 1));
+            if (under > 0 || onGround > 0) Debug.Log($"[Alatau] LRT stations: {onGround} at street level (no lift), {under} underground (no structure, trains still stop)");
         }
 
         void Add(Mesh m, int phase, int kind, string name)
@@ -292,7 +598,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
                     var a = r.P[Mathf.Max(i - 1, 0)]; var b = r.P[Mathf.Min(i + 1, r.P.Length - 1)]; var d = (b - a); d.y = 0; d.Normalize();
                     var side = new Vector3(-d.z, 0, d.x) * (W * 0.5f);
                     if (i > 0) acc += Vector3.Distance(r.P[i], r.P[i - 1]);
-                    var c = r.P[i] + Vector3.up * 6f;
+                    var c = r.P[i]; c.y = Mathf.Max(c.y, CityGround.HeightAt(c.x, c.z)) + 6f;      // over a tunnel: above the ground
                     V.Add(c - side); U.Add(new Vector2(acc, 0)); V.Add(c + side); U.Add(new Vector2(acc, 1));
                     if (i > 0) { int k = v0 + (i - 1) * 2; T.Add(k); T.Add(k + 2); T.Add(k + 1); T.Add(k + 1); T.Add(k + 2); T.Add(k + 3); }
                 }
@@ -378,7 +684,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             }
             foreach (var t in trains)
             {
-                t.A.gameObject.SetActive(show); t.B.gameObject.SetActive(show); if (!show) continue;
+                if (!show) { t.A.gameObject.SetActive(false); t.B.gameObject.SetActive(false); continue; }
                 var r = t.R; float end = r.S[r.OpenIdx];
                 if (t.Dwell > 0) t.Dwell -= dt;
                 else
@@ -396,15 +702,18 @@ namespace AlatauCity.DigitalTwin.Landmarks
                         t.NextStop = NextStop(r, t.S, t.Dir);
                     }
                 }
-                Place(t.A, r, t.S, t.Dir, 0f); Place(t.B, r, t.S, t.Dir, -28.6f);
+                float sa = Place(t.A, r, t.S, t.Dir, 0f), sb = Place(t.B, r, t.S, t.Dir, -28.6f);
+                // in a tunnel a car is hidden once it is inside the portal's hood
+                t.A.gameObject.SetActive(r.Deep == null || DeepAt(r, sa) < 26f); t.B.gameObject.SetActive(r.Deep == null || DeepAt(r, sb) < 26f);
             }
         }
-        static void Place(Transform tr, Route r, float s, float dir, float back)
+        static float Place(Transform tr, Route r, float s, float dir, float back)
         {
             float sc = Mathf.Clamp(s + back * dir, 0f, r.S[Mathf.Max(r.OpenIdx, 1)]);
             var p = At(r, sc, out var fwd);
             // the bogies (0.2 m above the car origin) stand on the rails (0.2 m above the deck)
             tr.SetPositionAndRotation(p + Vector3.up * 0.02f + Vector3.Cross(fwd, Vector3.up).normalized * (dir > 0 ? -2.15f : 2.15f), Quaternion.LookRotation(fwd * dir, Vector3.up) * Quaternion.Euler(0, 90f, 0));
+            return sc;
         }
         public static Vector3 At(Route r, float s, out Vector3 fwd)
         {

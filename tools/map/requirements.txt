@@ -1,0 +1,10 @@
+# Python 3.12+ (tested on 3.13). pip install -r tools/map/requirements.txt
+shapely>=2.1
+numpy>=2.0
+pillow>=11
+pyproj>=3.7
+pyarrow>=20
+scipy>=1.14
+networkx>=3.4
+pandas>=2.2
+matplotlib>=3.9

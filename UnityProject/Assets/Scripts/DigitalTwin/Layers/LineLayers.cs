@@ -20,7 +20,7 @@ namespace AlatauCity.DigitalTwin
         public static readonly Color RoadWorkColor = new Color(0.96f, 0.65f, 0.14f);
 
         readonly Dictionary<string, MeshRenderer> layers = new Dictionary<string, MeshRenderer>();
-        Texture2D trafficTex; byte[] traffic = new byte[256 * 128];
+        Texture2D trafficTex; byte[] traffic = new byte[256 * 512];      // edge → v/c: up to 131 072 edges (the city with its drives)
         int trafficYear = -1, trafficScen = -1;
         static readonly int PxId = Shader.PropertyToID("_AlatauPx"), ScenIdx = Shader.PropertyToID("_AlatauScenIdx"), TrafficId = Shader.PropertyToID("_AlatauTrafficTex");
 
@@ -105,7 +105,7 @@ namespace AlatauCity.DigitalTwin
                 var edges = new List<int>(); var years = new List<Vector4>();
                 for (int i = 0; i < TwinData.Roads.Length; i++) { edges.Add(i); years.Add(Vector4.zero); }
                 var r = Make("traffic", edges, years, Color.white, 0, shader, 1, 3.4f);
-                trafficTex = new Texture2D(256, 128, TextureFormat.R8, false, true) { name = "Alatau traffic v/c", filterMode = FilterMode.Point, wrapMode = TextureWrapMode.Clamp };
+                trafficTex = new Texture2D(256, 512, TextureFormat.R8, false, true) { name = "Alatau traffic v/c", filterMode = FilterMode.Point, wrapMode = TextureWrapMode.Clamp };
                 Shader.SetGlobalTexture(TrafficId, trafficTex); trafficYear = -1;
             }
             HideAll();
@@ -117,10 +117,10 @@ namespace AlatauCity.DigitalTwin
         MeshRenderer Make(string name, List<int> edges, List<Vector4> years, Color color, float lane, Shader shader, int mode, float pixelHalfWidth)
         {
             var pos = new List<Vector3>(); var nrm = new List<Vector3>(); var col = new List<Color>(); var uv0 = new List<Vector2>(); var uv1 = new List<Vector4>(); var uv2 = new List<Vector2>();
-            var idx = new List<int>();
+            var idx = new List<int>(); var hs = new List<float>();
             for (int k = 0; k < edges.Count; k++)
             {
-                var e = TwinData.Roads[edges[k]]; var g = Densify(e.Geom, 40f); if (g.Count < 2) continue;
+                var e = TwinData.Roads[edges[k]]; var g = Densify(e.Geom, 40f, e.H, hs); if (g.Count < 2) continue;
                 float along = 0; int baseV = pos.Count;
                 for (int i = 0; i < g.Count; i++)
                 {
@@ -128,7 +128,8 @@ namespace AlatauCity.DigitalTwin
                     if (dir.sqrMagnitude < 1e-6f) dir = Vector2.right; dir.Normalize();
                     var side = new Vector3(-dir.y, 0, dir.x);
                     if (i > 0) along += (g[i] - g[i - 1]).magnitude;
-                    var c = new Vector3(g[i].x, CityGround.HeightAt(g[i].x, g[i].y), g[i].y);
+                    float y = CityGround.HeightAt(g[i].x, g[i].y); if (e.H != null) y = Mathf.Max(y, hs[i]);      // a deck or embankment of the redrawn map (never down into a tunnel)
+                    var c = new Vector3(g[i].x, y, g[i].y);
                     for (int sgn = -1; sgn <= 1; sgn += 2)
                     {
                         pos.Add(c); nrm.Add(side); col.Add(color); uv0.Add(new Vector2(along, sgn)); uv1.Add(years[k]); uv2.Add(new Vector2(edges[k], lane));
@@ -149,17 +150,18 @@ namespace AlatauCity.DigitalTwin
             return mr;
         }
 
-        static List<Vector2> Densify(Vector2[] g, float step)
+        /// <summary>Points every 'step' metres at most; with per-vertex heights h (roads.json `h`, redrawn map) their heights go to 'ho'.</summary>
+        static List<Vector2> Densify(Vector2[] g, float step, float[] h = null, List<float> ho = null)
         {
-            var o = new List<Vector2>(g.Length * 2);
+            var o = new List<Vector2>(g.Length * 2); bool wh = h != null && ho != null && h.Length == g.Length; if (ho != null) ho.Clear();
             for (int i = 0; i < g.Length; i++)
             {
                 if (i > 0)
                 {
                     float L = (g[i] - g[i - 1]).magnitude; int n = Mathf.FloorToInt(L / step);
-                    for (int k = 1; k <= n; k++) { float t = k / (n + 1f); o.Add(Vector2.Lerp(g[i - 1], g[i], t)); }
+                    for (int k = 1; k <= n; k++) { float t = k / (n + 1f); o.Add(Vector2.Lerp(g[i - 1], g[i], t)); if (wh) ho.Add(Mathf.Lerp(h[i - 1], h[i], t)); }
                 }
-                o.Add(g[i]);
+                o.Add(g[i]); if (wh) ho.Add(h[i]);
             }
             return o;
         }

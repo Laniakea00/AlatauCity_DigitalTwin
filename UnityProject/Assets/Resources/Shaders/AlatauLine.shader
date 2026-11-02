@@ -2,7 +2,7 @@
 // the vertex shader widens them with camera distance so a trunk main stays visible from the whole-city view.
 // Vertex data: POSITION = centre (world), NORMAL = side direction (xz), COLOR = colour, TEXCOORD0 = (metres along, side −1/+1),
 // TEXCOORD1 = in-service year per scenario (base, fast, slow, infra), TEXCOORD2 = (edge index, lane).
-// Globals: _AlatauYear, _AlatauScenIdx (0..3), _AlatauPx (2·tan(fov/2) / screen height), _AlatauTrafficTex (R8, edge → v/c×100, 0 = none).
+// Globals: _AlatauYear, _AlatauScenIdx (0..3), _AlatauPx (2·tan(fov/2) / screen height), _AlatauTrafficTex (R8 256 × 512, edge → v/c×100, 0 = none).
 Shader "AlatauCity/Line"
 {
     Properties
@@ -54,7 +54,7 @@ Shader "AlatauCity/Line"
                 int s = (int)round(_AlatauScenIdx);
                 o.year = s == 0 ? v.years.x : s == 1 ? v.years.y : s == 2 ? v.years.z : v.years.w;
                 float e = v.extra.x;
-                float2 tuv = float2((fmod(e, 256.0) + 0.5) / 256.0, (floor(e / 256.0) + 0.5) / 128.0);
+                float2 tuv = float2((fmod(e, 256.0) + 0.5) / 256.0, (floor(e / 256.0) + 0.5) / 512.0);     // 256 × 512 texels
                 o.vc = _Mode > 0.5 ? tex2Dlod(_AlatauTrafficTex, float4(tuv, 0, 0)).r * 255.0 / 100.0 : 0;
                 if (_Mode > 0.5 && o.vc > 0.005)
                 {

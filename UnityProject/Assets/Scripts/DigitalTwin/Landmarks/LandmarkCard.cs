@@ -38,7 +38,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             {
                 // readiness in the shown year (on the monitoring map: today)
                 bool mon = Modules.MonitoringModule.On;
-                int y = TwinState.Year; float pr = LandmarkSystem.Progress(l, mon ? Modules.MonitoringModule.Today : y);
+                int y = TwinState.Year; float pr = LandmarkSystem.Progress(l, mon ? Modules.MonitoringModule.Today : LandmarkSystem.EndOf(y));
                 var tl = new VisualElement(); tl.AddToClassList("lm-tl");
                 var tlh = new VisualElement(); tlh.AddToClassList("row"); tlh.style.justifyContent = Justify.SpaceBetween;
                 tlh.Add(new Label(l.StartYear.ToString()) { pickingMode = PickingMode.Ignore });

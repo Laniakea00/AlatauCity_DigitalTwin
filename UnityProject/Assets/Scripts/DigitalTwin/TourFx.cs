@@ -455,7 +455,7 @@ namespace AlatauCity.DigitalTwin
                 {
                     var tx = Shader.GetGlobalTexture(tn) as Texture2D;
                     if (tx == null) { sb.Append($" {tn}=null"); continue; }
-                    try { var c = tx.GetPixel(bid % 256, bid / 256); sb.Append($" {tn}[{tx.name}]=({c.r:0.###},{c.g:0.###},{c.b:0.###},{c.a:0.###})"); } catch { sb.Append($" {tn}[{tx.name}]=?"); }
+                    try { var c = tx.GetPixel(bid % BidTable.W, bid / BidTable.W); sb.Append($" {tn}[{tx.name}]=({c.r:0.###},{c.g:0.###},{c.b:0.###},{c.a:0.###})"); } catch { sb.Append($" {tn}[{tx.name}]=?"); }
                 }
                 break;
             }

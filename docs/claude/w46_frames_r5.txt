@@ -1,0 +1,26 @@
+# w46 round 5 frames (integ d15c2b9). MapCamera: target x z, distance, yaw, pitch. Years in brackets.
+iconic_offices_above      -3500 -19500  950   0  60   [2028, 2029]
+iconic_offices_ne_court   -3312 -19288  220 200  45   [2029]
+# from the plaza (eye 20 m up -> target 9 m up), [2029]
+plaza_ne_e   eye -3420 -19420  target -3270 -19340
+plaza_se     eye -3420 -19600  target -3314 -19726
+plaza_sw     eye -3580 -19600  target -3687 -19718
+plaza_w      eye -3600 -19500  target -3795 -19499
+plaza_nw     eye -3580 -19420  target -3689 -19288
+# street level (eye 1.7 m on paving -> block centre 9 m up), [2029]
+street_ne    eye -3372.2 -19295.7  target -3312 -19288
+street_e     eye -3245.2 -19445.3  target -3234 -19387
+street_se    eye -3367.9 -19703.1  target -3314 -19726
+street_sw    eye -3698.8 -19660.2  target -3687 -19718
+street_w     eye -3734.9 -19511.7  target -3795 -19499
+street_nw    eye -3679.0 -19343.8  target -3689 -19288
+# check: 4 storeys, no trunks through walls, courtyard gardens without z-fighting
+# airport (needs growing_w data merged; level-2 round)
+airport_overview   -15956 1868 4950 345 30  [2040 empty, 2043 site, 2045 done]
+airport_terminal   -15230 2250 1100 200 28  [2043, 2045]
+airport_tower      -16077 2345  600 200 20  [2043] target 50 m up
+airport_runway     -16600 1300 1500  30 15  [2044 earthworks, 2045 take-off]
+airport_access     -15899 2495  400 180 35  [2045]
+airport_west_vil11 -17980 2150  900  90 30  [2045]
+airport_old_site    -5900 8300 4000 345 35  [2045] must be empty plateau
+tour_step          «Аэропорт «Алатау» · после 2040» (Seg 3, 2050)

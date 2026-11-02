@@ -148,7 +148,7 @@ namespace AlatauCity.DigitalTwin
         }
         static T Active<T>() where T : class => TwinUI.Instance != null ? TwinUI.Instance.Active as T : null;
         static string Money(float mln) => mln >= 1000 ? Loc.N1(mln / 1000f) + " млрд ₸" : Loc.N0(mln) + " млн ₸";
-        static float Res(int y) { float r = 0; for (int d = 0; d < 4; d++) r += CityStats.Residents(d, y); return r; }
+        static float Res(int y) => CityStats.People(-1, y);          // the panels' number: new stock and existing houses (CityStats.People)
         static string K(float v) => Loc.N0(v / 1000f) + " тыс.";
         static string[] ObjectsOf(int d) => LS == null ? new string[0] : LS.Items.Where(l => l.District == d).Select(l => l.Name + " — " + LandmarkCatalog.StatusOf(l).ToLower()).ToArray();
         static int LrtYear(int p) { int s = (int)TwinState.Scenario; return TwinData.LrtPhaseYear[s] != null && p < TwinData.LrtPhaseYear[s].Length ? TwinData.LrtPhaseYear[s][p] : 2031; }
@@ -169,7 +169,7 @@ namespace AlatauCity.DigitalTwin
         static Story District(int d, string head, string extraV = null, string extraL = null)
         {
             int y = 2050; var s = new Story { Eyebrow = CityStats.DistrictIds[d] + " · " + y, Head = head };
-            s.K(Kk(CityStats.Residents(d, y)), "жителей", CRes).K(Kk(CityStats.Jobs(d, y)), "рабочих мест", CJobs);
+            s.K(Kk(CityStats.People(d, y)), "жителей", CRes).K(Kk(CityStats.Workplaces(d, y)), "рабочих мест", CJobs);
             if (extraV != null) s.K(extraV, extraL, Color.white); else s.K(Loc.N0(CityStats.DistrictAreaHa[d]) + " га", "площадь района", Color.white);
             return s;
         }
@@ -187,13 +187,13 @@ namespace AlatauCity.DigitalTwin
             // ================= the city (segment 0)
             steps.Add(new Step { Seg = 0, Zone = -1, Year = 2026, Dur = 24, Enter = Overview, Title = () => "Alatau City сегодня",
                 Story = () => new Story { Eyebrow = "Alatau City · 2026", Head = "Город-спутник Алматы на берегу Капшагая", Note = "Конституционный закон № 286-VIII · Alatau City Authority" }
-                    .K("88 267 га", "территория города").K("≈ 70 тыс.", "жителей сегодня", CRes).K("67", "проектов · $6,9 млрд", CInfo) });
+                    .K("88 267 га", "территория города").K(Kk(Res(2026)), "жителей сегодня", CRes).K("67", "проектов · $6,9 млрд", CInfo) });
             steps.Add(new Step { Seg = 0, Zone = -1, Year = 2026, Dur = 26, Grow = true, Gfa = true, Enter = Overview, Title = () => "Город растёт: 2026 → 2050",
                 Story = () =>
                 {
                     int y = TwinState.Year; var s = new Story { Eyebrow = "Рост города · " + y, Head = "Кварталы, сети и дороги — по графику стройки" };
                     s.K(y.ToString(), "год", Color.white).K(Kk(Res(y)), "жителей", CRes).K(Loc.N0(CityStats.Count(-1, y)), "зданий введено", CInfo);
-                    for (int d = 0; d < 4; d++) s.R(CityStats.DistrictIds[d], Mathf.RoundToInt(100f * CityStats.Residents(d, y) / (CityStats.DistrictTarget2050k[d] * 1000f)) + " % цели", CityStats.DistrictColors[d], CityStats.Residents(d, y) / (CityStats.DistrictTarget2050k[d] * 1000f));
+                    for (int d = 0; d < 4; d++) s.R(CityStats.DistrictIds[d], Mathf.RoundToInt(100f * CityStats.People(d, y) / (CityStats.DistrictTarget2050k[d] * 1000f)) + " % цели", CityStats.DistrictColors[d], CityStats.People(d, y) / (CityStats.DistrictTarget2050k[d] * 1000f));
                     return s;
                 } });
 
@@ -246,7 +246,7 @@ namespace AlatauCity.DigitalTwin
                     LandmarkCapacity.Totals(2050, out float rev, out float exp);
                     s.K(Loc.N0(indCount), "заводов и складов", new Color(1f, 0.62f, 0.22f)).K(Kk(indGfa / 100f), "рабочих мест", CJobs).K("$" + Loc.N1(rev / 1000f) + " млрд", "выручка крупных заводов в год", COk);
                     var o = new Color(1f, 0.62f, 0.22f);
-                    foreach (var id in new[] { "pepsico", "mars", "sunny_paper", "danaflex", "tlc", "gtes" })
+                    foreach (var id in new[] { "mars", "sunny_paper", "danaflex", "tlc", "gtes" })      // Growing's plants (PepsiCo stands in Gate)
                     {
                         var l = LS?.Get(id); var c = LandmarkCapacity.Of(id); if (l == null || c == null) continue;
                         s.R(l.Short, LandmarkCapacity.Fmt(LandmarkCapacity.CapacityAt(l, c, 2050), c.Unit) + (c.Jobs > 0 ? " · " + Loc.N0(c.Jobs) + " мест" : ""), o, LandmarkCapacity.Load(l, 2050));
@@ -257,7 +257,8 @@ namespace AlatauCity.DigitalTwin
                     At(0.6f, () => Spot(2, "Заводы", new Color(1f, 0.62f, 0.22f), b => b.Kind == "industry")),
                     At(8f, () => Spot(2, "Энергетика и сети", new Color(1f, 0.86f, 0.25f), b => b.Kind == "utility" || b.Kind == "solar")) } });
             steps.Add(new Step { Seg = 3, Zone = 2, Year = 2050, Dur = 22, Enter = () => { LS?.Select(null, false); var c = Cam; if (c != null) c.FlyTo(c.overview); TourFx.Instance?.ShowSilkRoad(); }, Title = () => "Шёлковый путь через Алатау" });
-            steps.Add(new Step { Seg = 3, Zone = 2, Module = "objects", Year = 2050, Dur = 22, Enter = () => Object("airport"), Title = () => "Новый аэропорт · концепция" });
+            // the airport on the owner's site of 31.10.2026 (Growing-West, runway centre −16000, 1500; LandmarkData «airport» built 2041–2045, open from 2045)
+            steps.Add(new Step { Seg = 3, Zone = 2, Module = "objects", Year = 2050, Dur = 22, Enter = () => Object("airport"), Title = () => "Аэропорт «Алатау» · после 2040" });
 
             // ================= Green: tourism on Kapshagay (segment 4)
             steps.Add(new Step { Seg = 4, Zone = 3, Year = 2050, Dur = 15, Title = () => "Район Green в 2050 году", Enter = () => ZoneGlide(3, 16f),
@@ -317,7 +318,7 @@ namespace AlatauCity.DigitalTwin
                 Story = () =>
                 {
                     var s = new Story { Eyebrow = "Alatau City · 2050", Head = "Город, который проверяют до того, как он стоит денег", Note = "Модель qTwin по генплану (ПП РК № 388) · не официальные данные" };
-                    s.K(Kk(Res(2050)), "жителей", CRes).K(Kk(CityStats.Jobs(-1, 2050)), "рабочих мест", CJobs).K(Loc.N0(CityStats.Count(-1, 2050)), "зданий", CInfo);
+                    s.K(Kk(Res(2050)), "жителей", CRes).K(Kk(CityStats.Workplaces(-1, 2050)), "рабочих мест", CJobs).K(Loc.N0(CityStats.Standing(-1, 2050)), "зданий", CInfo);
                     var e = CityEconomy.Of(2050);
                     s.R("ВРП 2050", CityEconomy.Usd(e.GrpTotal) + " · $" + Loc.N0(e.GrpPerCapitaUsd) + " на жителя", COk);
                     s.R("Стройка: план против факта", "", COk).R("Сети и дефициты — за годы до проблемы", "", COk).R("Smart City и ситуационный центр", "", COk);

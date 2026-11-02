@@ -42,9 +42,9 @@ namespace AlatauCity.DigitalTwin
             if (s == Scenario.Base) { Shader.SetGlobalFloat(OnId, 0f); return; }
             if (yearTex == null)
             {
-                yearTex = new Texture2D(256, 256, TextureFormat.RFloat, false, true) { name = "Alatau scenario years", filterMode = FilterMode.Point, wrapMode = TextureWrapMode.Clamp };
+                yearTex = BidTable.New(TextureFormat.RFloat, "Alatau scenario years");
             }
-            var data = new float[256 * 256];
+            var data = new float[BidTable.N];
             foreach (var b in db.Buildings) if (b != null && b.Bid >= 0 && b.Bid < data.Length) data[b.Bid] = EffectiveYear(b, s);
             yearTex.SetPixelData(data, 0); yearTex.Apply(false, false);
             Shader.SetGlobalTexture(TexId, yearTex); Shader.SetGlobalFloat(OnId, 1f);

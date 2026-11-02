@@ -4,7 +4,7 @@ namespace AlatauCity.DigitalTwin
     /// <summary>Merged building mesh. Triangle -> building id is read from uv2.y of the (unwelded) triangle.
     /// It also tells the film look which way each building is turned: the main direction of its walls (modulo 90°), so that roof
     /// membranes, plant, solar rows and metal ribs drawn by AlatauFilm.cginc run along the building and not along the map grid.
-    /// One chunk is read per frame after start; the result is the global _AlatauRoofTex (256×256, bid → r = angle / 90° + 0.5,
+    /// One chunk is read per frame after start; the result is the global _AlatauRoofTex (BidTable 256×512, bid → r = angle / 90° + 0.5,
     /// a = 1 when known) with _AlatauRoofOn = 1 once the first chunk is in.</summary>
     [RequireComponent(typeof(MeshFilter))]
     public class BuildingChunk : MonoBehaviour
@@ -36,12 +36,12 @@ namespace AlatauCity.DigitalTwin
             if (m == null || !m.isReadable) return;
             var V = m.vertices; var T = m.triangles; var ids = new System.Collections.Generic.List<Vector2>(); m.GetUVs(1, ids);
             if (ids.Count != V.Length) return;
-            const int N = 256 * 256;
+            const int N = BidTable.N;
             if (roofTex == null)
             {
                 roofPx = new Color32[N]; accC = new float[N]; accS = new float[N];
                 for (int i = 0; i < N; i++) roofPx[i] = new Color32(128, 0, 0, 0);
-                roofTex = new Texture2D(256, 256, TextureFormat.RGBA32, false, true) { name = "Alatau roof orientation", filterMode = FilterMode.Point, wrapMode = TextureWrapMode.Clamp };
+                roofTex = BidTable.New(TextureFormat.RGBA32, "Alatau roof orientation");
             }
             int lo = int.MaxValue, hi = -1;
             for (int t = 0; t + 2 < T.Length; t += 3)

@@ -192,7 +192,7 @@ namespace AlatauCity.DigitalTwin
                 float a = Mathf.LerpUnclamped(a0, a1, s) * Mathf.Deg2Rad, r = Mathf.LerpUnclamped(r0, r1, s), h = Mathf.LerpUnclamped(h0, h1, s), lh = Mathf.LerpUnclamped(l0, l1, s);
                 Vector3 eye = c + new Vector3(Mathf.Sin(a) * r, h, Mathf.Cos(a) * r), look = c + lookOff + new Vector3(0f, lh, 0f);
                 if (m != null) { eye = m.TransformPoint(eye); look = m.TransformPoint(look); }
-                else { var o = new Vector3(-3170f, CityGround.HeightAt(-3170f, -19080f), -19080f); eye += o; look += o; }
+                else { var c = Landmarks.IconicFrame.Centre; var o = new Vector3(c.x, CityGround.HeightAt(c.x, c.y), c.y); eye += o; look += o; }
                 return new Pose { Eye = eye, Look = look };
             };
         }
@@ -234,21 +234,22 @@ namespace AlatauCity.DigitalTwin
         void Define()
         {
             if (shots.Count > 0) return;
-            var iconic = new Vector2(-3170f, -19080f);
+            var iconic = Landmarks.IconicFrame.Centre;               // the complex and its quarter (moved in stage 7: LandmarkData)
             // 1. 0–6.5 s: morning, a high slow push-in over the city toward Gate and Iconic (title)
             shots.Add(new Shot { Name = "morning", Pre = 4f, Dur = 6.5f, Year = 2050, H0 = 7.2f, H1 = 7.45f, Fov = 42f, EaseIn = true,
                 Path = MapMove(iconic + new Vector2(-250f, -400f), iconic, 120f, 90f, 5600f, 3300f, 18f, 30f, 18f, 20f) });
-            // 2. 6–14 s: glide over Gate at 8:30 — traffic, the LRT, roofs
+            // 2. 6–14 s: glide over Gate at 8:30 — traffic, the LRT, roofs (over the quarter: it follows Iconic)
             shots.Add(new Shot { Name = "gate", Pre = 2f, Dur = 7.5f, Year = 2050, H0 = 8.0f, H1 = 8.25f, Fov = 45f,
-                Path = MapMove(new Vector2(-2980f, -18760f), new Vector2(-2480f, -18300f), 0f, 0f, 760f, 640f, 28f, 46f, 33f, 30f) });
+                Path = MapMove(Landmarks.IconicFrame.Follow(-2980f, -18760f), Landmarks.IconicFrame.Follow(-2480f, -18300f), 0f, 0f, 760f, 640f, 28f, 46f, 33f, 30f) });
             // 3. 13.5–21.5 s: low tracking along a main avenue of Gate — cars, people, trees, crossings
             shots.Add(new Shot { Name = "avenue", Pre = 2f, Dur = 7.5f, Year = 2050, H0 = 9.0f, H1 = 9.2f, Fov = 46f,
                 Build = () => Avenue(new Vector2(-2110f, -18550f), 190f, 46f, 210f, 0f) });
             // 4. Iconic Complex at midday — rising round the plaza inside the ring of towers (clear of the 32 m pavilions) and looking up the tower
             shots.Add(new Shot { Name = "iconic", Pre = 2f, Dur = 9f, Year = 2050, H0 = 13.6f, H1 = 13.9f, Fov = 50f,
                 Build = () => LocalOrbit("iconic", Vector3.zero, 146f, 110f, 205f, 220f, 55f, 105f, 50f, 130f, new Vector3(0f, 0f, -10f)) });
-            // 5. 30–37.5 s: the tower under construction (2029): working cranes on the frame (caption «Every site monitored»)
-            shots.Add(new Shot { Name = "construction", Pre = 4f, Dur = 7.2f, Year = 2029, H0 = 15.4f, H1 = 15.6f, Fov = 42f,
+            // 5. 30–37.5 s: the tower under construction (the map at the end of 2028, the frame topped out): working cranes on the frame
+            // (caption «Every site monitored»)
+            shots.Add(new Shot { Name = "construction", Pre = 4f, Dur = 7.2f, Year = 2028, H0 = 15.4f, H1 = 15.6f, Fov = 42f,
                 Build = () => LocalOrbit("iconic", new Vector3(-84f, 0f, 46f), 198f, 226f, 340f, 320f, 105f, 140f, 135f, 160f, Vector3.zero) });
             // 6. 37–45 s: golden hour over Golden and the KAIST campus
             shots.Add(new Shot { Name = "golden", Pre = 4f, Dur = 8f, Year = 2050, H0 = 17.7f, H1 = 18.0f, Fov = 40f,

@@ -99,6 +99,15 @@ float4 ARoofUnits(float2 p, float2 c, float dens, float2 sz, float2 sh, float aa
     return float4(box, shd, fan * box, h0 / max(dens, 1e-3));
 }
 
+// the wall materials of the model district round Iconic (style 10, below the towers): white panel, light stone, warm sand stone,
+// light grey panel, terracotta brick, graphite panel; layer = the photo material of AlatauMat (0 plaster / stone, 1 panel, 2 brick)
+float3 AMaketWall(float k, out float layer)
+{
+    layer = k < 0.5 ? 1.0 : k < 2.5 ? 0.0 : k < 3.5 ? 1.0 : k < 4.5 ? 2.0 : 1.0;
+    return k < 0.5 ? float3(0.92, 0.91, 0.88) : k < 1.5 ? float3(0.87, 0.83, 0.75) : k < 2.5 ? float3(0.83, 0.74, 0.60)
+         : k < 3.5 ? float3(0.77, 0.78, 0.79) : k < 4.5 ? float3(0.70, 0.46, 0.36) : float3(0.50, 0.52, 0.54);
+}
+
 // style: 0 other, 1 house, 2 housing, 3 glass tower / office, 4 public, 5 industry, 6 podium / retail, 7 solar field, 8 resort, 9 existing,
 // 10 the presentation model around Iconic (light stone and white panel, real glazing, a darker plinth with shopfronts, planted roofs)
 // wall = (metres along the wall from its start, wall length); hy = metres above the building's base; H = building height;
@@ -111,7 +120,9 @@ AFacade AlatauFacade(float2 wall, float hy, float H, float floorsN, float style,
     float2 wdir2 = normalize(float2(-n.z, n.x) + float2(1e-5, 0.0));
     bool noUV = wall.y > -0.5 && wall.y < 0.05 && abs(n.y) < 0.45;
     wall = noUV ? float2(300.0 + 400.0 * frac(dot(wpos.xz, wdir2) / 400.0), 1000.0) : wall;
-    float r1 = AHash1(seed * 255.0 + 1.0), r2 = AHash1(seed * 255.0 + 7.0), r3 = AHash1(seed * 255.0 + 13.0), r4 = AHash1(seed * 255.0 + 19.0);
+    // the wall's variant r1 steps through a golden-ratio sequence of the seed byte (FilmLook.FacadeSeeds gives neighbours seeds whose
+    // variants lie far apart, so two buildings side by side never share a facade); the rest stays a hash of the seed
+    float r1 = frac(floor(seed * 255.0 + 0.5) * 0.618034 + 0.1), r2 = AHash1(seed * 255.0 + 7.0), r3 = AHash1(seed * 255.0 + 13.0), r4 = AHash1(seed * 255.0 + 19.0);
     bool maket = style > 9.5;
     bool tallM = maket && H >= 42.0;
     // ---- what the building is made of
@@ -140,11 +151,35 @@ AFacade AlatauFacade(float2 wall, float hy, float H, float floorsN, float style,
         wallL = 0.0; gf = 1.0; occ = 0.40;
         if (tallM && r1 < 0.55)      { bw = 1.5; ww = 0.90; wh = 0.78; sill = 0.0; spandrel = 0.20; mull = 0.075; occ = 0.32; wallL = 1.0; glassC = r2 < 0.5 ? float3(0.09, 0.14, 0.19) : float3(0.11, 0.16, 0.17); wallC = float3(0.90, 0.90, 0.88); }
         else if (tallM)              { bw = 3.0; ww = 0.68; wh = 0.76; sill = 0.12; occ = 0.38; wallL = 1.0; glassC = float3(0.11, 0.15, 0.19); wallC = r2 < 0.5 ? float3(0.91, 0.90, 0.87) : float3(0.87, 0.84, 0.78); }
-        else                         { bw = 3.2; ww = 0.50 + 0.08 * r2; wh = 0.58; sill = 0.26; glassC = float3(0.13, 0.17, 0.21); wallC = r1 < 0.40 ? float3(0.92, 0.91, 0.88) : r1 < 0.75 ? float3(0.88, 0.85, 0.78) : float3(0.84, 0.85, 0.85); }
+        else
+        {
+            // mid-rise housing: one of six wall materials per building (not one cream for the whole district)
+            float mk = r1 < 0.24 ? 0.0 : r1 < 0.44 ? 1.0 : r1 < 0.62 ? 2.0 : r1 < 0.78 ? 3.0 : r1 < 0.90 ? 4.0 : 5.0;
+            bw = 3.0 + 0.6 * r4; ww = 0.50 + 0.08 * r2; wh = 0.58; sill = 0.26; glassC = float3(0.13, 0.17, 0.21); wallC = AMaketWall(mk, wallL);
+        }
     }
     else if (style > 8.5)                 { wallL = r1 < 0.8 ? 0.0 : 2.0; roofL = r2 < 0.5 ? 4.0 : 10.0; bw = 3.4; ww = 0.40; wh = 0.44; sill = 0.32; gf = 0.0; occ = 0.45; wallC = r1 < 0.5 ? float3(0.74, 0.73, 0.70) : r1 < 0.8 ? float3(0.80, 0.76, 0.68) : float3(0.63, 0.52, 0.46); }
     wallC = lerp(wallC, tint, maket ? 0.0 : 0.14);
     bool housing = (style > 1.5 && style < 2.5) || (style > 7.5 && style < 8.5) || (maket && !tallM);
+    // ---- no facade runs on unbroken for more than 60 m: a longer wall is built in sections of at most 48 m with a blank pier between
+    //      them (the bays restart in every section); every other section takes a second material of the scheme and its own window
+    //      rhythm (sheds only change their shade)
+    float secN = wall.y > 60.0 ? ceil(wall.y / 48.0) : 1.0, secLen = wall.y / secN;
+    float secI = secN > 1.5 ? clamp(floor(wall.x / secLen), 0.0, secN - 1.0) : 0.0, secH = AHash1(secI * 5.7 + seed * 71.0);
+    if (secN > 1.5)
+    {
+        bool shed = style > 4.5 && style < 5.5;
+        if (fmod(secI, 2.0) > 0.5 && !shed)
+        {
+            float l2 = wallL;
+            float3 alt2 = r4 < 0.5 ? float3(0.80, 0.72, 0.60) : r4 < 0.8 ? float3(0.66, 0.67, 0.68) : float3(0.74, 0.55, 0.45);
+            float mk2 = fmod(floor(r1 * 6.0) + 1.0 + floor(r4 * 4.0), 6.0);
+            float3 c2 = maket ? AMaketWall(mk2, l2) : lerp(wallC, alt2, 0.55);
+            wallC = c2; wallL = maket ? l2 : wallL;
+            bw *= 1.15; ww *= 0.88; glassC *= 0.92 + 0.16 * secH;
+        }
+        wallC *= 0.97 + 0.06 * secH;
+    }
 
     o.spec = 0; o.emit = 0; o.ao = 1; o.albedo = wallC;
     // every screen-space derivative is taken here, before the first branch
@@ -159,12 +194,14 @@ AFacade AlatauFacade(float2 wall, float hy, float H, float floorsN, float style,
     float fhMax = (style > 0.5 && style < 1.5) || style > 8.5 ? 3.4 : (style > 4.5 && style < 5.5) ? 6.0 : (style > 5.5 && style < 6.5) ? 5.0 : 4.4;
     float floorsE = clamp(max(floorsN, floor(H / fhMax + 0.25)), 1.0, max(floor(H / 2.8), 1.0));
     float fh = H / floorsE;
-    float L = wall.y, m = min(0.55, L * 0.12);
-    float nb = max(1.0, floor((L - 2.0 * m) / bw + 0.5));
-    float ub = (wall.x - m) / max(L - 2.0 * m, 0.01) * nb;            // bay coordinate: integer = a bay line
+    float L = wall.y, Ls = secLen, m = secN > 1.5 ? 1.2 : min(0.55, Ls * 0.12);   // the bays of this wall section (one section up to 60 m;
+                                                                                  // sections of a longer wall meet at a 2.4 m blank pier)
+    float nb = max(1.0, floor((Ls - 2.0 * m) / bw + 0.5));
+    float ub = (wall.x - secI * secLen - m) / max(Ls - 2.0 * m, 0.01) * nb;     // bay coordinate: integer = a bay line
     float vf = hy / fh;
-    float2 cell = float2(ub, vf), cw = fwidth(cell);
-    float mppW = max(cw.x * (L - 2.0 * m) / nb, 1e-3);                // metres per pixel along the wall
+    // the width of a pixel in bays comes from the metres along the wall, which run on across a section joint (ub jumps there)
+    float2 cell = float2(ub, vf), cw = float2(fwidth(wall.x) * nb / max(Ls - 2.0 * m, 0.01), fwidth(vf));
+    float mppW = max(cw.x * (Ls - 2.0 * m) / nb, 1e-3);               // metres per pixel along the wall
 
     float rowW = fwidth(wpos.y / 0.24);                                // tile courses, for sloped roofs
     // the material photo of this face: walls are mapped along the wall and up, flat roofs from above (along the building), pitched roofs along the slope
@@ -306,13 +343,15 @@ AFacade AlatauFacade(float2 wall, float hy, float H, float floorsN, float style,
     {
         float band = saturate((q.y - spandrel) / max(cw.y, 1e-4) + 0.5);
         float bar = saturate((abs(q.x - 0.5) - (0.5 - mull)) / max(cw.x, 1e-4) + 0.5);
+        // a mullion under about a pixel and a half would alias into moiré from afar: it fades to its share of the bay
+        bar = lerp(2.0 * mull, bar, saturate((2.0 * mull / max(cw.x, 1e-4) - 0.7) / 0.8));
         win = band * (1.0 - bar) * inWall * step(1.2, top);
     }
-    float h = AHash2(id + seed * 91.0);
+    float h = AHash2(id + float2(secI * 37.0, 0.0) + seed * 91.0);
     // wall surface: slab lines, bay joints, a little unevenness, a darker plinth
     float joint = (1.0 - saturate(q.y / max(cw.y * 1.5, 0.035))) * (maket ? 0.16 : 0.10) + (1.0 - saturate(min(q.x, 1.0 - q.x) / max(cw.x * 1.5, 0.012))) * 0.05 * inWall;
     float3 wallS = wallC * (1.0 - joint) * (1.0 + 0.07 * grainFade * (ANoise(float2(wall.x * 0.7, hy * 0.7) + seed * 40.0) - 0.5)) * surf;
-    if (style > 4.5 && style < 5.5) wallS *= 0.96 + 0.04 * step(0.5, frac(wall.x / 0.9));               // cladding sheets
+    if (style > 4.5 && style < 5.5) wallS *= 0.96 + 0.04 * lerp(0.5, step(0.5, frac(wall.x / 0.9)), saturate(1.5 - mppW * 2.2));   // cladding sheets (fade under ~2 px)
     // street level: shopfronts in a dark frame under a canopy band (the darker stone plinth of the model district)
     float3 plinthC = maket ? float3(0.34, 0.33, 0.32) : wallC * 0.6;
     wallS = lerp(wallS, plinthC * surf, (maket ? 0.92 : 0.5) * ground);
@@ -376,6 +415,11 @@ AFacade AlatauFacade(float2 wall, float hy, float H, float floorsN, float style,
         float2 fw = float2(0.07 / bw, 0.07 / fh);
         float inner = ABox(q - wc, max(ws - fw, 0.001), cw) * inWall * step(0.9, top);
         float bar = ws.x * bw > 0.7 ? 1.0 - saturate((abs(q.x - wc.x) - 0.025 / bw) / max(cw.x, 1e-4) + 0.5) : 0.0;
+        // frames and centre bars thinner than about a pixel would alias into moiré from afar: they fade to their share of the pane
+        bar *= saturate((0.05 / bw / max(cw.x, 1e-4) - 0.7) / 0.8);
+        float frameK = saturate((min(fw.x / max(cw.x, 1e-4), fw.y / max(cw.y, 1e-4)) - 0.5) / 0.8);
+        float frameS = 1.0 - saturate((ws.x - fw.x) * (ws.y - fw.y) / max(ws.x * ws.y, 1e-4));
+        inner = lerp(win * (1.0 - frameS), inner, frameK);
         float3 frameC = maket ? (r2 < 0.6 ? float3(0.30, 0.31, 0.33) : float3(0.86, 0.86, 0.85)) : r2 < 0.55 ? float3(0.93, 0.93, 0.92) : r2 < 0.8 ? float3(0.24, 0.25, 0.27) : float3(0.45, 0.33, 0.24);
         float head = saturate(1.0 - (wc.y + ws.y - q.y) / (0.16 * saturate(_AlatauSunDir.y * 2.0 + 0.3)));          // deeper shadow with a higher sun
         glass *= 1.0 - 0.45 * head * inner;

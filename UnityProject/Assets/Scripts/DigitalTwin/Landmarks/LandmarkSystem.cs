@@ -37,6 +37,10 @@ namespace AlatauCity.DigitalTwin.Landmarks
             public bool Site0, Site1, Cr0, Cr1; public MeshRenderer FenceR; public MaterialPropertyBlock FenceB;
         }
         readonly Dictionary<string, Node> nodes = new Dictionary<string, Node>();
+        // the plan site of an object without a model (Griffin): a hoarding round its lot and the shells of the plan's own buildings on it
+        class Shell { public GameObject Go; public MeshRenderer R; public int Bid; public float H; }
+        class PlanSite { public Landmark L; public GameObject Root; public readonly List<Shell> Shells = new List<Shell>(); }
+        readonly List<PlanSite> planSites = new List<PlanSite>(); MaterialPropertyBlock shellB;
         Material mat, matIconic, matKaist; bool built;
         static readonly int RevealId = Shader.PropertyToID("_Reveal"), BuildId = Shader.PropertyToID("_Build"), GhostId = Shader.PropertyToID("_Ghost"), HiId = Shader.PropertyToID("_Hi"),
             FacadeId = Shader.PropertyToID("_Facade"), LandId = Shader.PropertyToID("_Land"), GlowId = Shader.PropertyToID("_Glow"), HeightId = Shader.PropertyToID("_H"),
@@ -57,8 +61,17 @@ namespace AlatauCity.DigitalTwin.Landmarks
         static byte[] hidden;
         /// <summary>Generic buildings of the plan that a landmark replaces, or that MapOrder removes (hidden in AlatauLit, not pickable:
         /// pick and line-of-sight rays pass through them).</summary>
-        public static bool IsHiddenBid(int bid) => (hidden != null && bid >= 0 && bid < hidden.Length && hidden[bid] != 0 && (hidden[bid] == 1 || TwinState.Year >= 2000 + hidden[bid]))
-                                                   || MapOrder.Removed(bid);          // removed from the map (wrong place in the base data)
+        public static bool IsHiddenBid(int bid) => TwinState.Year >= GoneYear(bid);
+        /// <summary>The year from which the building is off the map (a landmark's plot, or MapOrder: removed from the map, wrong place in the
+        /// base data); 0 = never shown, int.MaxValue = never taken away. CityStats.Standing counts the standing buildings by it.</summary>
+        public static int GoneYear(int bid)
+        {
+            int g = int.MaxValue;
+            if (hidden != null && bid >= 0 && bid < hidden.Length && hidden[bid] != 0) g = hidden[bid] == 1 ? 0 : 2000 + hidden[bid];
+            return Mathf.Min(g, MapOrder.GoneYear(bid));
+        }
+        /// <summary>Bumped when the plots' table of hidden buildings is (re)built: figures cached from GoneYear are rebuilt.</summary>
+        public static int HiddenVersion { get; private set; }
 
         /// <summary>Before anything is draped on the terrain (roads, trees, networks, LRT): every plot is levelled to one height with a soft
         /// edge, the terrain mesh follows, the generic buildings standing on the plot are hidden, and an invisible slab keeps the trees off it.</summary>
@@ -68,19 +81,24 @@ namespace AlatauCity.DigitalTwin.Landmarks
             Mesh mesh = null; Vector3[] verts = null;
             var mf = tgo != null ? tgo.GetComponent<MeshFilter>() : null;
             if (mf != null && mf.sharedMesh != null && mf.sharedMesh.isReadable) { mesh = mf.mesh; verts = mesh.vertices; }
-            hidden = new byte[256 * 256]; int nh = 0;
+            hidden = new byte[BidTable.N]; int nh = 0;
             LoadBounds();
             var db = CityDatabase.Instance;
             foreach (var l in Items)
             {
                 if (l.IsLrt || l.PadW <= 0f) continue;
-                float lvl = Ground(l.X, l.Z, Mathf.Max(l.PadW, l.PadD) * 0.5f);
+                // a district round the landmark (the Gate District of Iconic): its whole area is graded first, then the plot levelled
+                // (its plate level, terraced round it: IconicFrame.Grade), so the plot only settles 5 cm under the model's own pad
+                bool graded = false;
+                if (l.Ring > 0f) { var gi = IconicFrame.Grade(l.X, l.Z, l.Yaw, l.PadW + 16f, l.PadD + 16f); graded = !float.IsNaN(IconicFrame.PlateLevel); if (verts != null) foreach (var i in gi) if (i < verts.Length) verts[i].y = CityGround.RawHeight(i); }
+                float lvl = graded ? IconicFrame.PlateLevel : Ground(l.X, l.Z, Mathf.Max(l.PadW, l.PadD) * 0.5f) + l.PadLift;
                 l.Base = lvl;
-                var idx = CityGround.Flatten(l.X, l.Z, l.Yaw, l.PadW + 16f, l.PadD + 16f, lvl - 0.05f, Mathf.Max(80f, Mathf.Min(l.PadW, l.PadD) * 0.15f));
+                var idx = CityGround.Flatten(l.X, l.Z, l.Yaw, l.PadW + 16f, l.PadD + 16f, lvl - 0.05f, graded ? 1f : Mathf.Max(80f, Mathf.Min(l.PadW, l.PadD) * 0.15f));
                 if (verts != null) foreach (var i in idx) if (i < verts.Length) verts[i].y = CityGround.RawHeight(i);
                 float a = l.Yaw * Mathf.Deg2Rad, ca = Mathf.Cos(a), sa = Mathf.Sin(a);
                 // every building whose real footprint (Resources/Landmarks/bid_bounds) touches the plot is replaced by the landmark:
                 // planned and generated ones never appear, existing ones disappear in the year the landmark's construction starts
+                int pn = 0, py0 = 9999, py1 = 0;                   // planned buildings of the data on the plot and their years (the log)
                 if (bounds != null)
                 {
                     float hw = l.PadW * 0.5f + 6f, hd = l.PadD * 0.5f + 6f, R = Mathf.Sqrt(hw * hw + hd * hd);
@@ -96,10 +114,14 @@ namespace AlatauCity.DigitalTwin.Landmarks
                         if (!inGate && !onPad) continue;
                         var bi = db?.Get(bid);
                         bool existing = bi != null && bi.Source == "existing_osm";
-                        byte code = existing ? (byte)Mathf.Clamp(l.StartYear - 2000, 2, 254) : onPad ? (byte)1 : (byte)Mathf.Clamp(Mathf.CeilToInt(l.Finish) - 2000, 2, 254);
+                        if (onPad && !existing && bi != null && bi.Kind != "removed") { pn++; py0 = Mathf.Min(py0, bi.Year); py1 = Mathf.Max(py1, bi.Year); }
+                        byte code = existing ? (byte)Mathf.Clamp(l.StartYear - 2000, 2, 254) : onPad ? (byte)1 : (byte)Mathf.Clamp(DoneYear(l) - 2000, 2, 254);
                         if (hidden[bid] == 0 || code < hidden[bid]) { if (hidden[bid] == 0) nh++; hidden[bid] = code; }
                     }
                 }
+                // one year source: the data's own buildings on the plot (which the landmark replaces) must carry the landmark's year
+                if (pn > 0) Debug.Log(string.Format("[Alatau] landmark plot {0}: replaces {1} planned buildings of the data, years {2}–{3}; the landmark opens {4}{5}",
+                                                    l.Id, pn, py0, py1, DoneYear(l), py0 == DoneYear(l) && py1 == DoneYear(l) ? "" : " — years differ (data must take the object's year)"));
                 // an invisible slab over the plot: the film trees and hedges see "a building stands here" and keep off
                 var blk = new GameObject("Plot · " + l.Name); blk.transform.SetParent(transform, false);
                 blk.transform.SetPositionAndRotation(new Vector3(l.X, lvl, l.Z), Quaternion.Euler(0, l.Yaw, 0));
@@ -120,8 +142,8 @@ namespace AlatauCity.DigitalTwin.Landmarks
                     if (hidden[bid] == 0 || code < hidden[bid]) { if (hidden[bid] == 0) nh++; hidden[bid] = code; }
                 }
             }
-            BuildPadMask();
-            var tex = new Texture2D(256, 256, TextureFormat.R8, false, true) { name = "Alatau hidden buildings", filterMode = FilterMode.Point, wrapMode = TextureWrapMode.Clamp };
+            BuildPadMask(); HiddenVersion++;
+            var tex = BidTable.New(TextureFormat.R8, "Alatau hidden buildings");
             tex.SetPixelData(hidden, 0); tex.Apply(false, false);
             Shader.SetGlobalTexture("_AlatauHideTex", tex); Shader.SetGlobalFloat("_AlatauHideOn", 1f);
             Debug.Log("[Alatau] landmark plots levelled; generic buildings replaced: " + nh + (mesh == null ? " (terrain mesh not readable)" : ""));
@@ -160,7 +182,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             System.Buffer.BlockCopy(b, 8, bounds, 0, Mathf.Min(bounds.Length * 4, b.Length - 8));
         }
         /// <summary>Oriented rectangle (centre, cos/sin of yaw, half sizes) against an axis-aligned box: separating axis test.</summary>
-        static bool ObbHitsAabb(float cx, float cz, float ca, float sa, float hw, float hd, float x0, float z0, float x1, float z1)
+        internal static bool ObbHitsAabb(float cx, float cz, float ca, float sa, float hw, float hd, float x0, float z0, float x1, float z1)
         {
             // rectangle axes in world: u = (ca, -sa)·? — Unity yaw: local (u, v) -> world (u ca + v sa, -u sa + v ca)
             float ux = ca, uz = -sa, vx = sa, vz = ca;
@@ -195,11 +217,20 @@ namespace AlatauCity.DigitalTwin.Landmarks
         {
             float gy = l.Base != 0f ? l.Base : Ground(l.X, l.Z, l.Radius * 0.5f);
             l.World = new Vector3(l.X, gy, l.Z);
+            // no model of its own (Griffin since Stage 7): the plan's buildings are the object; the label and the camera need its place, and
+            // a lot of its own (SiteW × SiteD) gets a plan site while the works go on
+            if (string.IsNullOrEmpty(l.Model))
+            {
+                l.Anchor = l.World + Vector3.up * l.Height;
+                try { BuildPlanSite(l); } catch (Exception e) { Debug.LogWarning("[Alatau] plan site " + l.Id + ": " + e.Message); }
+                return;
+            }
             var go = new GameObject("Landmark · " + l.Name);
             go.transform.SetParent(transform, false);
             go.transform.SetPositionAndRotation(l.World, Quaternion.Euler(0, l.Yaw, 0));
             Mesh m; try { m = LandmarkModels.Build(l.Model, l.X * 0.001f); }
             catch (Exception e) { Debug.LogWarning("[Alatau] model " + l.Model + ": " + e.Message); return; }
+            if (l.Drape && l.PadW > 0f) DrapePastPlot(l, m, go.transform);
             go.AddComponent<MeshFilter>().sharedMesh = m;
             var lm = l.Model == "iconic" && QTwinData.Bim() != null ? matIconic : l.Model == "campus" && QTwinData.Kaist() != null ? matKaist : mat;
             var r = go.AddComponent<MeshRenderer>(); r.sharedMaterial = lm; r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.On; r.receiveShadows = true;
@@ -218,20 +249,43 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 node.Flyer = pg.transform; pg.SetActive(false);
             }
         }
-        /// <summary>Take-off run on the airport's west runway (along +z): roll, rotate, climb out and leave; then again.</summary>
+        /// <summary>The parts of a model that reach past its levelled plot (Landmark.Drape: the airport's access road to the end of the
+        /// street and the bridge to the rail station) follow the ground there: every vertex outside the plot and its 8 m skirt moves by
+        /// the height of the ground under it over the plot's level, so a road meets the city's street at the street's height.</summary>
+        static void DrapePastPlot(Landmark l, Mesh m, Transform t)
+        {
+            var v = m.vertices; float hw = l.PadW * 0.5f + 8f, hd = l.PadD * 0.5f + 8f, lo = 0f, hi = 0f; int moved = 0;
+            for (int i = 0; i < v.Length; i++)
+            {
+                if (Mathf.Abs(v[i].x) <= hw && Mathf.Abs(v[i].z) <= hd) continue;
+                var w = t.TransformPoint(new Vector3(v[i].x, 0f, v[i].z));
+                float dy = CityGround.HeightAt(w.x, w.z) - l.World.y; v[i].y += dy; moved++;
+                lo = Mathf.Min(lo, dy); hi = Mathf.Max(hi, dy);
+            }
+            if (moved == 0) return;
+            m.vertices = v; m.RecalculateBounds();
+            Debug.Log(string.Format("[Alatau] landmark {0}: {1} vertices past its plot follow the ground ({2:0.0} … {3:0.0} m)", l.Id, moved, lo, hi));
+        }
+        /// <summary>Take-off on the airport's runway toward 095° (local +z) from its west end: lined up, a 900 m roll, rotation at
+        /// ≈ 76 m/s, the climb out over the runway; then again (every 45 s).</summary>
         static void Fly(Node n, float dt)
         {
-            n.FlyT = (n.FlyT + dt) % 30f; float t = n.FlyT;
-            float z, y = 0.45f, pitch = 0f; const float z0 = LandmarkModels.RwyLZ0 + 60f;
+            n.FlyT = (n.FlyT + dt) % 45f; float t = n.FlyT;
+            const float z0 = LandmarkModels.RwyZ0 + 60f, zr = z0 + 900f, acc = 3.2f;
+            float z, y = 0.45f, pitch = 0f;
             if (t < 2.5f) z = z0;                                                                  // lined up
             else
             {
-                float tr = t - 2.5f; z = z0 + 0.5f * 3.2f * tr * tr;                               // 3.2 m/s² roll
-                if (z > 150f) { float tc = Mathf.Sqrt((150f - z0) / 1.6f); float ta = tr - tc; float v = 3.2f * tc; z = 150f + v * ta; y = 0.45f + Mathf.Pow(Mathf.Max(ta, 0f), 1.6f) * 2.6f; pitch = -Mathf.Clamp(ta * 3f, 0f, 9f); }
+                float tr = t - 2.5f; z = z0 + 0.5f * acc * tr * tr;                                // 3.2 m/s² roll
+                if (z > zr)
+                {
+                    float tc = Mathf.Sqrt(2f * (zr - z0) / acc), ta = tr - tc, v = acc * tc;
+                    z = zr + v * ta; y = 0.45f + Mathf.Pow(Mathf.Max(ta, 0f), 1.6f) * 2.6f; pitch = -Mathf.Clamp(ta * 3f, 0f, 9f);
+                }
             }
-            bool vis = t < 26f;
+            bool vis = t < 42f;
             if (n.Flyer.gameObject.activeSelf != vis) n.Flyer.gameObject.SetActive(vis);
-            n.Flyer.localPosition = new Vector3(LandmarkModels.RwyLX, y, z); n.Flyer.localRotation = Quaternion.Euler(pitch, 0f, 0f);
+            n.Flyer.localPosition = new Vector3(LandmarkModels.RwyX, y, z); n.Flyer.localRotation = Quaternion.Euler(pitch, 0f, 0f);
         }
 
         /// <summary>Hoarding and tower cranes of the construction site (shown only while the object is being built).</summary>
@@ -257,6 +311,67 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 if (l.Height < 30f) break;          // low plants: one crane is enough
             }
             site.SetActive(false);
+        }
+        /// <summary>The plan site of an object without a model of its own (Landmark.SiteW × SiteD, axis-aligned round its point): while
+        /// the object is being built (0 &lt; progress &lt; 1, the label's «Строится N %») a hoarding stands round the lot and every building
+        /// of the data on it that is not yet standing shows as a shell put up as far as the works have gone (Apply's stages). One year
+        /// source: the buildings carry the object's year (logged when they differ).</summary>
+        void BuildPlanSite(Landmark l)
+        {
+            if (l.SiteW <= 0f || l.SiteD <= 0f) return;
+            var root = new GameObject("Plan site · " + l.Name); root.transform.SetParent(transform, false); root.transform.position = l.World;
+            var ps = new PlanSite { L = l, Root = root };
+            var f = new GameObject("Hoarding"); f.transform.SetParent(root.transform, false);
+            f.AddComponent<MeshFilter>().sharedMesh = LandmarkSite.FenceOnGround(l.X, l.Z, l.World.y, l.SiteW, l.SiteD);
+            f.AddComponent<MeshRenderer>().sharedMaterial = mat;
+            var db = CityDatabase.Instance; float hx = l.SiteW * 0.5f, hz = l.SiteD * 0.5f; int y0 = 9999, y1 = 0;
+            if (bounds != null && db != null)
+                for (int bid = 0; bid < boundsN; bid++)
+                {
+                    float x0 = bounds[bid * 4], z0 = bounds[bid * 4 + 1], x1 = bounds[bid * 4 + 2], z1 = bounds[bid * 4 + 3];
+                    if (x1 <= x0) continue;
+                    float cx = (x0 + x1) * 0.5f, cz = (z0 + z1) * 0.5f;
+                    if (Mathf.Abs(cx - l.X) > hx || Mathf.Abs(cz - l.Z) > hz) continue;              // its middle on the lot
+                    var b = db.Get(bid); if (b == null || b.Source == "existing_osm" || b.Kind == "removed" || b.HeightM <= 0f) continue;
+                    float gy = b.GroundM != 0f ? b.GroundM : CityGround.HeightAt(cx, cz);
+                    var g = new GameObject("Shell · " + b.Id); g.transform.SetParent(root.transform, false); g.transform.position = new Vector3(cx, gy, cz);
+                    g.AddComponent<MeshFilter>().sharedMesh = LandmarkSite.Shell(x1 - x0, z1 - z0, b.HeightM);
+                    var r = g.AddComponent<MeshRenderer>(); r.sharedMaterial = mat; r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.On;
+                    g.SetActive(false);
+                    ps.Shells.Add(new Shell { Go = g, R = r, Bid = bid, H = Mathf.Max(b.HeightM, 3f) });
+                    y0 = Mathf.Min(y0, b.Year); y1 = Mathf.Max(y1, b.Year);
+                }
+            root.SetActive(false); planSites.Add(ps); shellB ??= new MaterialPropertyBlock();
+            Debug.Log(string.Format("[Alatau] plan site {0}: lot {1:0} × {2:0} m, {3} buildings of the data on it{4}; the object is built {5}–{6}{7}",
+                                    l.Id, l.SiteW, l.SiteD, ps.Shells.Count, ps.Shells.Count > 0 ? string.Format(", years {0}–{1}", y0, y1) : "", l.StartYear, DoneYear(l),
+                                    ps.Shells.Count == 0 || (y0 == DoneYear(l) && y1 == DoneYear(l)) ? "" : " — years differ (data must take the object's year)"));
+        }
+        /// <summary>The plan sites at date y: the hoarding while the works go on (or a building on the lot is still not standing), each
+        /// building's shell until the year it stands (CityStats.EffectiveYearOf: then the city's own building takes over). No allocations.</summary>
+        void ApplyPlanSites(float y)
+        {
+            int year = TwinState.Year; bool layer = ConstructionLayer.Active;      // the construction layer draws the plan's sites itself
+            for (int i = 0; i < planSites.Count; i++)
+            {
+                var ps = planSites[i]; float p = Progress(ps.L, y);
+                bool rising = false; for (int k = 0; k < ps.Shells.Count; k++) if (CityStats.EffectiveYearOf(ps.Shells[k].Bid) > year) { rising = true; break; }
+                bool on = p > 0f && (p < 0.999f || rising);
+                if (ps.Root.activeSelf != on) ps.Root.SetActive(on);
+                if (!on) continue;
+                float q = Mathf.Min(p, 0.97f);                    // late against the object: shown nearly done, not finished
+                for (int k = 0; k < ps.Shells.Count; k++)
+                {
+                    var sh = ps.Shells[k]; bool show = !layer && CityStats.EffectiveYearOf(sh.Bid) > year;
+                    if (sh.Go.activeSelf != show) sh.Go.SetActive(show);
+                    if (!show) continue;
+                    float H = sh.H, frame = H * Mathf.Clamp01((q - 0.08f) / 0.62f), facade = H * Mathf.Clamp01((q - 0.25f) / 0.65f);
+                    shellB.Clear();
+                    shellB.SetFloat(RevealId, Mathf.Max(frame, 0.6f)); shellB.SetFloat(BuildId, 1f); shellB.SetFloat(FacadeId, facade);
+                    shellB.SetFloat(LandId, Mathf.Clamp01((q - 0.85f) / 0.13f)); shellB.SetFloat(GlowId, -1f); shellB.SetFloat(HeightId, H);
+                    shellB.SetFloat(GhostId, 0f); shellB.SetFloat(HiId, 0f);
+                    sh.R.SetPropertyBlock(shellB);
+                }
+            }
         }
         /// <summary>Base of a site on sloping ground: the median of the terrain under it, so the plinth is half buried, never floating.</summary>
         static float Ground(float x, float z, float r)
@@ -284,20 +399,29 @@ namespace AlatauCity.DigitalTwin.Landmarks
             return false;
         }
 
-        /// <summary>Year shown by the city now (fractional while the timeline plays).</summary>
+        // Dates and years. Everything here (Progress, PlanPart, PartP, TowerP, Begin/Finish, the parts' A/B, the monitoring's dates) is a
+        // date: a fractional calendar year, 2026.82 = end of October 2026. A year on the map means its end: the year view Y shows what
+        // stands by 31.12.Y, as the city's buildings of year Y do — so a year y of the map is the date EndOf(y) = y + 1.
+        /// <summary>Year shown by the map now (fractional while the timeline plays).</summary>
+        public static float ShownYear => TwinState.Playing || Shader.GetGlobalFloat("_AlatauGrow") > 0.5f ? Mathf.Max(Shader.GetGlobalFloat("_AlatauYearF"), TwinState.Year) : TwinState.Year;
+        /// <summary>Date of a year of the map: its end.</summary>
+        public static float EndOf(float year) => year + 1f;
         /// <summary>A date set by the construction monitoring (4D timeline of one object), −1 = none: the landmarks are shown as of it.</summary>
         public static float YearOverride = -1f;
-        public static float YearNow => YearOverride >= 0f ? YearOverride : TwinState.Playing || Shader.GetGlobalFloat("_AlatauGrow") > 0.5f ? Mathf.Max(Shader.GetGlobalFloat("_AlatauYearF"), TwinState.Year) : TwinState.Year;
-        /// <summary>0 = not started, (0,1) = under construction, 1 = complete in the shown year.</summary>
-        public static float Progress(Landmark l, float y)
+        /// <summary>Date the landmarks are shown at now: the monitoring's date, else the end of the year on the map.</summary>
+        public static float YearNow => YearOverride >= 0f ? YearOverride : EndOf(ShownYear);
+        /// <summary>The year of the map in which the landmark stands complete.</summary>
+        public static int DoneYear(Landmark l) => l.Parts != null ? Mathf.CeilToInt(l.Finish) - 1 : l.EndYear;
+        /// <summary>Progress in a year of the map (at its end).</summary>
+        public static float InYear(Landmark l, float year) => Progress(l, EndOf(year));
+        /// <summary>0 = not started, (0,1) = under construction, 1 = complete at date d.</summary>
+        public static float Progress(Landmark l, float d)
         {
             if (l == null) return 0f;
-            // a complex of several buildings: from the first start to the last hand-over
-            if (l.Parts != null) { float a = l.Begin, b = l.Finish; return y <= a ? 0f : Mathf.Clamp01((y - a) / Mathf.Max(b - a, 0.01f)); }
-            // works run through the start year: progress grows continuously from the end of the year before (no jump when the year turns)
-            float s0 = l.StartYear - 1f;
-            if (y <= s0) return 0f;
-            return Mathf.Clamp01((y - s0) / (l.EndYear - l.StartYear + 1f));
+            // a complex of several buildings: from the first start to the last hand-over; one object: from the start of its first
+            // year to the end of its last (Begin/Finish), growing continuously (no jump when the year turns)
+            float a = l.Begin, b = l.Finish;
+            return d <= a ? 0f : Mathf.Clamp01((d - a) / Mathf.Max(b - a, 0.01f));
         }
         /// <summary>Planned progress of building i of a complex (index in Landmark.Parts) at date y.</summary>
         public static float PlanPart(Landmark l, int i, float y)
@@ -323,6 +447,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             float y = YearNow;
             HoverPick();
             foreach (var n in nodes.Values) Apply(n, y, Time.deltaTime, false);
+            ApplyPlanSites(y);
             if (Input.GetKeyDown(KeyCode.Escape) && Selected != null && !MapCamera.Typing && !IconicInterior.EscTaken) Select(null, false);
         }
         /// <summary>Shows landmark id as of date y in the next picture taken (the construction monitoring compares two surveys in one

@@ -43,9 +43,9 @@ namespace AlatauCity.DigitalTwin
             var db = CityDatabase.Instance;
             if (db != null)
             {
-                var geo = new float[256 * 256 * 4];
-                foreach (var b in db.Buildings) if (b != null && b.Bid >= 0 && b.Bid < 65536) { geo[b.Bid * 4] = b.GroundM; geo[b.Bid * 4 + 1] = b.HeightM; }
-                var tex = new Texture2D(256, 256, TextureFormat.RGBAFloat, false, true) { name = "Alatau building geo", filterMode = FilterMode.Point, wrapMode = TextureWrapMode.Clamp };
+                var geo = new float[BidTable.N * 4];
+                foreach (var b in db.Buildings) if (b != null && BidTable.Has(b.Bid)) { geo[b.Bid * 4] = b.GroundM; geo[b.Bid * 4 + 1] = b.HeightM; }
+                var tex = BidTable.New(TextureFormat.RGBAFloat, "Alatau building geo");
                 tex.SetPixelData(geo, 0); tex.Apply(false, false); Shader.SetGlobalTexture("_AlatauGeoTex", tex);
             }
             Shader.SetGlobalFloat("_AlatauGrow", 0f); Shader.SetGlobalFloat("_AlatauBldSat", 0.45f);

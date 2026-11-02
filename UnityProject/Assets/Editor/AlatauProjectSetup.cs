@@ -111,7 +111,10 @@ namespace AlatauCity.EditorTools
         {
             using (var md5 = MD5.Create())
             {
-                foreach (var f in new[] { "Assets/CityData/layer_buildings.bytes", "Assets/CityData/buildings.csv", "Assets/CityData/layer_infrastructure.bytes", "Assets/CityData/terrain_heights.bytes" })
+                // the buildings layer with all its parts (layer_buildings_1.bytes …) in order: one file gives the same stamp as before
+                var files = AlatauCityBuilder.LayerParts("Assets/CityData/layer_buildings.bytes");
+                files.AddRange(new[] { "Assets/CityData/buildings.csv", "Assets/CityData/layer_infrastructure.bytes", "Assets/CityData/terrain_heights.bytes" });
+                foreach (var f in files)
                 {
                     if (!File.Exists(f)) continue;
                     var b = File.ReadAllBytes(f); md5.TransformBlock(b, 0, b.Length, null, 0);

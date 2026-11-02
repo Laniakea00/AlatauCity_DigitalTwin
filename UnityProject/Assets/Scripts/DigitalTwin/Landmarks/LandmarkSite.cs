@@ -29,6 +29,40 @@ namespace AlatauCity.DigitalTwin.Landmarks
             return k.ToMesh("Hoarding");
         }
 
+        /// <summary>Hoarding round the lot of an object without a model of its own (its plan site, LandmarkSystem.BuildPlanSite): the lot
+        /// is large and the ground slopes, so the panels go in runs of about 12 m, each standing on the terrain under its middle (a foot
+        /// buried 0.4 m), with the gate in the middle of the south side. Local frame: the lot centre (cx, cz) at height baseY.</summary>
+        public static Mesh FenceOnGround(float cx, float cz, float baseY, float w, float d)
+        {
+            var k = new LandmarkKit(); float hw = w * 0.5f - 2f, hd = d * 0.5f - 2f, h = 2.4f, t = 0.18f, gate = Mathf.Min(16f, w * 0.2f);
+            void Run(Vector2 a, Vector2 b)
+            {
+                float L = (b - a).magnitude; if (L < 0.5f) return;
+                int n = Mathf.Max(1, Mathf.CeilToInt(L / 12f)); float s = L / n, yaw = -Mathf.Atan2(b.y - a.y, b.x - a.x) * Mathf.Rad2Deg;
+                for (int i = 0; i < n; i++)
+                {
+                    var m = Vector2.Lerp(a, b, (i + 0.5f) / n); float g = CityGround.HeightAt(cx + m.x, cz + m.y) - baseY;
+                    k.Box(new Vector3(m.x, g + (h + 0.3f - 0.4f) * 0.5f, m.y), new Vector3(s + 0.04f, h + 0.3f + 0.4f, t), yaw, Hoarding, LM.Solid, h, HoardingTop, LM.Solid);
+                    k.Box(new Vector3(m.x, g + 0.3f + h + 0.12f, m.y), new Vector3(s + 0.04f, 0.24f, t + 0.04f), yaw, HoardingTop, LM.Solid, 1f, HoardingTop, LM.Solid);
+                }
+            }
+            Run(new Vector2(-hw, -hd), new Vector2(-gate * 0.5f, -hd)); Run(new Vector2(gate * 0.5f, -hd), new Vector2(hw, -hd));
+            Run(new Vector2(hw, -hd), new Vector2(hw, hd)); Run(new Vector2(hw, hd), new Vector2(-hw, hd)); Run(new Vector2(-hw, hd), new Vector2(-hw, -hd));
+            return k.ToMesh("Hoarding on the ground");
+        }
+
+        /// <summary>A building of the plan on a plan site while it is put up: a concrete floor slab and the hall's shell (profiled metal
+        /// walls, flat roof) on its footprint box, origin at its base. AlatauLandmark stages it like a landmark (_Reveal: the frame rises,
+        /// bare near the top; _Facade: the cladding follows), so the site shows as far as the works have gone.</summary>
+        public static Mesh Shell(float w, float d, float h)
+        {
+            var k = new LandmarkKit();
+            k.Box(new Vector3(0f, 0.15f, 0f), new Vector3(w + 1.2f, 0.6f, d + 1.2f), 0f, Slab, LM.Solid, 1f, Slab, LM.Paving);
+            k.Prism(LandmarkKit.Rect(0f, 0f, w, d), 0.45f, Mathf.Max(h, 3f), ShellWall, LM.Metal, 4f, ShellRoof, LM.Roof);
+            return k.ToMesh("Shell of a planned building");
+        }
+        static readonly Color32 Slab = LM.C("#a9a69e"), ShellWall = LM.C("#c9ccd0"), ShellRoof = LM.C("#8f9399");
+
         /// <summary>Lattice mast of a tower crane, 2 m square, from the ground to 'h' (clipped by _Reveal as it climbs).</summary>
         public static Mesh Mast(float h)
         {

@@ -1,7 +1,7 @@
 // One shader for the whole city. uv2.x = completion year (0 = always), uv2.y = building id + 1 (0 = none).
 // uv = (metres along the wall from its start, wall length; 0 = not a wall): written by AlatauCityBuilder, used by the film look.
 // Globals: _AlatauYear (timeline, 0 = all), _AlatauSel (selected id + 1, 0 = none),
-//          _AlatauSelColor (selection colour), _AlatauScenario (1 = read the year from _AlatauYearTex: 256x256 RFloat, bid -> visible-from year),
+//          _AlatauSelColor (selection colour), _AlatauScenario (1 = read the year from _AlatauYearTex: 256x512 RFloat, bid -> visible-from year; every bid table is 256x512, BidTable.cs),
 //          _AlatauMode (0 = normal, 1 = construction: _AlatauStateTex RGBA32 r = state, g = progress; _AlatauGeoTex RGBAFloat r = base Y, g = height),
 //          _AlatauMode 2 = analysis tint: _AlatauTintTex RGBA32 (bid → colour, a = strength),
 //          _AlatauCull (render-state cull mode, 2 = Back; set to 0 = Off while buildings are shown "under construction"),
@@ -47,7 +47,7 @@ Shader "AlatauCity/Lit"
             float year = IN.info.x;
             float floors = IN.worldPos.y / 3.2, floorsW = fwidth(floors);     // derivatives outside of branches
             float bid = round(IN.info.y) - 1.0;
-            float4 tuv = float4((fmod(max(bid, 0), 256.0) + 0.5) / 256.0, (floor(max(bid, 0) / 256.0) + 0.5) / 256.0, 0, 0);
+            float4 tuv = float4((fmod(max(bid, 0), 256.0) + 0.5) / 256.0, (floor(max(bid, 0) / 256.0) + 0.5) / 512.0, 0, 0);     // per-building tables 256 × 512 (BidTable.cs)
             // film look: the facade of this building at this point (it takes its own derivatives, so it is evaluated before the branches)
             float3 wn = normalize(IN.worldNormal) * (IN.vface < 0 ? -1.0 : 1.0);
             float3 view = normalize(_WorldSpaceCameraPos - IN.worldPos);

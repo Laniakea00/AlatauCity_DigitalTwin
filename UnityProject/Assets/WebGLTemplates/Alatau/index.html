@@ -117,6 +117,7 @@
     var T0 = Date.now();
     var A = window.__alatau = { state: "loading", progress: 0, errors: [], fatal: null, gpu: null, started: 0, build: "" };
     var CHECK = /[?&]check=1/.test(location.search);
+    var BENCH = /[?&]bench=1/.test(location.search);   // speed baseline: the twin visits 10 fixed views (AlatauBench.cs), results in A.bench
     var $ = function (id) { return document.getElementById(id); };
 
     function record(kind, msg) {
@@ -237,8 +238,22 @@
       if (!CHECK || posted) return; posted = true;
       var shot = "";
       try { shot = canvas.toDataURL("image/jpeg", 0.7); } catch (e) {}
-      var body = JSON.stringify({ state: A.state, fatal: A.fatal, gpu: A.gpu, errors: A.errors, startSeconds: A.started ? Math.round((A.started - T0) / 1000) : null, ua: navigator.userAgent, shot: shot });
+      var body = JSON.stringify({ state: A.state, fatal: A.fatal, gpu: A.gpu, errors: A.errors, startSeconds: A.started ? Math.round((A.started - T0) / 1000) : null, ua: navigator.userAgent, shot: shot, bench: A.bench || null });
       try { fetch("__check", { method: "POST", body: body }).catch(function () {}); } catch (e) {}
+    }
+    // check + bench: each view goes to the script as it is measured (it adds the tab's memory from Windows); the report follows the
+    // last view, or comes without the bench when the build has none (2 min) or it does not finish (10 min)
+    if (CHECK && BENCH) window.addEventListener("alatau-bench", function (e) {
+      var d = e.detail || {}, b = A.bench;
+      if (d.kind === "view" && b && b.views[d.i]) try { fetch("__bench", { method: "POST", body: JSON.stringify({ i: d.i, view: b.views[d.i] }) }).catch(function () {}); } catch (x) {}
+      if (d.kind === "done") setTimeout(function () { requestAnimationFrame(function () { requestAnimationFrame(checkPost); }); }, 1500);   // after the last view's post
+    });
+    function benchWatch() {
+      var t0 = Date.now(), h = setInterval(function () {
+        var s = (Date.now() - t0) / 1000;
+        if (posted) { clearInterval(h); return; }
+        if ((!A.bench && s > 120) || (A.bench && !A.bench.done && s > 600)) { clearInterval(h); record("bench", A.bench ? "bench did not finish in 10 min" : "this build has no bench mode"); checkPost(); }
+      }, 1000);
     }
 
     // the preview film: only once the page is idle, so it never delays the first build bytes
@@ -418,7 +433,8 @@
           fs.onclick = function () { unity.SetFullscreen(1); };
           canvas.focus();
           if (A.errors.some(function (e) { return /gl-link|gl-compile/.test(e.kind); })) oops();
-          if (CHECK) setTimeout(function () { requestAnimationFrame(function () { requestAnimationFrame(checkPost); }); }, 20000);
+          if (CHECK && BENCH) benchWatch();
+          else if (CHECK) setTimeout(function () { requestAnimationFrame(function () { requestAnimationFrame(checkPost); }); }, 20000);
         }).catch(function (message) { fail("start", String(message)); });
       };
       document.body.appendChild(script);

@@ -26,7 +26,7 @@ namespace AlatauCity.DigitalTwin
             var ta = Resources.Load<TextAsset>("Landmarks/map_order"); if (ta == null) return;
             Data d = null; try { d = JsonUtility.FromJson<Data>(ta.text); } catch (System.Exception e) { Debug.LogWarning("[Alatau] map order: " + e.Message); }
             if (d == null || d.b == null || d.c == null || d.c.Length != d.b.Length) return;
-            code = new byte[256 * 256];
+            code = new byte[BidTable.N];
             for (int i = 0; i < d.b.Length; i++)
             {
                 int bid = d.b[i]; if (bid < 0 || bid >= code.Length) continue;
@@ -37,10 +37,12 @@ namespace AlatauCity.DigitalTwin
         }
 
         /// <summary>Is the building removed from the map in the year shown?</summary>
-        public static bool Removed(int bid)
+        public static bool Removed(int bid) => TwinState.Year >= GoneYear(bid);
+        /// <summary>The year from which the building is removed from the map: 0 = never shown, int.MaxValue = it stays.</summary>
+        public static int GoneYear(int bid)
         {
-            Load(); if (code == null || bid < 0 || bid >= code.Length) return false;
-            byte c = code[bid]; return c != 0 && (c == 1 || TwinState.Year >= 2000 + c);
+            Load(); if (code == null || bid < 0 || bid >= code.Length) return int.MaxValue;
+            byte c = code[bid]; return c == 0 ? int.MaxValue : c == 1 ? 0 : 2000 + c;
         }
 
         /// <summary>Merge into the hidden-buildings table of the landmark plots (a smaller code wins: hidden earlier).</summary>
@@ -48,7 +50,7 @@ namespace AlatauCity.DigitalTwin
         {
             Load(); if (code == null) return true;
             var tex = Shader.GetGlobalTexture("_AlatauHideTex") as Texture2D;
-            if (tex == null || tex.width != 256 || tex.height != 256 || !tex.isReadable) return false;
+            if (tex == null || tex.width != BidTable.W || tex.height != BidTable.H || !tex.isReadable) return false;
             var px = tex.GetPixelData<byte>(0);
             if (px.Length < code.Length) return false;
             int n = 0;

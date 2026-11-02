@@ -171,7 +171,7 @@ namespace AlatauCity.DigitalTwin.Modules
             for (int i = 0; i < chips.Count; i++) chips[i].EnableInClassList("active", i == cur);
             var m = Metrics[cur]; int s = (int)TwinState.Scenario, y = TwinState.Year;
             eyebrow.text = (Loc.T("tab_prediction") + " · " + y + " · " + TwinScenario.Name(TwinState.Scenario)).ToUpperInvariant();
-            whyLabel.text = Loc.T(m.Why); heroIdx = -1;
+            whyLabel.text = m.Kind == Kind.Social && SocialNorms.Loaded ? SocialNorms.Why() : Loc.T(m.Why); heroIdx = -1;      // the norms of norms_social.json when there
             rows.Clear(); legend.Clear();
             var rk = m.Kind == Kind.Transport ? "p_rows_tr" : m.Kind == Kind.Quake ? "p_rows_q" : m.Kind == Kind.Flood ? "p_rows_f" : "p_districts";
             rowsTitle.text = Loc.T(rk); rowsSub.text = rk == "p_districts" ? Loc.T("p_districts_sub") : "";

@@ -124,11 +124,11 @@ namespace AlatauCity.DigitalTwin.Data
             // ---- under construction / operating
             P("Iconic Complex", "застройщик в статье не назван · генподрядчик CSCEC · архитектор SOM", "Китай · США", 2, 0, 4, AtIconic, 800, 0, "10.2026 – конец 2029", "iconic",
               "Первый небоскрёб города: башни 272 и 78 м, офисы, резиденции, отель, торговля. Закладка — 26.10.2026.", "> $800 млн"),
-            P("Завод снеков PepsiCo", "PepsiCo", "США", 0, 2, 4, QzPm, 360, 900, "стройка с 2024", "pepsico",
+            P("Завод снеков PepsiCo", "PepsiCo", "США", 0, 0, 4, QzPm, 360, 900, "стройка с 2024", "pepsico",
               "Переработка картофеля, две очереди.", null, Sources.GovSummary),
             P("Завод кормов Mars Petcare", "Mars Inc.", "США", 0, 2, 4, DigBiz, 180, 200, "2025–2027", "mars",
               "Корма для домашних животных. Рабочие места и сроки — Forbes.kz.", "≈ $180 млн", Forbes),
-            P("Griffin Logopark", "Griffin Partners · ЕАБР", "США", 1, 2, 4, Kursiv, 125, 0, "до III кв. 2027", "griffin",
+            P("Griffin Logopark", "Griffin Partners · ЕАБР", "США", 1, 0, 4, Kursiv, 125, 0, "до III кв. 2027", "griffin",
               "Склады класса А, 125 400 м², две очереди, у трассы A3.", null, Sources.GovSummary),
             P("Sunny Paper", "Sunny Paper", null, 0, 2, 4, Sources.GovSummary, 0, 0, null, "sunny_paper", "Бумажное производство, «активная фаза реализации»."),
             P("DanaFlex", "DanaFlex", null, 0, 2, 4, Sources.GovSummary, 0, 0, null, "danaflex", "Гибкая упаковка, работы начаты."),

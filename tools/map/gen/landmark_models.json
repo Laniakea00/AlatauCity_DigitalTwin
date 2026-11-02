@@ -1,0 +1,25 @@
+{
+  "schema": "qtwin.landmark_models/1",
+  "about_ru": "Объекты реестра, у которых в Unity есть своя модель (LandmarkData.cs, поле Id): их участки gen_buildings не застраивает по правилам, на них стоит модель. Всё остальное на участках ориентиров и транспорта строится по правилам и подписано «модель qTwin». Части группы (objects[].parent) живут на участке родителя.",
+  "source_ru": "registry.json rows[].twin_now «landmark:<id>»; Id из Assets/Scripts/DigitalTwin/Landmarks/LandmarkData.cs",
+  "models": {
+    "iconic_complex": "iconic",
+    "l7_lotte": "lotte_l7",
+    "qaist": "kaist",
+    "medcluster_golden": "medcluster",
+    "k_park": "kpark",
+    "marina_kapchagay": "marina",
+    "pepsico": "pepsico",
+    "mars_petcare": "mars",
+    "danaflex": "danaflex",
+    "sunny_paper": "sunny_paper",
+    "g_trans": "gtrans",
+    "tlc_zhetygen": "tlc",
+    "airport_alatau": "airport",
+    "gtes_doosan": "gtes",
+    "ps_arna_twin": "ps_arna"
+  },
+  "generated_ru": {
+    "griffin_logopark": "в Gate склады Griffin строятся по правилам на участке объекта (старая модель в Growing снимается, w46 — разбор тестера, п. 46)"
+  }
+}

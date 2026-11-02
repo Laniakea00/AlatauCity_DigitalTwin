@@ -16,8 +16,8 @@ namespace AlatauCity.DigitalTwin
         static void Ensure()
         {
             if (tex != null) return;
-            tex = new Texture2D(256, 256, TextureFormat.RGBA32, false, false) { name = "Alatau tint", filterMode = FilterMode.Point, wrapMode = TextureWrapMode.Clamp };
-            px = new Color32[256 * 256];
+            tex = BidTable.New(TextureFormat.RGBA32, "Alatau tint", false);
+            px = new Color32[BidTable.N];
         }
 
         /// <summary>Colour every building; return alpha 0 for "no tint" (grey context).</summary>

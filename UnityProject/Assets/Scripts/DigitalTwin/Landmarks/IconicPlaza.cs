@@ -64,6 +64,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             }
 
             var white = new Color32(255, 255, 255, 255);
+            lastMesh = m; lastCls = cls;                    // Trees fits the plaza's trees to the model as drawn
             Emit(k, m, cls, 0, Vector4.zero, false);
             Emit(k, m, cls, 2, Win(Wbs.GSquare, 0f, 3.8f), true);
             Emit(k, m, cls, 3, Win(Wbs.GSquare, 0f, 2.6f), false);
@@ -113,6 +114,186 @@ namespace AlatauCity.DigitalTwin.Landmarks
             }
             k.Part = 0; k.NoWin();
         }
+
+        // ------------------------------------------------------------------ the trees of the plaza, fitted to the model
+        // The page's trees (QTwinData.Gate().Trees on the plot) were placed on its own drawing: along the low edges of both pavilions
+        // their crowns ran into the sloped roofs and the retaining wall under them, and beside T2 into its terraces; on the stone they
+        // stood without a pit. Each tree is now checked against the model as it is drawn (the amphitheatre drawn in, the plaza's granite
+        // at its own level): its trunk (0.45 m round it) and its crown (the film tree's: an ellipsoid CrownK · h wide, 0.40 h high round
+        // 0.64 h, with Margin; LandmarkKit.Tree) must stay clear of every surface. The trunk stands exactly where the page puts it (the
+        // kit's half-metre jitter is taken back: a row on the plaza is planted on its line, a tree in a terrace's opening in the middle
+        // of it). If it does not fit, it is lowered (down to MinTree), else moved a few metres along the same floor, else left out; on
+        // stone or paving it stands in a steel grate over a pit of soil (on lawns and planted terraces in the ground).
+        const float CrownK = 0.48f, CrownH = 0.40f, CrownC = 0.64f, Margin = 0.3f, Trunk = 0.45f, MinTree = 4.5f, GCell = 4f, GX0 = -144f, GZ0 = -108f;
+        const byte TagPlanted = 6;
+        static QTwinData.QMesh lastMesh; static byte[] lastCls;
+        static Vector3[] ta, tb, tc; static float[] ty0, ty1; static bool[] twall; static byte[] ttag; static int[] cellStart, cellTris, stamp; static int query, gw, gh;
+        static readonly Color32 GrateSteel = LM.C("#4d535a"), PitSoil = LM.C("#3d362d");
+
+        /// <summary>Plants the plaza's trees (local x, base y, z, size w; height 10.5 w) on the plot, each fitted to the model; the kit's
+        /// Part and Window are the caller's (the plaza, planted last). Logs what was kept, lowered, moved and left out.</summary>
+        public static void Trees(LandmarkKit k, Vector4[] trees, Color32 leafA, Color32 leafB)
+        {
+            if (lastMesh == null || lastCls == null) return;
+            IndexModel(lastMesh, lastCls);
+            int kept = 0, lowered = 0, moved = 0, dropped = 0, grates = 0, all = 0; float minH = float.MaxValue;
+            var placed = new List<Vector2>();
+            var dirs = new Vector2[12]; for (int a = 0; a < 12; a++) dirs[a] = new Vector2(Mathf.Cos(a * Mathf.PI / 6f), Mathf.Sin(a * Mathf.PI / 6f));
+            for (int i = 0; i < trees.Length; i++)
+            {
+                var t = trees[i]; if (Mathf.Abs(t.x) >= 136f || Mathf.Abs(t.z) >= 100f) continue;
+                all++;
+                float seed = i * 0.37f, h0 = 10.5f * t.w; var jit = LandmarkKit.TreeJitter(seed);
+                var p = new Vector3(t.x, t.y, t.z);
+                bool onFloor = FloorAt(p.x, p.z, p.y, out float fy, out byte ftag);
+                float h = Fit(p, h0);
+                if (h < 0f)
+                {
+                    // move it along the same floor (or onto a lawn or a planted bed), the nearest spot that takes it first
+                    bool done = false;
+                    for (float r = 1.5f; r <= 6.01f && !done; r += 1.5f)
+                        for (int a = 0; a < 12 && !done; a++)
+                        {
+                            var q = p + new Vector3(dirs[a].x * r, 0f, dirs[a].y * r);
+                            if (Mathf.Abs(q.x) > PlotHW - 2f || Mathf.Abs(q.z) > PlotHD - 2f) continue;
+                            if (!FloorAt(q.x, q.z, p.y, out float qy, out byte qtag) || !(qtag == ftag || qtag == TagLawn || qtag == TagPlanted) || !onFloor) continue;
+                            bool near = false; foreach (var o in placed) if ((o - new Vector2(q.x, q.z)).sqrMagnitude < 9f) { near = true; break; }
+                            if (near) continue;
+                            q.y = ftag == TagGranite && qtag == TagGranite ? p.y : qy;
+                            float hq = Fit(q, h0); if (hq < 0f) continue;
+                            p = q; h = hq; fy = qy; ftag = qtag; done = true;
+                        }
+                    if (!done) { dropped++; continue; }
+                    moved++;
+                }
+                else if (h < h0 - 0.01f) lowered++; else kept++;
+                minH = Mathf.Min(minH, h); placed.Add(new Vector2(p.x, p.z));
+                k.Tree(p - jit, h, (i & 1) == 0 ? leafA : leafB, seed);
+                if (onFloor && ftag != TagLawn && ftag != TagPlanted)
+                {
+                    // a steel grate 1.8 m square over a pit of dark soil, flush with the stone (the plaza's granite is laid at GroundY)
+                    float g = Mathf.Max(fy, ftag == TagGranite ? GroundY : fy);
+                    k.Box(new Vector3(p.x, g + 0.015f, p.z), new Vector3(1.8f, 0.05f, 1.8f), 0f, GrateSteel, LM.Solid, 1f, GrateSteel, LM.Paving);
+                    k.Box(new Vector3(p.x, g + 0.025f, p.z), new Vector3(1.3f, 0.05f, 1.3f), 0f, PitSoil, LM.Solid, 1f, PitSoil, LM.Paving);
+                    grates++;
+                }
+            }
+            Debug.Log(string.Format("[Alatau] Iconic plaza trees: {0} on the plot — {1} as on the page, {2} lowered (lowest {3:0.0} m), {4} moved up to 6 m, {5} left out (no room for a crown); {6} in grates on stone or paving",
+                                    all, kept, lowered, minH < float.MaxValue ? minH : 0f, moved, dropped, grates));
+            ta = tb = tc = null; ty0 = ty1 = null; twall = null; ttag = null; cellStart = cellTris = stamp = null;    // the index is not kept
+        }
+
+        /// <summary>The tallest height (≤ h0, ≥ MinTree or h0 if smaller, in 0.5 m steps) a tree at p can have clear of the model; −1 = none.</summary>
+        static float Fit(Vector3 p, float h0)
+        {
+            for (float h = h0; h >= Mathf.Min(MinTree, h0) - 0.01f; h -= 0.5f) if (Clear(p, h)) return h;
+            return -1f;
+        }
+        /// <summary>Is a tree of height h at p clear of the model: nothing within Trunk of its trunk between 0.3 m over its foot and its top,
+        /// nothing inside its crown's ellipsoid (CrownK · h + Margin across, CrownH · h + Margin high, centred CrownC · h up)?</summary>
+        static bool Clear(Vector3 p, float h)
+        {
+            float rx = CrownK * h + Margin, ry = CrownH * h + Margin, cy = p.y + CrownC * h, top = p.y + h, foot = p.y + 0.3f;
+            int i0 = Mathf.Max(0, (int)((p.x - rx - GX0) / GCell)), i1 = Mathf.Min(gw - 1, (int)((p.x + rx - GX0) / GCell));
+            int j0 = Mathf.Max(0, (int)((p.z - rx - GZ0) / GCell)), j1 = Mathf.Min(gh - 1, (int)((p.z + rx - GZ0) / GCell));
+            if (i1 < i0 || j1 < j0) return true;
+            query++;
+            bool Hit(float d, float y0, float y1)
+            {
+                if (d < Trunk && y1 > foot && y0 < top) return true;
+                float yy = Mathf.Clamp(cy, y0, y1), u = d / rx, w = (yy - cy) / ry; return u * u + w * w < 1f;
+            }
+            for (int j = j0; j <= j1; j++)
+                for (int i = i0; i <= i1; i++)
+                {
+                    int c = j * gw + i;
+                    for (int e = cellStart[c]; e < cellStart[c + 1]; e++)
+                    {
+                        int t = cellTris[e]; if (stamp[t] == query) continue; stamp[t] = query;
+                        if (ty1[t] <= foot || ty0[t] >= cy + ry) continue;               // wholly under the foot or over the crown
+                        if (twall[t])
+                        {
+                            // a wall: how near its foot line comes to the trunk; it stands through its whole height there
+                            float d = Mathf.Min(SegDist(p, ta[t], tb[t]), Mathf.Min(SegDist(p, tb[t], tc[t]), SegDist(p, tc[t], ta[t])));
+                            if (d < rx && Hit(d, ty0[t], ty1[t])) return false;
+                            continue;
+                        }
+                        // a floor, roof or slope: sampled every metre where it lies within reach
+                        Vector3 a = ta[t], b = tb[t], cc = tc[t];
+                        float x0 = Mathf.Max(Mathf.Min(a.x, Mathf.Min(b.x, cc.x)), p.x - rx), x1 = Mathf.Min(Mathf.Max(a.x, Mathf.Max(b.x, cc.x)), p.x + rx);
+                        float z0 = Mathf.Max(Mathf.Min(a.z, Mathf.Min(b.z, cc.z)), p.z - rx), z1 = Mathf.Min(Mathf.Max(a.z, Mathf.Max(b.z, cc.z)), p.z + rx);
+                        if (x1 < x0 || z1 < z0) continue;
+                        float det = (b.z - cc.z) * (a.x - cc.x) + (cc.x - b.x) * (a.z - cc.z); if (Mathf.Abs(det) < 1e-6f) continue;
+                        for (float sz = Mathf.Floor(z0) + 0.5f; sz <= z1 + 0.5f; sz += 1f)
+                            for (float sx = Mathf.Floor(x0) + 0.5f; sx <= x1 + 0.5f; sx += 1f)
+                            {
+                                float qx = Mathf.Clamp(sx, x0, x1), qz = Mathf.Clamp(sz, z0, z1);
+                                float l1 = ((b.z - cc.z) * (qx - cc.x) + (cc.x - b.x) * (qz - cc.z)) / det, l2 = ((cc.z - a.z) * (qx - cc.x) + (a.x - cc.x) * (qz - cc.z)) / det, l3 = 1f - l1 - l2;
+                                if (l1 < -1e-4f || l2 < -1e-4f || l3 < -1e-4f) continue;
+                                float yy = l1 * a.y + l2 * b.y + l3 * cc.y, dx = qx - p.x, dz = qz - p.z;
+                                if (yy > foot && Hit(Mathf.Sqrt(dx * dx + dz * dz), yy, yy)) return false;
+                            }
+                    }
+                }
+            return true;
+        }
+        /// <summary>The floor under (x, z) at about level y (within 0.3 m): the stone slab of the page lies under everything, so any other
+        /// floor there (a lawn, a planted bed, a terrace, a pavilion's floor) wins over it.</summary>
+        static bool FloorAt(float x, float z, float y, out float fy, out byte tag)
+        {
+            fy = y; tag = 0; float bo = float.MaxValue, bs = float.MaxValue, yo = y, ys = y; byte to = 0;
+            int i = (int)((x - GX0) / GCell), j = (int)((z - GZ0) / GCell); if (x < GX0 || z < GZ0 || i >= gw || j >= gh) return false;
+            int c = j * gw + i;
+            for (int e = cellStart[c]; e < cellStart[c + 1]; e++)
+            {
+                int t = cellTris[e]; if (twall[t] || ty1[t] < y - 0.3f || ty0[t] > y + 0.3f) continue;
+                Vector3 a = ta[t], b = tb[t], cc = tc[t];
+                float det = (b.z - cc.z) * (a.x - cc.x) + (cc.x - b.x) * (a.z - cc.z); if (Mathf.Abs(det) < 1e-6f) continue;
+                float l1 = ((b.z - cc.z) * (x - cc.x) + (cc.x - b.x) * (z - cc.z)) / det, l2 = ((cc.z - a.z) * (x - cc.x) + (a.x - cc.x) * (z - cc.z)) / det, l3 = 1f - l1 - l2;
+                if (l1 < -1e-4f || l2 < -1e-4f || l3 < -1e-4f) continue;
+                float yy = l1 * a.y + l2 * b.y + l3 * cc.y, d = Mathf.Abs(yy - y); if (d > 0.3f) continue;
+                if (ttag[t] == TagGranite) { if (d < bs) { bs = d; ys = yy; } }
+                else if (d < bo) { bo = d; yo = yy; to = ttag[t]; }
+            }
+            if (bo < float.MaxValue) { fy = yo; tag = to; return true; }
+            if (bs < float.MaxValue) { fy = ys; tag = TagGranite; return true; }
+            return false;
+        }
+        static float SegDist(Vector3 p, Vector3 a, Vector3 b)
+        {
+            float ex = b.x - a.x, ez = b.z - a.z, L = ex * ex + ez * ez;
+            float u = L > 1e-8f ? Mathf.Clamp01(((p.x - a.x) * ex + (p.z - a.z) * ez) / L) : 0f;
+            float dx = a.x + ex * u - p.x, dz = a.z + ez * u - p.z; return Mathf.Sqrt(dx * dx + dz * dz);
+        }
+        /// <summary>The model's triangles as drawn (the amphitheatre drawn in round its stage) in 4 m cells of the plot.</summary>
+        static void IndexModel(QTwinData.QMesh m, byte[] cls)
+        {
+            int nt = m.I.Length / 3; ta = new Vector3[nt]; tb = new Vector3[nt]; tc = new Vector3[nt]; ty0 = new float[nt]; ty1 = new float[nt]; twall = new bool[nt]; ttag = new byte[nt]; stamp = new int[nt]; query = 0;
+            gw = Mathf.CeilToInt(-2f * GX0 / GCell); gh = Mathf.CeilToInt(-2f * GZ0 / GCell);
+            var count = new int[gw * gh + 1];
+            for (int pass = 0; pass < 2; pass++)
+            {
+                var fill = pass == 1 ? new int[gw * gh] : null;
+                for (int t = 0; t < nt; t++)
+                {
+                    if (pass == 0)
+                    {
+                        Vector3 a = m.P[m.I[t * 3]], b = m.P[m.I[t * 3 + 1]], c = m.P[m.I[t * 3 + 2]];
+                        if (cls[t] == 2) { a = Amph(a); b = Amph(b); c = Amph(c); }
+                        ta[t] = a; tb[t] = b; tc[t] = c; ttag[t] = m.Tag[m.I[t * 3]];
+                        ty0[t] = Mathf.Min(a.y, Mathf.Min(b.y, c.y)); ty1[t] = Mathf.Max(a.y, Mathf.Max(b.y, c.y));
+                        var n = Vector3.Cross(b - a, c - a); float nl = n.magnitude;
+                        twall[t] = nl < 1e-6f || Mathf.Abs(n.y) < 0.25f * nl;
+                    }
+                    int i0 = Mathf.Max(0, (int)((Mathf.Min(ta[t].x, Mathf.Min(tb[t].x, tc[t].x)) - GX0) / GCell)), i1 = Mathf.Min(gw - 1, (int)((Mathf.Max(ta[t].x, Mathf.Max(tb[t].x, tc[t].x)) - GX0) / GCell));
+                    int j0 = Mathf.Max(0, (int)((Mathf.Min(ta[t].z, Mathf.Min(tb[t].z, tc[t].z)) - GZ0) / GCell)), j1 = Mathf.Min(gh - 1, (int)((Mathf.Max(ta[t].z, Mathf.Max(tb[t].z, tc[t].z)) - GZ0) / GCell));
+                    for (int j = j0; j <= j1; j++) for (int i = i0; i <= i1; i++)
+                        { int c = j * gw + i; if (pass == 0) count[c + 1]++; else cellTris[cellStart[c] + fill[c]++] = t; }
+                }
+                if (pass == 0) { for (int c = 0; c < gw * gh; c++) count[c + 1] += count[c]; cellStart = count; cellTris = new int[count[gw * gh]]; }
+            }
+        }
+        static Vector3 Amph(Vector3 q) => new Vector3(AmphCentre.x + (q.x - AmphCentre.x) * AmphScale, q.y, AmphCentre.y + (q.z - AmphCentre.y) * AmphScale);
 
         /// <summary>A piece rising from y0 to y1 over window w of the plaza's progress (AlatauLandmark AWin).</summary>
         static Vector4 Win(Vector2 w, float y0, float y1) => new Vector4(w.x, w.y, y0, y1);

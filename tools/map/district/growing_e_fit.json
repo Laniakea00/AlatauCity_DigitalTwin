@@ -1,0 +1,749 @@
+{
+ "what": "доля плотности, которую набрали кварталы (gen_buildings totals.zones got_m2 / need_m2)",
+ "run": {
+  "homes_new": 167402,
+  "jobs_new": 230480,
+  "targets": {
+   "homes_2050": 167180,
+   "population_2050": 417900,
+   "jobs_2050": 267500
+  }
+ },
+ "village_jobs": 6657,
+ "jobs_by_use": {
+  "business": 66305,
+  "industry": 31366,
+  "logistics": 24729,
+  "medical": 1632,
+  "mixed_centre": 49081,
+  "reserve": 37,
+  "residential_high": 15461,
+  "residential_low": 11387,
+  "residential_mid": 22502,
+  "village_existing": 6657
+ },
+ "zones": {
+  "z_a3_front_1": {
+   "use": "business",
+   "jobs_per_ha": 142.5,
+   "jobs_ratio": 0.9852
+  },
+  "z_a3_front_2": {
+   "use": "business",
+   "jobs_per_ha": 142.5,
+   "jobs_ratio": 0.9854
+  },
+  "z_a3_front_3": {
+   "use": "business",
+   "jobs_per_ha": 142.5,
+   "jobs_ratio": 1.0038
+  },
+  "z_a3_front_4": {
+   "use": "business",
+   "jobs_per_ha": 142.5,
+   "jobs_ratio": 0.9863
+  },
+  "z_a3_front_5": {
+   "use": "business",
+   "jobs_per_ha": 142.5,
+   "jobs_ratio": 1.0008
+  },
+  "z_belt_1": {
+   "use": "industry",
+   "jobs_per_ha": 35,
+   "jobs_ratio": 0.7035
+  },
+  "z_belt_1_p2": {
+   "use": "industry",
+   "jobs_per_ha": 35,
+   "jobs_ratio": 0.6392
+  },
+  "z_belt_1_p3": {
+   "use": "industry",
+   "jobs_per_ha": 35,
+   "jobs_ratio": 0.6071
+  },
+  "z_belt_1_p4": {
+   "use": "industry",
+   "jobs_per_ha": 35,
+   "jobs_ratio": 0.731
+  },
+  "z_belt_1_p5": {
+   "use": "industry",
+   "jobs_per_ha": 35,
+   "jobs_ratio": 0.4621
+  },
+  "z_belt_1_p6": {
+   "use": "industry",
+   "jobs_per_ha": 35,
+   "jobs_ratio": 0.4718
+  },
+  "z_belt_2": {
+   "use": "industry",
+   "jobs_per_ha": 35,
+   "jobs_ratio": 0.6665
+  },
+  "z_belt_2_p2": {
+   "use": "industry",
+   "jobs_per_ha": 35,
+   "jobs_ratio": 0.0998
+  },
+  "z_belt_3": {
+   "use": "industry",
+   "jobs_per_ha": 35,
+   "jobs_ratio": 0.6138
+  },
+  "z_belt_4": {
+   "use": "industry",
+   "jobs_per_ha": 35,
+   "jobs_ratio": 0.4761
+  },
+  "z_belt_6": {
+   "use": "industry",
+   "jobs_per_ha": 35,
+   "jobs_ratio": 0.6141
+  },
+  "z_belt_7": {
+   "use": "industry",
+   "jobs_per_ha": 35,
+   "jobs_ratio": 0.2641
+  },
+  "z_business_a3": {
+   "use": "business",
+   "jobs_per_ha": 305.3,
+   "jobs_ratio": 0.8918
+  },
+  "z_centre_enbek": {
+   "use": "mixed_centre",
+   "jobs_per_ha": 244.2,
+   "jobs_ratio": 0.8965,
+   "homes_per_ha": 34.9,
+   "housing_ratio": 0.9007
+  },
+  "z_centre_kaskelen": {
+   "use": "mixed_centre",
+   "jobs_per_ha": 244.2,
+   "jobs_ratio": 0.9851,
+   "homes_per_ha": 34.9,
+   "housing_ratio": 1.0028
+  },
+  "z_centre_main": {
+   "use": "mixed_centre",
+   "jobs_per_ha": 407.1,
+   "jobs_ratio": 0.6842,
+   "homes_per_ha": 34.9,
+   "housing_ratio": 0.7926
+  },
+  "z_centre_main_p2": {
+   "use": "mixed_centre",
+   "jobs_per_ha": 407.1,
+   "jobs_ratio": 0.4347,
+   "homes_per_ha": 34.9,
+   "housing_ratio": 0.1712
+  },
+  "z_centre_mid": {
+   "use": "mixed_centre",
+   "jobs_per_ha": 244.2,
+   "jobs_ratio": 0.9672,
+   "homes_per_ha": 34.9,
+   "housing_ratio": 0.7539
+  },
+  "z_centre_south": {
+   "use": "mixed_centre",
+   "jobs_per_ha": 244.2,
+   "jobs_ratio": 0.9867,
+   "homes_per_ha": 34.9,
+   "housing_ratio": 0.988
+  },
+  "z_centre_zh_1": {
+   "use": "business",
+   "jobs_per_ha": 223.9,
+   "jobs_ratio": 0.9856
+  },
+  "z_centre_zh_2": {
+   "use": "business",
+   "jobs_per_ha": 223.9,
+   "jobs_ratio": 0.9925
+  },
+  "z_ind_centre": {
+   "use": "business",
+   "jobs_per_ha": 162.8,
+   "jobs_ratio": 0.987
+  },
+  "z_kairat_1": {
+   "use": "industry",
+   "jobs_per_ha": 30,
+   "jobs_ratio": 0.5728
+  },
+  "z_kairat_2": {
+   "use": "industry",
+   "jobs_per_ha": 30,
+   "jobs_ratio": 0.4658
+  },
+  "z_kairat_3": {
+   "use": "industry",
+   "jobs_per_ha": 30,
+   "jobs_ratio": 0.0918
+  },
+  "z_log_south": {
+   "use": "logistics",
+   "jobs_per_ha": 30,
+   "jobs_ratio": 0.5452
+  },
+  "z_log_south_p2": {
+   "use": "logistics",
+   "jobs_per_ha": 30,
+   "jobs_ratio": 0.7568
+  },
+  "z_log_turksib_1": {
+   "use": "logistics",
+   "jobs_per_ha": 30,
+   "jobs_ratio": 0.8619
+  },
+  "z_log_turksib_1_p2": {
+   "use": "logistics",
+   "jobs_per_ha": 30,
+   "jobs_ratio": 0.6972
+  },
+  "z_log_turksib_1_p3": {
+   "use": "logistics",
+   "jobs_per_ha": 30,
+   "jobs_ratio": 0.6522
+  },
+  "z_log_turksib_1_p4": {
+   "use": "logistics",
+   "jobs_per_ha": 30,
+   "jobs_ratio": 0.6331
+  },
+  "z_log_turksib_1_p5": {
+   "use": "logistics",
+   "jobs_per_ha": 30,
+   "jobs_ratio": 0.4375
+  },
+  "z_log_turksib_1_p6": {
+   "use": "logistics",
+   "jobs_per_ha": 30,
+   "jobs_ratio": 0.5784
+  },
+  "z_log_turksib_1_p7": {
+   "use": "logistics",
+   "jobs_per_ha": 30,
+   "jobs_ratio": 0.6732
+  },
+  "z_log_turksib_2": {
+   "use": "logistics",
+   "jobs_per_ha": 30,
+   "jobs_ratio": 0.5933
+  },
+  "z_log_turksib_2_p2": {
+   "use": "logistics",
+   "jobs_per_ha": 30,
+   "jobs_ratio": 0.6372
+  },
+  "z_log_turksib_2_p3": {
+   "use": "logistics",
+   "jobs_per_ha": 30,
+   "jobs_ratio": 0.6973
+  },
+  "z_log_turksib_3": {
+   "use": "logistics",
+   "jobs_per_ha": 30,
+   "jobs_ratio": 0.8642
+  },
+  "z_medical": {
+   "use": "medical",
+   "jobs_per_ha": 60,
+   "jobs_ratio": 0.9978
+  },
+  "z_north_ind_1": {
+   "use": "industry",
+   "jobs_per_ha": 20,
+   "jobs_ratio": 0.5409
+  },
+  "z_north_ind_2": {
+   "use": "industry",
+   "jobs_per_ha": 20,
+   "jobs_ratio": 1.1272
+  },
+  "z_north_ind_3": {
+   "use": "industry",
+   "jobs_per_ha": 20,
+   "jobs_ratio": 0.7266
+  },
+  "z_oiz_1": {
+   "use": "industry",
+   "jobs_per_ha": 35,
+   "jobs_ratio": 0.521
+  },
+  "z_oiz_1_p2": {
+   "use": "industry",
+   "jobs_per_ha": 35,
+   "jobs_ratio": 0.5299
+  },
+  "z_oiz_1_p3": {
+   "use": "industry",
+   "jobs_per_ha": 35,
+   "jobs_ratio": 0.528
+  },
+  "z_oiz_1_p4": {
+   "use": "industry",
+   "jobs_per_ha": 35,
+   "jobs_ratio": 0.3822
+  },
+  "z_oiz_1_p5": {
+   "use": "industry",
+   "jobs_per_ha": 35,
+   "jobs_ratio": 0.7701
+  },
+  "z_oiz_1_p6": {
+   "use": "industry",
+   "jobs_per_ha": 35,
+   "jobs_ratio": 0.3639
+  },
+  "z_oiz_1_p7": {
+   "use": "industry",
+   "jobs_per_ha": 35,
+   "jobs_ratio": 0.2814
+  },
+  "z_oiz_1_p8": {
+   "use": "industry",
+   "jobs_per_ha": 35,
+   "jobs_ratio": 0.4276
+  },
+  "z_oiz_1_p9": {
+   "use": "industry",
+   "jobs_per_ha": 35,
+   "jobs_ratio": 0.6309
+  },
+  "z_oiz_1_p10": {
+   "use": "industry",
+   "jobs_per_ha": 35,
+   "jobs_ratio": 0.4485
+  },
+  "z_oiz_2": {
+   "use": "industry",
+   "jobs_per_ha": 35,
+   "jobs_ratio": 0.7494
+  },
+  "z_res_high_1": {
+   "use": "residential_high",
+   "jobs_per_ha": 30.0,
+   "jobs_ratio": 0.993,
+   "homes_per_ha": 78.6,
+   "housing_ratio": 1.0125
+  },
+  "z_res_high_2": {
+   "use": "residential_high",
+   "jobs_per_ha": 30.0,
+   "jobs_ratio": 1.3757,
+   "homes_per_ha": 78.6,
+   "housing_ratio": 1.0069
+  },
+  "z_res_high_2_p2": {
+   "use": "residential_high",
+   "jobs_per_ha": 30.0,
+   "jobs_ratio": 1.0895,
+   "homes_per_ha": 78.6,
+   "housing_ratio": 1.0112
+  },
+  "z_res_high_3": {
+   "use": "residential_high",
+   "jobs_per_ha": 30.0,
+   "jobs_ratio": 0.9988,
+   "homes_per_ha": 78.6,
+   "housing_ratio": 1.0117
+  },
+  "z_res_high_3_p2": {
+   "use": "residential_high",
+   "jobs_per_ha": 30.0,
+   "jobs_ratio": 0.9967,
+   "homes_per_ha": 78.6,
+   "housing_ratio": 1.0027
+  },
+  "z_res_high_3_p3": {
+   "use": "residential_high",
+   "jobs_per_ha": 30.0,
+   "jobs_ratio": 1.2412,
+   "homes_per_ha": 78.6,
+   "housing_ratio": 0.9952
+  },
+  "z_res_low_e_1": {
+   "use": "residential_low",
+   "jobs_per_ha": 8.0,
+   "jobs_ratio": 1.0046,
+   "homes_per_ha": 28.0,
+   "housing_ratio": 1.0133
+  },
+  "z_res_low_e_1_p2": {
+   "use": "residential_low",
+   "homes_per_ha": 28.0,
+   "housing_ratio": 1.0136
+  },
+  "z_res_low_e_1_p3": {
+   "use": "residential_low",
+   "jobs_per_ha": 8.0,
+   "jobs_ratio": 1.0533,
+   "homes_per_ha": 28.0,
+   "housing_ratio": 1.0039
+  },
+  "z_res_low_e_1_p4": {
+   "use": "residential_low",
+   "jobs_per_ha": 8.0,
+   "jobs_ratio": 1.0344,
+   "homes_per_ha": 28.0,
+   "housing_ratio": 0.9956
+  },
+  "z_res_low_e_1_p5": {
+   "use": "residential_low",
+   "homes_per_ha": 28.0,
+   "housing_ratio": 0.9871
+  },
+  "z_res_low_e_2": {
+   "use": "residential_low",
+   "jobs_per_ha": 8.0,
+   "jobs_ratio": 1.0192,
+   "homes_per_ha": 28.0,
+   "housing_ratio": 1.0127
+  },
+  "z_res_low_e_2_p2": {
+   "use": "residential_low",
+   "homes_per_ha": 28.0,
+   "housing_ratio": 1.0013
+  },
+  "z_res_low_e_3": {
+   "use": "residential_low",
+   "jobs_per_ha": 8.0,
+   "jobs_ratio": 1.2087,
+   "homes_per_ha": 28.0,
+   "housing_ratio": 1.0092
+  },
+  "z_res_low_e_3_p2": {
+   "use": "residential_low",
+   "jobs_per_ha": 8.0,
+   "jobs_ratio": 1.0406,
+   "homes_per_ha": 28.0,
+   "housing_ratio": 0.9034
+  },
+  "z_res_low_e_4": {
+   "use": "residential_low",
+   "jobs_per_ha": 8.0,
+   "jobs_ratio": 1.035,
+   "homes_per_ha": 28.0,
+   "housing_ratio": 1.063
+  },
+  "z_res_low_n_1": {
+   "use": "residential_low",
+   "jobs_per_ha": 8.0,
+   "jobs_ratio": 1.003,
+   "homes_per_ha": 28.0,
+   "housing_ratio": 1.0149
+  },
+  "z_res_low_n_1_p2": {
+   "use": "residential_low",
+   "jobs_per_ha": 8.0,
+   "jobs_ratio": 0.9936,
+   "homes_per_ha": 28.0,
+   "housing_ratio": 1.0145
+  },
+  "z_res_low_n_1_p3": {
+   "use": "residential_low",
+   "jobs_per_ha": 8.0,
+   "jobs_ratio": 1.0021,
+   "homes_per_ha": 28.0,
+   "housing_ratio": 1.007
+  },
+  "z_res_low_n_1_p4": {
+   "use": "residential_low",
+   "homes_per_ha": 28.0,
+   "housing_ratio": 0.9957
+  },
+  "z_res_low_n_2": {
+   "use": "residential_low",
+   "jobs_per_ha": 8.0,
+   "jobs_ratio": 1.0389,
+   "homes_per_ha": 28.0,
+   "housing_ratio": 1.0115
+  },
+  "z_res_low_n_3": {
+   "use": "residential_low",
+   "jobs_per_ha": 8.0,
+   "jobs_ratio": 1.3663,
+   "homes_per_ha": 28.0,
+   "housing_ratio": 1.0064
+  },
+  "z_res_low_n_3_p2": {
+   "use": "residential_low",
+   "jobs_per_ha": 8.0,
+   "jobs_ratio": 1.7508,
+   "homes_per_ha": 28.0,
+   "housing_ratio": 1.1057
+  },
+  "z_res_low_v_1": {
+   "use": "residential_low",
+   "homes_per_ha": 55.3,
+   "housing_ratio": 0.9863
+  },
+  "z_res_low_v_1_p2": {
+   "use": "residential_low",
+   "jobs_per_ha": 10.0,
+   "jobs_ratio": 1.0123,
+   "homes_per_ha": 55.3,
+   "housing_ratio": 0.9855
+  },
+  "z_res_low_v_2": {
+   "use": "residential_low",
+   "jobs_per_ha": 10.0,
+   "jobs_ratio": 1.0074,
+   "homes_per_ha": 55.3,
+   "housing_ratio": 0.9865
+  },
+  "z_res_low_v_3": {
+   "use": "residential_low",
+   "homes_per_ha": 55.3,
+   "housing_ratio": 0.9888
+  },
+  "z_res_low_v_3_p2": {
+   "use": "residential_low",
+   "jobs_per_ha": 10.0,
+   "jobs_ratio": 1.0,
+   "homes_per_ha": 55.3,
+   "housing_ratio": 0.9942
+  },
+  "z_res_low_v_3_p3": {
+   "use": "residential_low",
+   "homes_per_ha": 55.3,
+   "housing_ratio": 0.9999
+  },
+  "z_res_low_v_4": {
+   "use": "residential_low",
+   "jobs_per_ha": 10.0,
+   "jobs_ratio": 1.0064,
+   "homes_per_ha": 55.3,
+   "housing_ratio": 0.9872
+  },
+  "z_res_low_v_5": {
+   "use": "residential_low",
+   "jobs_per_ha": 10.0,
+   "jobs_ratio": 0.4818,
+   "homes_per_ha": 55.3,
+   "housing_ratio": 0.5452
+  },
+  "z_res_low_v_6": {
+   "use": "residential_low",
+   "homes_per_ha": 55.3,
+   "housing_ratio": 0.5807
+  },
+  "z_res_low_v_7": {
+   "use": "residential_low",
+   "jobs_per_ha": 10.0,
+   "jobs_ratio": 2.3077,
+   "homes_per_ha": 55.3,
+   "housing_ratio": 0.9597
+  },
+  "z_res_low_v_8": {
+   "use": "residential_low",
+   "homes_per_ha": 55.3,
+   "housing_ratio": 0.3601
+  },
+  "z_res_low_v_9": {
+   "use": "residential_low",
+   "jobs_per_ha": 10.0,
+   "jobs_ratio": 1.2213,
+   "homes_per_ha": 55.3,
+   "housing_ratio": 1.0043
+  },
+  "z_res_mid_1": {
+   "use": "residential_mid",
+   "homes_per_ha": 68.7,
+   "housing_ratio": 1.0144
+  },
+  "z_res_mid_1_p2": {
+   "use": "residential_mid",
+   "jobs_per_ha": 15.0,
+   "jobs_ratio": 1.259,
+   "homes_per_ha": 68.7,
+   "housing_ratio": 1.029
+  },
+  "z_res_mid_1_p3": {
+   "use": "residential_mid",
+   "jobs_per_ha": 15.0,
+   "jobs_ratio": 1.4738,
+   "homes_per_ha": 68.7,
+   "housing_ratio": 1.1123
+  },
+  "z_res_mid_2": {
+   "use": "residential_mid",
+   "homes_per_ha": 68.7,
+   "housing_ratio": 1.0122
+  },
+  "z_res_mid_2_p2": {
+   "use": "residential_mid",
+   "homes_per_ha": 68.7,
+   "housing_ratio": 1.0154
+  },
+  "z_res_mid_3": {
+   "use": "residential_mid",
+   "homes_per_ha": 68.7,
+   "housing_ratio": 1.0125
+  },
+  "z_res_mid_3_p2": {
+   "use": "residential_mid",
+   "homes_per_ha": 68.7,
+   "housing_ratio": 1.0144
+  },
+  "z_res_mid_3_p3": {
+   "use": "residential_mid",
+   "jobs_per_ha": 15.0,
+   "jobs_ratio": 1.0937,
+   "homes_per_ha": 68.7,
+   "housing_ratio": 0.9884
+  },
+  "z_res_mid_4": {
+   "use": "residential_mid",
+   "homes_per_ha": 68.7,
+   "housing_ratio": 1.0109
+  },
+  "z_res_mid_4_p2": {
+   "use": "residential_mid",
+   "homes_per_ha": 68.7,
+   "housing_ratio": 0.9994
+  },
+  "z_res_mid_4_p3": {
+   "use": "residential_mid",
+   "jobs_per_ha": 15.0,
+   "jobs_ratio": 3.2522,
+   "homes_per_ha": 68.7,
+   "housing_ratio": 1.0875
+  },
+  "z_res_mid_5": {
+   "use": "residential_mid",
+   "homes_per_ha": 68.7,
+   "housing_ratio": 1.004
+  },
+  "z_res_mid_5_p2": {
+   "use": "residential_mid",
+   "jobs_per_ha": 15.0,
+   "jobs_ratio": 1.4875,
+   "homes_per_ha": 68.7,
+   "housing_ratio": 0.9997
+  },
+  "z_res_mid_6": {
+   "use": "residential_mid",
+   "jobs_per_ha": 15.0,
+   "jobs_ratio": 1.0408,
+   "homes_per_ha": 68.7,
+   "housing_ratio": 1.0128
+  },
+  "z_res_mid_7": {
+   "use": "residential_mid",
+   "homes_per_ha": 68.7,
+   "housing_ratio": 0.9992
+  },
+  "z_res_mid_8": {
+   "use": "residential_mid",
+   "homes_per_ha": 68.7,
+   "housing_ratio": 1.009
+  },
+  "z_res_mid_9": {
+   "use": "residential_mid",
+   "jobs_per_ha": 15.0,
+   "jobs_ratio": 1.0254,
+   "homes_per_ha": 68.7,
+   "housing_ratio": 1.0077
+  },
+  "z_res_mid_10": {
+   "use": "residential_mid",
+   "jobs_per_ha": 15.0,
+   "jobs_ratio": 1.1284,
+   "homes_per_ha": 68.7,
+   "housing_ratio": 0.9969
+  },
+  "z_res_mid_11": {
+   "use": "residential_mid",
+   "jobs_per_ha": 15.0,
+   "jobs_ratio": 1.4041,
+   "homes_per_ha": 68.7,
+   "housing_ratio": 1.0135
+  },
+  "z_res_mid_12": {
+   "use": "residential_mid",
+   "jobs_per_ha": 15.0,
+   "jobs_ratio": 1.1427,
+   "homes_per_ha": 68.7,
+   "housing_ratio": 1.0063
+  },
+  "z_res_mid_13": {
+   "use": "residential_mid",
+   "jobs_per_ha": 15.0,
+   "jobs_ratio": 1.1213,
+   "homes_per_ha": 68.7,
+   "housing_ratio": 0.9919
+  },
+  "z_res_mid_14": {
+   "use": "residential_mid",
+   "jobs_per_ha": 15.0,
+   "jobs_ratio": 1.024,
+   "homes_per_ha": 68.7,
+   "housing_ratio": 1.0364
+  },
+  "z_res_mid_15": {
+   "use": "residential_mid",
+   "jobs_per_ha": 15.0,
+   "jobs_ratio": 2.1221,
+   "homes_per_ha": 68.7,
+   "housing_ratio": 1.0518
+  },
+  "z_res_mid_16": {
+   "use": "residential_mid",
+   "jobs_per_ha": 15.0,
+   "jobs_ratio": 2.7894,
+   "homes_per_ha": 68.7,
+   "housing_ratio": 1.0689
+  },
+  "z_res_mid_17": {
+   "use": "residential_mid",
+   "jobs_per_ha": 15.0,
+   "jobs_ratio": 3.0871,
+   "homes_per_ha": 68.7,
+   "housing_ratio": 0.9996
+  },
+  "z_res_mid_18": {
+   "use": "residential_mid",
+   "jobs_per_ha": 15.0,
+   "jobs_ratio": 3.5502,
+   "homes_per_ha": 68.7,
+   "housing_ratio": 1.106
+  },
+  "z_res_mid_19": {
+   "use": "residential_mid",
+   "jobs_per_ha": 15.0,
+   "jobs_ratio": 10.5982,
+   "homes_per_ha": 68.7,
+   "housing_ratio": 1.0368
+  },
+  "z_res_mid_20": {
+   "use": "residential_mid",
+   "jobs_per_ha": 15.0,
+   "jobs_ratio": 15.9591,
+   "homes_per_ha": 68.7,
+   "housing_ratio": 1.2228
+  },
+  "z_res_mid_21": {
+   "use": "residential_mid",
+   "jobs_per_ha": 15.0,
+   "jobs_ratio": 3.781,
+   "homes_per_ha": 68.7,
+   "housing_ratio": 1.157
+  },
+  "z_tlc": {
+   "use": "logistics",
+   "jobs_per_ha": 30,
+   "jobs_ratio": 0.546
+  },
+  "z_tlc_p2": {
+   "use": "logistics",
+   "jobs_per_ha": 30,
+   "jobs_ratio": 0.5114
+  }
+ }
+}

@@ -68,7 +68,7 @@ namespace AlatauCity.DigitalTwin.UI
             {
                 if (t.IndexOf(w, System.StringComparison.Ordinal) < 0) continue;
                 var l = ls != null ? ls.Get(id) : null; if (l == null) return false;
-                if ((t.Contains("стройплощадка") ? l.Begin : l.Finish) > y + 0.999f) return false;
+                if ((t.Contains("стройплощадка") ? l.Begin : l.Finish) > Landmarks.LandmarkSystem.EndOf(y)) return false;   // dates: the end of the shown year
             }
             return true;
         }

@@ -17,6 +17,15 @@ namespace AlatauCity.DigitalTwin.Landmarks
         public float X, Z, Yaw;               // site (city metres), heading of the long side
         public float Height, Radius;          // for the camera: top of the model, half-size of the site
         public float PadW, PadD;              // the levelled plot the model stands on (local x × z, metres)
+        /// <summary>Metres added to the plot's automatic level (the median of the ground round it): a long plot on rolling ground
+        /// (the airport) takes the level that moves the ground under the houses round it least. 0 = the median.</summary>
+        public float PadLift;
+        /// <summary>The parts of the model past its plot follow the ground there (the airport's access road to the street's end and
+        /// the bridge to the rail station): LandmarkSystem moves each vertex outside the plot by the ground's height over the plot.</summary>
+        public bool Drape;
+        /// <summary>An object without a model of its own (Model null): its lot (x × z, metres, axis-aligned round X, Z), where the plan
+        /// site stands while it is built (LandmarkSystem.BuildPlanSite: hoarding and the shells of the plan's buildings on it). 0 = none.</summary>
+        public float SiteW, SiteD;
         /// <summary>&gt; 0: the landmark brings the district round it (Iconic: the Gate District of its QTwin page, IconicDistrict) — no
         /// generic buildings, film trees or city roads inside the district's area once it stands. 0 = none.</summary>
         public float Ring;
@@ -37,9 +46,10 @@ namespace AlatauCity.DigitalTwin.Landmarks
         public List<LPart> Parts;
         public Landmark Part(LPart p) { (Parts ??= new List<LPart>()).Add(p); return this; }
         public int Main { get { if (Parts != null) for (int i = 0; i < Parts.Count; i++) if (Parts[i].Tower) return i; return -1; } }
-        /// <summary>First start and last hand-over of the whole complex (years, fractional).</summary>
-        public float Begin { get { if (Parts == null) return StartYear - 1f; float a = float.MaxValue; foreach (var p in Parts) a = Mathf.Min(a, p.A); return a; } }
-        public float Finish { get { if (Parts == null) return EndYear; float b = float.MinValue; foreach (var p in Parts) b = Mathf.Max(b, p.B); return b; } }
+        /// <summary>First start and last hand-over of the whole complex (dates, fractional years); one object: the start of StartYear
+        /// and the end of EndYear.</summary>
+        public float Begin { get { if (Parts == null) return StartYear; float a = float.MaxValue; foreach (var p in Parts) a = Mathf.Min(a, p.A); return a; } }
+        public float Finish { get { if (Parts == null) return EndYear + 1f; float b = float.MinValue; foreach (var p in Parts) b = Mathf.Max(b, p.B); return b; } }
     }
 
     /// <summary>One building (or the grounds) of a complex: plan dates A … B (fractional years), height, where the camera looks at it, and
@@ -66,7 +76,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
         public static string StatusLabel(Landmark l)
         {
             int si = StatusIdx(l);
-            return si == 1 ? StatusText[1] + " " + Mathf.RoundToInt(LandmarkSystem.Progress(l, TwinState.Year) * 100f) + " %" : StatusText[si];
+            return si == 1 ? StatusText[1] + " " + Mathf.RoundToInt(LandmarkSystem.InYear(l, TwinState.Year) * 100f) + " %" : StatusText[si];
         }
         public static string StatusOf(Landmark l) => StatusText[StatusIdx(l)];
         /// <summary>Today's status from the sources (the construction monitoring map shows the city as designed, the statuses as of today).</summary>
@@ -76,7 +86,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
         public static int StatusIdx(Landmark l)
         {
             if (l.IsLrt) return (int)l.Status;
-            int y = TwinState.Year; float p = LandmarkSystem.Progress(l, y);
+            int y = TwinState.Year; float p = LandmarkSystem.InYear(l, y);
             if (p >= 0.999f) return l.S2End > 0 && y >= l.S2Start && y < l.S2End ? 6 : 0;   // working, or its 2nd phase is being built
             if (p >= 0.85f) return 5;                                                          // the last months: commissioning
             if (p > 0f) return 1;
@@ -84,6 +94,15 @@ namespace AlatauCity.DigitalTwin.Landmarks
             // further ahead: today's status, but a project that is not started yet is never «Работает» / «Строится»
             return l.Status == LStatus.Working || l.Status == LStatus.Construction ? 2 : (int)l.Status;
         }
+
+        /// <summary>Where Iconic Complex stands with the whole Gate District quarter round it — the one source of truth: everything that
+        /// follows Iconic (IconicDistrict, IconicPlaza, flags, monitoring, tour and pitch cameras, the film reel, FilmLook's maquette,
+        /// IconicFrame) reads these. Stage 7 (approved by the owner 31.10.2026): moved rigidly to the centre of Gate, yaw unchanged.</summary>
+        public const float IconicX = -3500f, IconicZ = -19500f, IconicYaw = 270f;
+        /// <summary>The place the quarter's world-coordinate data files were made for (gate_q1.*, old fixed cameras and shot lists):
+        /// IconicFrame.Shift moves them by (IconicX − IconicDataX, IconicZ − IconicDataZ) at load. Set equal to IconicX/Z once the data
+        /// is regenerated at the new place.</summary>
+        public const float IconicDataX = -3170f, IconicDataZ = -19080f;
 
         public static List<Landmark> All()
         {
@@ -94,53 +113,66 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 Id = "iconic", Name = "Iconic Complex", Short = "Iconic Complex", Company = "Caspian Group · ТОО «Alatau City Iconic Complex» · архитектор SOM",
                 Purpose = "«Вертикальный район»: офисы, премиальные резиденции, отель 5*, ритейл и культурные пространства", Model = "iconic",
                 District = 0, Status = LStatus.Construction, StatusNote = "стройка начата 26.10.2026",
-                StartYear = 2026, EndYear = 2030, YearOfficial = true, X = -3170, Z = -19080, Yaw = 270f, PadW = 270f, PadD = 200f, Ring = 1f, Height = 272f, Radius = 170f, ViewYaw = 25f, ViewPitch = 14f,
+                StartYear = 2026, EndYear = 2029, YearOfficial = true, X = IconicX, Z = IconicZ, Yaw = IconicYaw, PadW = 270f, PadD = 200f, Ring = 1f, Height = 272f, Radius = 170f, ViewYaw = 25f, ViewPitch = 14f,
                 Source = "SOM, Forbes.kz, primeminister.kz", SourceDate = "05.03.2026 / 23.04.2026 / 26.08.2026"
             }.F("Площадь", "276 800 м²").F("Главная башня", "272 м · 56 этажей — офисы и резиденции").F("Вторая башня", "80 м · 21 этаж — ступенчатая «пирамида» с озеленёнными террасами: отель 5* и брендированные резиденции")
-             .F("Подиум", "18 м · 3 этажа · ≈ 58 000 м² — два павильона-клина с садами на кровле, бассейн на террасе, площадь с амфитеатром").F("Офисы и жильё", "офисы 57 600 м² · резиденции 40 300 м² · отель 21 806 м²").F("Конструкции", "сейсмостойкий каркас с демпферами").F("Инвестиции", "> $800 млн (по другим данным > $1 млрд), без бюджетных денег")
-             .F("Токенизация", "Iconic Tower — до $50 млн на KASE (план до конца 2026)").F("Сроки", "сдача конец 2029 – начало 2030").Stage2("культурный центр на площади", 2037, 2039)
-             // the buildings of the complex with their own dates: the hotel opens two years before the tower (first revenue), the east retail
-             // block a quarter before it, the west one and the grounds after it (scenario of the twin; the tower keeps the published dates)
+             .F("Подиум", "18 м · 3 этажа · ≈ 58 000 м² — два павильона-клина с садами на кровле, бассейн на террасе, площадь с амфитеатром")
+             .F("Офисные корпуса", "6 корпусов · 4 этажа · 17,7 м — с внутренними дворами, в квартале вокруг площади; ≈ 58 100 м² по модели, в составе 276 800 м² комплекса").F("Офисы и жильё", "офисы 57 600 м² · резиденции 40 300 м² · отель 21 806 м²").F("Конструкции", "сейсмостойкий каркас с демпферами").F("Инвестиции", "> $800 млн (по другим данным > $1 млрд), без бюджетных денег")
+             .F("Токенизация", "Iconic Tower — до $50 млн на KASE (план до конца 2026)").F("Сроки", "начало стройки — 10.2026, сдача — конец 2029").Stage2("культурный центр на площади", 2037, 2039)
+             // the buildings of the complex with their own dates: the hotel opens more than a year before the tower (first revenue), the east
+             // retail block a quarter before it, the west one and the grounds with it (scenario of the twin; the complex keeps the published
+             // dates of the registry: start 10.2026, completion at the end of 2029 — the last hand-over is in December 2029)
              .Part(new LPart { Id = "t1", Name = "Башня T1", Short = "T1", Use = "офисы и премиальные резиденции", Size = "272 м · 56 этажей · 97 900 м²", Tower = true,
-                               A = 2026.82f, B = 2030.0f, H = 272f, Capex = 480f, Delay = 0.14f, Recover = true, Focus = new Vector3(-84f, 110f, 46f), Dist = 560f, Pitch = 16f,
+                               A = 2026.82f, B = 2029.92f, H = 272f, Capex = 480f, Delay = 0.14f, Recover = true, Focus = new Vector3(-84f, 110f, 46f), Dist = 560f, Pitch = 16f,
                                Deal = "предпродажи резиденций 38 % · аренда офисов 24 %", Risk = "Каркас отстаёт из-за зимнего бетонирования; вторая смена на армировании закрывает отставание" })
              .Part(new LPart { Id = "t2", Name = "Отель T2", Short = "T2", Use = "отель 5* и брендированные резиденции", Size = "80 м · 21 этаж · террасы · 21 806 м² · 220 номеров",
-                               A = 2026.95f, B = 2028.6f, H = 81f, Capex = 150f, Delay = -0.04f, Focus = new Vector3(40f, 28f, 42f), Dist = 270f, Pitch = 24f,
+                               A = 2026.95f, B = 2028.45f, H = 81f, Capex = 150f, Delay = -0.04f, Focus = new Vector3(40f, 28f, 42f), Dist = 270f, Pitch = 24f,
                                Deal = "договор управления с международным оператором; продажи номеров открываются за 3 месяца до ввода", Risk = "Опережение: каркас закончен раньше — отель даёт первую выручку комплекса" })
              .Part(new LPart { Id = "re", Name = "Павильон · восточный", Short = "Павильон В", Use = "торговая галерея, рестораны, бассейн на террасе", Size = "клин до 32 м · 4 уровня · ≈ 30 000 м²",
                                A = 2027.3f, B = 2029.7f, H = 32f, Capex = 95f, Delay = 0.075f, Focus = new Vector3(-66f, 12f, -50f), Dist = 240f, Pitch = 32f,
                                Deal = "предварительная аренда 61 %, якорный арендатор — супермаркет", Risk = "Поставка модулей витража задерживается на 4 недели — ввод сдвигается" })
              .Part(new LPart { Id = "rw", Name = "Павильон · западный", Short = "Павильон З", Use = "магазины, фуд-холл, сад на кровле", Size = "клин до 22 м · 3 уровня · ≈ 28 000 м²",
-                               A = 2028.5f, B = 2030.7f, H = 22f, Capex = 70f, Focus = new Vector3(66f, 10f, -50f), Dist = 240f, Pitch = 32f,
+                               A = 2028.5f, B = 2029.85f, H = 22f, Capex = 70f, Focus = new Vector3(66f, 10f, -50f), Dist = 240f, Pitch = 32f,
                                Deal = "предварительная аренда 35 %", Risk = "Старт после ввода отеля: бригады и краны переходят с T2" })
              .Part(new LPart { Id = "gr", Name = "Площадь, амфитеатр и сад", Short = "Площадь", Use = "общественное пространство, открытое городу", Size = "≈ 5 га · амфитеатр, фонтаны, деревья", Land = true,
-                               A = 2029.45f, B = 2030.4f, H = 9f, Capex = 18f, Focus = new Vector3(0f, 0f, -46f), Dist = 380f, Pitch = 46f,
-                               Deal = "входит в стоимость комплекса; повышает арендные ставки ритейла", Risk = "Начинается после снятия кранов с башни; посадка деревьев весной" }));
+                               A = 2029.3f, B = 2029.92f, H = 9f, Capex = 18f, Focus = new Vector3(0f, 0f, -46f), Dist = 380f, Pitch = 46f,
+                               Deal = "входит в стоимость комплекса; повышает арендные ставки ритейла", Risk = "Работы идут вместе с фасадом башни; деревья сажают осенью" }));
             L.Add(new Landmark
             {
                 Id = "lotte_l7", Name = "L7 by Lotte", Short = "L7 by Lotte", Company = "Lotte Hotels & Resorts (Южная Корея)",
                 Purpose = "Городской отель на 180 номеров", Model = "hotel_l7",
                 District = 0, Status = LStatus.Agreement, StatusNote = "договорённость 08.2026; 14.09.2026 — окончательных соглашений нет",
-                StartYear = 2028, EndYear = 2030, YearOfficial = false, X = -2300, Z = -19600, Yaw = 4.2f, PadW = 90f, PadD = 70f, Height = 100f, Radius = 45f, ViewYaw = 220f, ViewPitch = 16f,
+                // Gate v1.1 (spec gate.json l7_lotte, move to (−3021.5, −19602.3)): the corner of the Gate avenue and the East street, across
+                // from Iconic; the plot is the spec's footprint (x −3075 … −2968, z −19644.6 … −19560: 107 × 84.6 m, axis-aligned), the
+                // drop-off faces its access street in the south (−z). One year source: the spec's base year (years[0] = 2031, built
+                // 2029–2031); the data's buildings on the lot must carry it too (PrepareGround logs the years of the data it replaces)
+                StartYear = 2029, EndYear = 2031, YearOfficial = false, X = -3021.5f, Z = -19602.3f, Yaw = 0f, PadW = 107f, PadD = 84.6f, Height = 100f, Radius = 58f, ViewYaw = 220f, ViewPitch = 16f,
                 Source = "Kapital.kz, bes.media", SourceDate = "14.09.2026"
-            }.F("Номера", "180").F("Инвестиции", "> $200 млн").F("Сроки", "не объявлены (в демо — 2030)"));
+            }.F("Номера", "180").F("Инвестиции", "> $200 млн").F("Сроки", "не объявлены (в демо — 2031, по плану района Gate)"));
             L.Add(new Landmark
             {
                 Id = "pepsico", Name = "Завод PepsiCo", Short = "PepsiCo", Company = "PepsiCo Kazakhstan",
-                Purpose = "Производство картофельных чипсов и снеков", Model = "food_pepsico",
-                District = 2, Status = LStatus.Construction, StatusNote = "активная фаза строительства (сводка правительства 26.08.2026)",
-                StartYear = 2025, EndYear = 2027, YearOfficial = true, X = 8500, Z = 940, Yaw = -81.7f, PadW = 430f, PadD = 300f, Height = 40f, Radius = 215f, ViewYaw = 200f, ViewPitch = 24f,
-                Source = "Kapital.kz, 24.kz", SourceDate = "20.05.2025 / 26.08.2026"
+                Purpose = "Производство картофельных чипсов и снеков", Model = null,
+                District = 0, Status = LStatus.Construction, StatusNote = "активная фаза строительства (сводка правительства 26.08.2026)",
+                // Gate v1.1 (spec gate.json pepsico, move to (−3078.5, −22541.2), yaw −74°): the plant in Yntymak is its own hall in OSM
+                // (building bid 48572 of the twin, 28 041 m², 347 × 82 m), which stays an existing building — no model, no plot of its own;
+                // the entry keeps the card, the label and the monitoring mark on the hall. Years of the registry: works from 2024, first
+                // stage and full launch in 2026 (registry.json pepsico years: start 2024, first_stage 2026, completion 2026)
+                StartYear = 2024, EndYear = 2026, YearOfficial = true, X = -3078.5f, Z = -22541.2f, Yaw = -74f, PadW = 0f, PadD = 0f, Height = 15f, Radius = 180f, ViewYaw = 200f, ViewPitch = 24f,
+                Source = "Tribune.kz, Tengrinews, Kapital.kz", SourceDate = "22.07.2024 / 02.06.2026 / 26.08.2026"
             }.F("Инвестиции", "≈ $360 млн (81 млрд ₸); первый этап $160 млн").F("Сырьё", "210 тыс. т картофеля в год").F("Рабочие места", "≈ 900")
-             .F("Сроки", "1-я очередь — 03.2026, полная мощность — 09.2027").Stage2("новые линии", 2030, 2032));
+             .F("Сроки", "стройка с 06.2024; техзапуск — весна 2026, полная мощность — лето 2026"));
             L.Add(new Landmark
             {
                 Id = "griffin", Name = "Griffin Logopark Almaty", Short = "Griffin Logopark", Company = "Griffin Partners · кредит ЕАБР",
-                Purpose = "Логопарк класса А в западном промышленном поясе, у БАКАД", Model = "logistics_griffin",
-                District = 2, Status = LStatus.Construction, StatusNote = "стройка с 07.2026, первый камень — 25.09.2026",
-                StartYear = 2026, EndYear = 2027, YearOfficial = true, X = -5713, Z = 1735, Yaw = 38.0f, PadW = 380f, PadD = 420f, Height = 15f, Radius = 210f, ViewYaw = 200f, ViewPitch = 26f,
+                Purpose = "Логопарк класса А в районе Gate, у дублёра трассы А-3", Model = null,
+                District = 0, Status = LStatus.Construction, StatusNote = "стройка с 07.2026, первый камень — 25.09.2026",
+                // Stage 7: one Griffin in the city — the sheds are the Gate plan's own buildings on lot L00067 (spec object griffin_logopark,
+                // years [2027, …]); no model, no plot of its own: the entry keeps the card, the label and the monitoring mark at the lot, and
+                // its lot (the spec's footprint x −2680 … −2365, z −19300 … −18902: 315 × 398 m) has a plan site while it is built
+                StartYear = 2026, EndYear = 2027, YearOfficial = true, X = -2522.5f, Z = -19101f, Yaw = 0f, PadW = 0f, PadD = 0f, SiteW = 315f, SiteD = 398f, Height = 15f, Radius = 200f, ViewYaw = 200f, ViewPitch = 26f,
                 Source = "ЕАБР, bizmedia.kz", SourceDate = "10.08.2026 / 25.09.2026"
-            }.F("Инвестиции", "$125 млн").F("Склады", "≈ 120 тыс. м²").F("Рабочие места", "≈ 600").F("Сроки", "1-я фаза — I кв. 2027").Stage2("третий склад", 2031, 2033));
+            }.F("Инвестиции", "$125 млн").F("Склады", "≈ 120 тыс. м²").F("Рабочие места", "≈ 600").F("Сроки", "1-я фаза — I кв. 2027"));
 
             // ---------------- Golden: science, education, medicine
             L.Add(new Landmark
@@ -197,7 +229,8 @@ namespace AlatauCity.DigitalTwin.Landmarks
             }.F("Инвестиции", "≈ $180–185 млн (в соцсетях — $160 млн)").F("Сроки", "не объявлены (в демо — 2028)").Stage2("второй цех", 2032, 2034));
 
             // ---------------- Growing: export industry and logistics — in two industrial belts on the sides of the city (east along the
-            // railway, west by the airport and BAKAD); PepsiCo, Mars Petcare and Griffin belong here too (plants and warehouses, not the business gate)
+            // railway, west by the airport and BAKAD); PepsiCo and Mars Petcare belong here too (plants, not the business gate); Griffin stands
+            // in Gate since Stage 7, as the plan's own sheds
             L.Add(new Landmark
             {
                 Id = "sunny_paper", Name = "Sunny Paper", Short = "Sunny Paper", Company = "Sunny Paper",
@@ -250,12 +283,24 @@ namespace AlatauCity.DigitalTwin.Landmarks
 
             L.Add(new Landmark
             {
-                Id = "airport", Name = "Аэропорт Алатау", Short = "Аэропорт", Company = "Концепция цифрового двойника · оператор не определён",
-                Purpose = "Пассажирский и грузовой аэропорт: две параллельные ВПП, терминал в форме самолёта, карго, ТОиР, ЛРТ до терминала", Model = "airport",
-                District = 2, Status = LStatus.Concept, StatusNote = "концепция: аэродром → пассажирский аэропорт, сроков нет",
-                StartYear = 2032, EndYear = 2036, YearOfficial = false, X = -5900, Z = 8300, Yaw = 30f, PadW = 1600f, PadD = 3800f, Height = 98f, Radius = 1000f, ViewYaw = 300f, ViewPitch = 34f,
-                Source = "генплан (аэродром), Astana Times — замысел пассажирского аэропорта", SourceDate = "04.09.2026"
-            }.F("ВПП", "3 400 × 60 м и 2 650 × 60 м, параллельные").F("Терминал", "в форме самолёта: 985 × 776 м, ≈ 350 000 м²").F("Стоянки", "32 телетрапа + 6 перронных").F("Подъезд", "шоссе от трассы Алматы–Конаев ≈ 9 км, ветка ЛРТ до терминала").F("Пассажиры", "до 20 млн в год (оценка)").F("Сроки", "не объявлены (в демо — 2036)"));
+                Id = "airport", Name = "Аэропорт Алатау", Short = "Аэропорт", Company = "Оператор не определён · место утверждено 31.10.2026",
+                Purpose = "Международный аэропорт: одна ВПП 4 000 × 45 м, к северу от неё перрон и терминал у вокзала «Алатау» и конечной ЛРТ", Model = "airport",
+                District = 2, Status = LStatus.Concept, StatusNote = "место утверждено 31.10.2026 (схема Growing-запад); стройка 2041–2045",
+                // Owner's site of 31.10.2026 (city.json airport_new, growing_w.json objects airport_alatau): runway centre (−16000, 1500),
+                // one runway 4 000 × 45 m on 095°/275°, built after 2040. Until then nothing stands here. A construction site like the other
+                // landmarks: works from 2041 (the airport lot's base year in the Growing-West map, years [2041, 2037, 2046, 2041]) to 2045
+                // (city.json airport_new: built 2041–2045, open 2045). Progress 0 in the map year 2040 (the site empty), the hoarding, the
+                // earthworks and the frames from 2041, handed over at the end of 2045 (the planes fly from 2045). The point is the centre of the levelled plot, not of the
+                // runway: the plot (PadW × PadD, centred on the point) covers the runway strip to 150 m south of its axis and the apron,
+                // the terminal and the forecourt to 890 m north of it, all inside the airport lot (4.6 × 1.45 km: 450 m south, 1 000 m
+                // north), 8 m past the runway's ends; it stays 33 m off the farm road along the lot's north-east edge and 36 m off the
+                // village vil_11 west of the runway's end. The runway centre is 370 m south and 12 m west of the point (LandmarkModels.RwyX,
+                // AZ). Level: the median of the ground + 2.3 m (PadLift, ≈ 637 m: the ground under vil_11 moves ≤ 1.5 m instead of 3 m);
+                // the access road from the end of the Аэропортовая магистраль and the bridge to the station follow the ground (Drape).
+                // Was (−5900, 8300), yaw 30, two runways (the twin's concept until 31.10.2026).
+                StartYear = 2041, EndYear = 2045, YearOfficial = false, X = -15955.8f, Z = 1867.55f, Yaw = 95f, PadW = 1040f, PadD = 4040f, PadLift = 2.3f, Drape = true, Height = 98f, Radius = 1300f, ViewYaw = 250f, ViewPitch = 30f,
+                Source = "решение владельца 31.10.2026 (схема Growing-запад); генплан — 15 млн пасс./год, после 2040", SourceDate = "31.10.2026"
+            }.F("ВПП", "одна, 4 000 × 45 м, курс 095°/275°").F("Терминал", "к северу от ВПП, у вокзала «Алатау» (аэроэкспресс) и конечной ЛРТ").F("Стоянки", "14 телетрапов + 4 перронных, грузовой перрон").F("Подъезд", "Аэропортовая магистраль с севера, южный въезд — с 2050").F("Пассажиры", "15 млн в год (генплан)").F("Сроки", "после 2040 (генплан); в двойнике — стройка 2041–2045, открытие в 2045"));
 
             // ---------------- Green: tourism and recreation on Kapshagay
             L.Add(new Landmark

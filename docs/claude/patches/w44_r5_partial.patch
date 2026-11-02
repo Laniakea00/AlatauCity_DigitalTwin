@@ -1,0 +1,294 @@
+diff --git a/tools/map/gen/gen_blocks_lots.py b/tools/map/gen/gen_blocks_lots.py
+index a43342a..11d79ef 100644
+--- a/tools/map/gen/gen_blocks_lots.py
++++ b/tools/map/gen/gen_blocks_lots.py
+@@ -361,11 +361,16 @@ class Social:
+ 
+     def site_plot(self, kind, rest, split_params_fn, home_m2, m2_res):
+         if kind == "fire_station":
+-            # norms.json has no depot plot: the smallest lot of the zone's lot split (model qTwin)
+-            if rest["village"] or rest["split"] not in ("perimeter", "towers", "industrial"):
+-                return None, "-"
+-            _, _, mn = split_params_fn(rest["split"], rest["rules"], self.N, home_m2, m2_res)
+-            return (mn if mn > 0 else None), "не найдено в norms.json (участок депо): минимальный участок зоны, модель qTwin"
++            # norms.json has no depot plot: the smallest lot of the zone's lot split (model qTwin); a village, a zone of rows
++            # or houses and the reserve land at a village's edge take FIRE_DEPOT_PLOT_M2 — without it no depot stood in
++            # a village and every house of a large village was out of fire.depot_radius_km (growing_e: 2,682 houses at
++            # (8316, 9016); golden: the farmsteads of the far west, B0037 16 km from a depot)
++            mn = 0.0
++            if not rest["village"] and rest["split"] in ("perimeter", "towers", "industrial"):
++                _, _, mn = split_params_fn(rest["split"], rest["rules"], self.N, home_m2, m2_res)
++            if mn > 0:
++                return mn, "не найдено в norms.json (участок депо): минимальный участок зоны, модель qTwin"
++            return FIRE_DEPOT_PLOT_M2, "не найдено в norms.json (участок депо): FIRE_DEPOT_PLOT_M2, модель qTwin"
+         if kind == "playground":
+             return self.N.v("parks.square_or_playground", "min_area_m2"), "parks.square_or_playground"
+         return self.plot(kind, 0)
+@@ -1753,6 +1758,8 @@ SITE_STOP_MARGIN = 3.0   # the greedy loop of a kind stops after this × (land w
+                          # and the places short over the smallest facility — far more than a cover of the district needs (model qTwin)
+ SITE_SAFETY_CAP = 5000   # sites of one kind per district: a pure safety cap of the loop, far above the stop above
+ SITE_EDGE_USES = {"reserve"}   # land next to a village that may take a site its houses reach no other way (model qTwin)
++FIRE_DEPOT_PLOT_M2 = 3600.0    # m² of a fire depot's lot where the zone's split gives none (village, rows, houses, reserve):
++#                               the 60 × 60 m lot of the perimeter zones (block side 120 m / 2); norms.json has none (модель qTwin)
+ SITE_BATCH = 30          # candidate sites checked on foot per batch after the first 30 (model qTwin)
+ GROUP_LINK = 100.0       # m: homes outside the radius closer than this to each other are one group in the log (model qTwin)
+ 
+diff --git a/tools/map/gen/gen_masks.py b/tools/map/gen/gen_masks.py
+index 711ee65..6b3388d 100644
+--- a/tools/map/gen/gen_masks.py
++++ b/tools/map/gen/gen_masks.py
+@@ -11,8 +11,9 @@ Parking   cars per lot = new homes × zone parking.per_home (+ office / retail n
+           multi-storey in the free land of the lot (floors by parking.garage_area_by_floors_m2), surface in the free land
+           (parking.area_m2_per_space open). Rule 17 is kept here: no surface field over parking.ground_lot_max_in_centre places
+           in a district centre, nothing above ground in a landmark view sector — the rest goes underground.
+-Stops     bus stops on the sidewalk of streets of the transit classes, greedy ≥ stops.spacing_m bus min apart, first where most
+-          new homes lie within stops.walk_max_m; LRT stations from lrt.json; rail stations = registry lots of use transit.
++Stops     bus stops on the sidewalk of streets of the transit classes, first where most homes lie within stops.walk_max_m on foot
++          (≥ stops.spacing_m bus min apart along one street), then by density (≥ that from every stop); LRT stations from lrt.json; rail stations = registry lots
++          of use transit.
+ Greens    park / square / playground / sport lots; no-build park lots are buffers; yards = residential lots minus buildings and
+           parking (split so no polygon has holes).
+ Plazas    free land of transit lots (station forecourts).
+@@ -39,6 +40,52 @@ import land_util as U  # noqa: E402
+ VILLAGE_BUS = {"village_main", "village_secondary"}    # village streets a bus runs on (model: the lanes are too narrow)
+ STOP_PAD_W = 2.0          # width of a stop pad where the street has no sidewalk (m): a model parameter
+ STOP_STEP_M = 25.0        # candidate stop points along a bus street this far apart (m): модель qTwin
++STREET_ON_DEG = 35.0      # a bus street goes on through a junction into the segment within this many degrees of straight
++#                           ahead (its stops.spacing_m run on along it): модель qTwin
++
++
++def bus_streets(net, classes):
++    """Street of every segment of the bus classes, as stops.spacing_m takes it (the distance between the stops of one route,
++    not between stops of two streets): {segment id: street key}. Segments of one network street id are one street, and at a
++    node a segment goes on into the one most nearly straight ahead (within STREET_ON_DEG) — two bus streets crossing or
++    meeting at a T stay two streets."""
++    segs = [s for s in net["segments"] if s["class"] in classes and len(s.get("pts") or []) >= 2]
++    par = {s["id"]: s["id"] for s in segs}
++
++    def root(a):
++        while par[a] != a:
++            par[a] = par[par[a]]
++            a = par[a]
++        return a
++
++    def join(a, b):
++        ra, rb = root(a), root(b)
++        if ra != rb:
++            par[ra] = rb
++    by_street = {}
++    ends = defaultdict(list)
++    for s in segs:
++        if s.get("street"):
++            if s["street"] in by_street:
++                join(s["id"], by_street[s["street"]])
++            else:
++                by_street[s["street"]] = s["id"]
++        P = s["pts"]
++        for nd, p0, p1 in ((s["a"], P[0], P[1]), (s["b"], P[-1], P[-2])):
++            ends[nd].append((math.atan2(p1[1] - p0[1], p1[0] - p0[0]), s["id"]))
++    for nd, es in ends.items():
++        pairs = []
++        for i in range(len(es)):
++            for j in range(i + 1, len(es)):
++                dev = abs((es[i][0] - es[j][0]) % (2 * math.pi) - math.pi)      # 0: straight on
++                if dev <= math.radians(STREET_ON_DEG) and es[i][1] != es[j][1]:
++                    pairs.append((dev, i, j))
++        used = set()
++        for _, i, j in sorted(pairs):
++            if i not in used and j not in used:
++                used |= {i, j}
++                join(es[i][1], es[j][1])
++    return {k: root(k) for k in par}
+ HARD_GAP_M = 0.1          # a green keeps this far off hard ground (m), past the overlap tolerance at the edge: модель qTwin
+ NOPLANT_MIN_M2 = 0.5      # m²: no-plant parts kept down to this, under rule 19's tolerance (a 2 m² end of an HV zone was lost at 5) — модель qTwin
+ 
+@@ -291,9 +338,17 @@ def run(d, out, spec_path=None):
+         return ii[d <= walk]
+ 
+     chosen = []
+-
+-    def spaced(x, z):
+-        return not any(math.hypot(x - a, z - b) < spacing for a, b, _ in chosen)
++    # the stops that bring houses within the walk keep stops.spacing_m between the stops of one street (bus_streets), not
++    # across streets: a stop on a parallel street 300 m off barred the one that brought the houses of the next street within
++    # the walk (Gate r4: 13,651 residents not reached, 43 blocks of rule 14, houses 11–300 m from a bus street and
++    # 500–1,300 m from a stop); the fill by density keeps it from every stop, as before (per street it put 813 stops on
++    # Gate's streets, five times as many)
++    street = bus_streets(net, U.TRANSIT_CLASSES | VILLAGE_BUS)
++
++    def spaced(x, z, s, own_street=False):
++        k = street.get(s["id"], s["id"])
++        return not any((not own_street or street.get(t["id"], t["id"]) == k) and math.hypot(x - a, z - b) < spacing
++                       for a, b, t in chosen)
+     covered = np.zeros(len(wt), dtype=bool)
+     exact = {}
+     taken = set()
+@@ -301,7 +356,7 @@ def run(d, out, spec_path=None):
+     heapq.heapify(heap)
+     while heap:
+         nw, x, z, k = heapq.heappop(heap)
+-        if not spaced(x, z):
++        if not spaced(x, z, cand[k][3], own_street=True):
+             continue                # the stops chosen only grow: this point stays too near one
+         if k not in exact:
+             exact[k] = walk_cover(k)
+@@ -320,10 +375,11 @@ def run(d, out, spec_path=None):
+         w, x, z, s, _ = cand[k]
+         if w <= 0:
+             break
+-        if k not in taken and spaced(x, z):
++        if k not in taken and spaced(x, z, s):
+             chosen.append((x, z, s))
+     log(f"остановки: сначала те, что приводят пешком в {walk:g} м (stops.walk_max_m, по сети, как правило 14) больше жителей без "
+-        f"остановки, затем остальная улица по плотности, не ближе {spacing:g} м друг к другу (stops.spacing_m)", [],
++        f"остановки (на одной улице не ближе {spacing:g} м друг к другу, stops.spacing_m), затем остальная улица по плотности, "
++        f"не ближе {spacing:g} м от любой остановки", [],
+         cover=n_cover, total=len(chosen), residents=round(float(wt.sum())), residents_not_reached=round(float(wt[~covered].sum())))
+     for i, (x, z, s) in enumerate(chosen):
+         stops.append({"id": f"st{i:03d}", "kind": "bus", "x": round(x, 1), "z": round(z, 1), "segment": s["id"], "years": list(s["years"])})
+diff --git a/tools/map/gen/land_driveways.py b/tools/map/gen/land_driveways.py
+index 9456d3b..7cca763 100644
+--- a/tools/map/gen/land_driveways.py
++++ b/tools/map/gen/land_driveways.py
+@@ -389,8 +389,10 @@ def run(d, out, spec_path=None, og=None):
+     # street pieces off grade (landings, ramps, embankments, cuts, low spans): no drive crosses or roots on them; a drive may
+     # pass under a span with the fire clearance (land_util.offgrade)
+     og = U.offgrade(net, norms, T) if og is None else og
+-    # and the spec railway's viaduct where a fire engine does not pass under it (fire_access.arches.height_min_m, rule 25)
+-    og_polys = [p["poly"] for p in og] + U.rail_low_decks(spec, norms, T)
++    # and the spec railway's viaduct and the LRT viaduct where a fire engine does not pass under them
++    # (fire_access.arches.height_min_m, rule 25 under_decks)
++    lrt = U.read_json(os.path.join(od, "lrt.json")) or {}
++    og_polys = [p["poly"] for p in og] + U.rail_low_decks(spec, norms, T) + U.lrt_low_decks(lrt, norms, T)
+     og_tree = U.strtree(og_polys) if og_polys else None
+     og_by_seg = defaultdict(list)
+     for p in og:
+@@ -440,7 +442,6 @@ def run(d, out, spec_path=None, og=None):
+         b["_p"] = U.from_coords(b["footprint"])
+     btree = U.strtree([b["_p"] for b in B])
+     # the LRT ground corridor is no place for a drive (crossings are the streets' business)
+-    lrt = U.read_json(os.path.join(od, "lrt.json")) or {}
+     w_lrt = norms.v("lrt.corridor_width_m", "double_track")
+     lrt_polys = []
+     for Ln in lrt.get("lines", []):
+diff --git a/tools/map/gen/land_util.py b/tools/map/gen/land_util.py
+index 15e4f85..144c3ca 100644
+--- a/tools/map/gen/land_util.py
++++ b/tools/map/gen/land_util.py
+@@ -357,6 +357,37 @@ DECK_STEP_M = 1.0          # m between the points a deck's clearance is sampled
+ DECK_CLEAR_MARGIN_M = 0.3  # m over fire_access.arches.height_min_m: a drive's surface stands a little over the terrain (модель qTwin)
+ 
+ 
++def _low_pieces(ax, under, half, T, clear):
++    """Plan pieces of a deck (axis LineString, underside heights at its vertices, half width) with less than clear between
++    the underside and the ground (the highest of the terrain at the axis and at both deck edges, sampled every
++    DECK_STEP_M). [Polygon]."""
++    out = []
++    L = ax.length
++    if L < 0.5:
++        return out
++    n = max(2, int(math.ceil(L / DECK_STEP_M)) + 1)
++    t = np.linspace(0.0, L, n)
++    P = np.array([[ax.interpolate(v).x, ax.interpolate(v).y] for v in t])
++    S = np.r_[0.0, np.cumsum(np.hypot(*np.diff(np.array(ax.coords)[:, :2], axis=0).T))]
++    u = np.interp(t, S, under)
++    d = np.gradient(P, axis=0)
++    nrm = np.c_[-d[:, 1], d[:, 0]] / np.maximum(np.hypot(d[:, 0], d[:, 1]), 1e-9)[:, None]
++    g = np.max([np.asarray(T.height(P[:, 0] + k * half * nrm[:, 0], P[:, 1] + k * half * nrm[:, 1]), float) for k in (-1.0, 0.0, 1.0)], axis=0)
++    low = u - g < clear
++    i = 0
++    while i < n:
++        if not low[i]:
++            i += 1
++            continue
++        j = i
++        while j + 1 < n and low[j + 1]:
++            j += 1
++        a, b = max(0.0, t[i] - DECK_STEP_M), min(L, t[j] + DECK_STEP_M)
++        out.append(shapely.ops.substring(ax, a, b).buffer(half, cap_style="flat"))
++        i = j + 1
++    return out
++
++
+ def rail_low_decks(spec, norms, T=None):
+     """Plan pieces of the spec railway's viaduct with less than fire_access.arches.height_min_m (+ DECK_CLEAR_MARGIN_M)
+     between its underside and the ground (the highest of the terrain at the axis and at both deck edges): no drive or
+@@ -366,27 +397,37 @@ def rail_low_decks(spec, norms, T=None):
+     clear = norms.v("fire_access.arches", "height_min_m") + DECK_CLEAR_MARGIN_M
+     out = []
+     for ax, top, half, below in rail_decks(spec):
+-        L = ax.length
+-        n = max(2, int(math.ceil(L / DECK_STEP_M)) + 1)
+-        t = np.linspace(0.0, L, n)
+-        P = np.array([[ax.interpolate(v).x, ax.interpolate(v).y] for v in t])
+-        S = np.r_[0.0, np.cumsum(np.hypot(*np.diff(np.array(ax.coords)[:, :2], axis=0).T))]
+-        under = np.interp(t, S, top) - below
+-        d = np.gradient(P, axis=0)
+-        nrm = np.c_[-d[:, 1], d[:, 0]] / np.maximum(np.hypot(d[:, 0], d[:, 1]), 1e-9)[:, None]
+-        g = np.max([np.asarray(T.height(P[:, 0] + k * half * nrm[:, 0], P[:, 1] + k * half * nrm[:, 1]), float) for k in (-1.0, 0.0, 1.0)], axis=0)
+-        low = under - g < clear
+-        i = 0
+-        while i < n:
+-            if not low[i]:
+-                i += 1
++        out += _low_pieces(ax, np.asarray(top, float) - below, half, T, clear)
++    return out
++
++
++def lrt_low_decks(lrt, norms, T=None):
++    """Plan pieces of the LRT viaduct (sections of kind elevated, as rule 25 takes them: the rail heights of lrt.json less
++    lib.model lrt_rail_over_deck_m, lib.model lrt_viaduct_w_m wide) with less than fire_access.arches.height_min_m
++    (+ DECK_CLEAR_MARGIN_M) over the ground, where the viaduct comes down to its ramps: no drive or turnaround passes under
++    them (rule 25 under_decks). [Polygon]."""
++    try:
++        if MAP not in sys.path:
++            sys.path.insert(0, MAP)
++        from lib import model as _model
++        deck, half = float(_model("lrt_rail_over_deck_m")), float(_model("lrt_viaduct_w_m")) / 2.0
++    except Exception:
++        return []
++    T = T or terrain()
++    clear = norms.v("fire_access.arches", "height_min_m") + DECK_CLEAR_MARGIN_M
++    out = []
++    for Ln in (lrt or {}).get("lines", []):
++        P = np.asarray(Ln.get("pts") or [], float)
++        if len(P) < 2 or P.shape[1] < 3:
++            continue
++        S = np.r_[0.0, np.cumsum(np.hypot(*np.diff(P[:, :2], axis=0).T))]
++        for r in Ln.get("sections", []):
++            a, b = max(0.0, float(r["from_m"])), min(float(S[-1]), float(r["to_m"]))
++            if r["kind"] != "elevated" or b - a < 0.5:
+                 continue
+-            j = i
+-            while j + 1 < n and low[j + 1]:
+-                j += 1
+-            a, b = max(0.0, t[i] - DECK_STEP_M), min(L, t[j] + DECK_STEP_M)
+-            out.append(shapely.ops.substring(ax, a, b).buffer(half, cap_style="flat"))
+-            i = j + 1
++            ch = np.r_[a, S[(S > a + 1e-9) & (S < b - 1e-9)], b]
++            ax = LineString(np.c_[np.interp(ch, S, P[:, 0]), np.interp(ch, S, P[:, 1])])
++            out += _low_pieces(ax, np.interp(ch, S, P[:, 2]) - deck, half, T, clear)
+     return out
+ 
+ 
+diff --git a/tools/map/tests/test_land.py b/tools/map/tests/test_land.py
+index c1cd59d..dd7ca36 100644
+--- a/tools/map/tests/test_land.py
++++ b/tools/map/tests/test_land.py
+@@ -375,6 +375,16 @@ def rail_deck_case(norms, check):
+           len(low) == 1 and low[0].area > 400 and not high and len(bands) == 1 and bands[0].area > 400,
+           f"low {[round(q.area) for q in low]}, high {len(high)}, bands {len(bands)}")
+ 
++    # the LRT viaduct (lrt.json elevated sections: rail less lrt_rail_over_deck_m): a 100 m span down to its ramp, low at
++    # the far end only — the low end is a drive obstacle, the high part is not
++    deck = float(model("lrt_rail_over_deck_m"))
++    lrt = {"lines": [{"id": "l", "pts": [[x0, z0 + 50.0, g + deck + clear + 3.0], [x0 + 100.0, z0 + 50.0, g + deck + clear - 2.0]],
++                      "sections": [{"from_m": 0.0, "to_m": 100.0, "kind": "elevated"}]}]}
++    lo = U.lrt_low_decks(lrt, norms)
++    end = lo[0].bounds if len(lo) == 1 else None
++    check("the low end of an LRT viaduct (its ramp) is a drive obstacle, the high part is not",
++          end is not None and end[2] > x0 + 99.0 and end[0] > x0 + 40.0, f"pieces {[q.bounds for q in lo]}")
++
+ 
+ def main():
+     import argparse

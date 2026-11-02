@@ -34,6 +34,8 @@ namespace AlatauCity.DigitalTwin.Landmarks
         readonly List<Vector4> uv3 = new List<Vector4>();
         readonly List<int> t = new List<int>();
         public int VertexCount => v.Count;
+        /// <summary>Indices so far (three per triangle): where the geometry of one item ends in a combined mesh.</summary>
+        public int IndexCount => t.Count;
         /// <summary>Height subtracted from the facade v coordinate of the walls Prism builds (0 = the model's base): lets a building
         /// standing on sloping ground count its floors from its own ground (AlatauLandmark material Maket).</summary>
         public float UvY0;
@@ -214,7 +216,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             var hue = tw < 0.34f ? new Vector3(0.78f, 0.92f, 0.84f) : tw < 0.62f ? new Vector3(0.95f, 0.93f, 0.74f) : tw < 0.84f ? new Vector3(0.82f, 0.90f, 0.88f) : new Vector3(0.88f, 0.97f, 0.80f);
             var tint = hue * tv;
             // planted in rows, but never on a ruler: half a metre either way
-            p += new Vector3((((r2 * 13.7f) % 1f) - 0.5f) * 1.0f, 0f, (((r * 29.3f) % 1f) - 0.5f) * 1.0f);
+            p += TreeJitter(seed);
             int b = v.Count;
             for (int i = 0; i < T.p.Length; i++)
             {
@@ -226,6 +228,12 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 uv0.Add(new Vector2(w.x, w.z)); uv1.Add(new Vector2(trunk ? LM.Solid : LM.Plant, tag)); uv2.Add(new Vector2(Part, 0f)); uv3.Add(Window);
             }
             foreach (int i in T.t) t.Add(b + i);
+        }
+        /// <summary>Where Tree(p, …, seed) really puts the trunk: p plus this (up to half a metre either way; IconicPlaza fits the crowns by it).</summary>
+        public static Vector3 TreeJitter(float seed)
+        {
+            float r = Mathf.Abs(Mathf.Sin(seed * 91.7f + 3.1f) * 43758.5453f) % 1f, r2 = Mathf.Abs(Mathf.Sin(seed * 47.3f + 1.7f) * 24634.6345f) % 1f;
+            return new Vector3((((r2 * 13.7f) % 1f) - 0.5f) * 1.0f, 0f, (((r * 29.3f) % 1f) - 0.5f) * 1.0f);
         }
         class TreeT { public Vector3[] p, n; public Color[] c; public int[] t; public float top; }
         static readonly TreeT[] trees = new TreeT[3];

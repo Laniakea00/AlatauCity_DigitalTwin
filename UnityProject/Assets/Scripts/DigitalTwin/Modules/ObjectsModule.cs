@@ -206,7 +206,7 @@ namespace AlatauCity.DigitalTwin.Modules
         {
             if (yearLine == null) return;
             var sys = LandmarkSystem.Instance; int y = TwinState.Year; int built = 0, building = 0, total = 0;
-            if (sys != null) foreach (var l in sys.Items) { if (l.IsLrt) continue; total++; float p = LandmarkSystem.Progress(l, y); if (p >= 0.999f) built++; else if (p > 0) building++; }
+            if (sys != null) foreach (var l in sys.Items) { if (l.IsLrt) continue; total++; float p = LandmarkSystem.InYear(l, y); if (p >= 0.999f) built++; else if (p > 0) building++; }
             yearLine.text = building > 0 ? string.Format("{0}: работает {1} объектов, строится {2}", y, built, building) : string.Format("{0}: работает {1} объектов из {2}", y, built, total);
             calc?.Refresh();
             if (selected != null && selected.Landmark != null) BuildCard();

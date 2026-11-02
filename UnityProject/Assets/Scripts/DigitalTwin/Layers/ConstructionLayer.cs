@@ -5,7 +5,7 @@ using AlatauCity.DigitalTwin.Data;
 namespace AlatauCity.DigitalTwin
 {
     /// <summary>"Construction" view of the 57k buildings, all in the city shader (no GameObjects per building):
-    /// per-bid state + progress in a 256×256 RGBA32 lookup (_AlatauStateTex), base height + height in _AlatauGeoTex,
+    /// per-bid state + progress in a 256×512 RGBA32 lookup (BidTable) (_AlatauStateTex), base height + height in _AlatauGeoTex,
     /// visible-from year in _AlatauYearTex (a building appears when its works start, not when it is finished).
     /// States: 0 context (built / not ours), 1 under construction on plan, 2 behind plan / overdue, 3 paused, 4 completed this year.</summary>
     public static class ConstructionLayer
@@ -49,12 +49,12 @@ namespace AlatauCity.DigitalTwin
         static void Ensure()
         {
             if (stateTex != null) return;
-            stateTex = new Texture2D(256, 256, TextureFormat.RGBA32, false, true) { name = "Alatau construction state", filterMode = FilterMode.Point, wrapMode = TextureWrapMode.Clamp };
-            geoTex = new Texture2D(256, 256, TextureFormat.RGBAFloat, false, true) { name = "Alatau building geo", filterMode = FilterMode.Point, wrapMode = TextureWrapMode.Clamp };
-            yearTex = new Texture2D(256, 256, TextureFormat.RFloat, false, true) { name = "Alatau visible-from year", filterMode = FilterMode.Point, wrapMode = TextureWrapMode.Clamp };
-            state = new byte[256 * 256 * 4]; visible = new float[256 * 256];
-            var geo = new float[256 * 256 * 4]; var db = CityDatabase.Instance;
-            if (db != null) foreach (var b in db.Buildings) if (b != null && b.Bid >= 0 && b.Bid < 65536) { geo[b.Bid * 4] = b.GroundM; geo[b.Bid * 4 + 1] = b.HeightM; }
+            stateTex = BidTable.New(TextureFormat.RGBA32, "Alatau construction state");
+            geoTex = BidTable.New(TextureFormat.RGBAFloat, "Alatau building geo");
+            yearTex = BidTable.New(TextureFormat.RFloat, "Alatau visible-from year");
+            state = new byte[BidTable.N * 4]; visible = new float[BidTable.N];
+            var geo = new float[BidTable.N * 4]; var db = CityDatabase.Instance;
+            if (db != null) foreach (var b in db.Buildings) if (b != null && BidTable.Has(b.Bid)) { geo[b.Bid * 4] = b.GroundM; geo[b.Bid * 4 + 1] = b.HeightM; }
             geoTex.SetPixelData(geo, 0); geoTex.Apply(false, false);
         }
 
@@ -83,7 +83,7 @@ namespace AlatauCity.DigitalTwin
             var worst = new List<Site>();
             foreach (var b in db.Buildings)
             {
-                if (b == null || b.Bid < 0 || b.Bid >= 65536) continue;
+                if (b == null || !BidTable.Has(b.Bid)) continue;
                 int i = b.Bid;
                 if (b.Source == "existing_osm" || b.Year <= TwinState.MinYear) { visible[i] = b.Year; continue; }
                 Timing(b, out int start, out int plan, out int fact);

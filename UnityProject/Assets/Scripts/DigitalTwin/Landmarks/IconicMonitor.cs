@@ -307,7 +307,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             RegisterSources();
             L = ls.Get(id); if (L == null || L.Parts == null || L.Main < 0) return; H = L.Height;
             // the survey shown first is the one in the middle of the works (MakeSurveys snaps it to a survey date); the list runs to the handover
-            Report = L.Begin + 0.5f * (L.Finish - L.Begin); int stage = Mathf.FloorToInt(Report); T0 = Mathf.Floor(L.Begin); T1 = Mathf.Max(Mathf.Ceil(L.Finish + 0.05f), L.EndYear + 1f);
+            Report = L.Begin + 0.5f * (L.Finish - L.Begin); int stage = Mathf.FloorToInt(Report); T0 = Mathf.Floor(L.Begin); T1 = Mathf.Max(Mathf.Ceil(L.Finish + 0.25f), L.EndYear + 1f);
             var lm = L; shiftFn = (l, i, y) => l == lm ? DelayAt(i, y) : 0f;
             prevYear = TwinState.Year;
             if (TwinState.Year != stage) TwinState.Year = stage;

@@ -6,13 +6,17 @@ namespace AlatauCity.DigitalTwin
 {
     /// <summary>Street lamps of the film look along the drawn roads (FilmRoads.Lamps), open in the year shown: posts with an arm over the
     /// carriageway and a warm-white LED head (≈ 3500 K) that lights up from dusk (FilmLook.Lamps). Typical city practice, not survey data:
-    /// main roads 10 m posts every 32 m on both sides, streets 7 m posts every 25 m on one side, a 14 m mast with two arms every 40 m in
-    /// the median of the motorway and the ring, 12 m posts along each carriageway of a dual motorway and along ramps. AlatauRoad draws the
-    /// light of the same lamps on the asphalt from the same rule. Drawn with GPU instancing near the camera only; nothing from high up.</summary>
+    /// main roads 10 m posts every 32 m on both sides, streets 7 m posts every 25 m on one side, 12 m posts every 40 m on both verges of a
+    /// two-way motorway or ring road, 12 m posts along each carriageway of a dual motorway and along ramps. AlatauRoad draws the light of
+    /// the same lamps on the asphalt from the same rule. Rule 20: a post never stands on a drawn carriageway or junction patch (of any
+    /// year) or inside the footprint of a building (of any year): each place is tested as the street furniture count tests it
+    /// (RoadCounters.Blocked); a post that fails moves along the road, then up to 2.4 m away from it, else it is left out. Drawn with GPU
+    /// instancing near the camera only; nothing from high up.</summary>
     public class FilmLamps : MonoBehaviour
     {
         // ------------------------------------------------------------------ the rule (shared with AlatauRoad.shader: keep in step)
-        /// <summary>Spacing (m) and placement of the lamps of a road: mode 1 median mast, 2 both sides, 3 one side at x &lt; 0 (the outer
+        /// <summary>Spacing (m) and placement of the lamps of a road: mode 1 median mast (no longer given: the run counters take a median
+        /// for carriageway, so a two-way motorway or ring road has posts on both verges, mode 2), 2 both sides, 3 one side at x &lt; 0 (the outer
         /// kerb of a one-way carriageway; FilmRoads turns it into 6 = x &gt; 0 where the twin carriageway lies on that side), 4 one side of a
         /// street (x &gt; 0); cls 0 street, 1 main road, 2 motorway / ring / ramp.</summary>
         public static void Rule(TwinData.RoadClass c, bool ramp, bool oneWay, out float step, out int mode, out int cls)
@@ -20,7 +24,7 @@ namespace AlatauCity.DigitalTwin
             if (ramp) { step = 35f; mode = 3; cls = 2; return; }
             switch (c)
             {
-                case TwinData.RoadClass.Highway: case TwinData.RoadClass.Ring: cls = 2; if (oneWay) { step = 38f; mode = 3; } else { step = 40f; mode = 1; } break;
+                case TwinData.RoadClass.Highway: case TwinData.RoadClass.Ring: cls = 2; if (oneWay) { step = 38f; mode = 3; } else { step = 40f; mode = 2; } break;
                 case TwinData.RoadClass.Main: cls = 1; step = 32f; mode = oneWay ? 3 : 2; break;
                 default: cls = 0; if (oneWay) { step = 26f; mode = 3; } else { step = 25f; mode = 4; } break;
             }
@@ -38,6 +42,11 @@ namespace AlatauCity.DigitalTwin
         const float Cell = 200f;
         static readonly bool High = Application.platform != RuntimePlatform.WebGLPlayer;
         static FilmLamps instance;
+        /// <summary>Lamps placed so far (0 before the first placement) and a number that changes with every placement (RoadCounters).</summary>
+        public static int Count => instance != null ? instance.lamps.Count : 0;
+        public static int Placed { get; private set; }
+        /// <summary>Foot of lamp i (the ground, deck or embankment under its post) and its opening years per scenario.</summary>
+        public static void Foot(int i, out Vector3 p, out Vector4 years) { var l = instance.lamps[i]; p = l.P - new Vector3(0f, 0.12f, 0f); years = l.Years; }
         struct Lamp { public Vector3 P; public float Yaw; public byte Type; public Vector4 Years; }
         readonly List<Lamp> lamps = new List<Lamp>();
         readonly Dictionary<long, List<int>> cells = new Dictionary<long, List<int>>();
@@ -56,6 +65,8 @@ namespace AlatauCity.DigitalTwin
         void LateUpdate() { Draw(); }
         /// <summary>Queue the lamps for this frame (the capture tool renders by hand: FilmLook.Redraw calls this before it does).</summary>
         public static void DrawNow() { if (instance != null) instance.Draw(); }
+        /// <summary>Lamp posts queued this frame, 0 when none were drawn (read by the bench mode, AlatauBench).</summary>
+        public static int DrawnNow { get { var i = instance; if (i == null || i.lastFrame != Time.frameCount) return 0; int n = 0; for (int t = 0; t < Types; t++) n += i.counts[t]; return n; } }
 
         void Draw()
         {
@@ -158,10 +169,12 @@ namespace AlatauCity.DigitalTwin
         }
 
         static readonly float[] Nudge = { 0f, 2.5f, -2.5f, 5f, -5f };
+        // moves away from the road (m) when the place by the kerb is a carriageway or a building (rule 20); on a deck only within its pavement
+        static readonly float[] Out = { 0f, 1.2f, 2.4f };
         void Place()
         {
             lamps.Clear(); cells.Clear(); trees = TreeRows(); withTrees = trees != null; lastYear = -1;
-            int moved = 0, dropped = 0;
+            int moved = 0, dropped = 0, ruleMoved = 0, ruleDropped = 0;
             foreach (var run in FilmRoads.Lamps)
             {
                 float hw = run.Half; int mode = run.Mode;
@@ -176,33 +189,47 @@ namespace AlatauCity.DigitalTwin
                     {
                         float x = mode == 1 ? 0f : mode == 2 ? (ps == 0 ? side : -side) : mode == 3 ? -side : side;
                         float armDir = mode == 1 || mode == 3 || (mode == 2 && ps == 1) ? +1f : -1f;
-                        bool done = false;
-                        foreach (float dv in Nudge)
+                        bool done = false, blocked = false;
+                        foreach (float dx in Out)
                         {
-                            float v = v0 + dv; if (v < EndClear || v > run.Len - EndClear) continue;
-                            // not in the mouth of a street that joins in the middle of this road
-                            bool mouth = false; if (run.Mids != null) foreach (var j in run.Mids) if (Mathf.Abs(v - j.x) < j.y + 1.5f) mouth = true;
-                            if (mouth) continue;
-                            int seg = 1; while (seg < run.Along.Length - 1 && run.Along[seg] < v) seg++;
-                            float a0 = run.Along[seg - 1], a1 = run.Along[seg]; var p0 = run.P[seg - 1]; var p1 = run.P[seg];
-                            var c = Vector2.Lerp(p0, p1, a1 > a0 ? (v - a0) / (a1 - a0) : 0f);
-                            var d = (p1 - p0); if (d.sqrMagnitude < 1e-6f) continue; d.Normalize();
-                            var left = new Vector2(-d.y, d.x);
-                            if (NearTree(c + left * x)) continue;
-                            Add(c, left, x, armDir, type, run.Years); done = true; if (dv != 0f) moved++; break;
+                            if (dx > 0f && mode == 1) break;
+                            float xo = x < 0f ? x - dx : x + dx;
+                            foreach (float dv in Nudge)
+                            {
+                                float v = v0 + dv; if (v < EndClear || v > run.Len - EndClear) continue;
+                                // not in the mouth of a street that joins in the middle of this road
+                                bool mouth = false; if (run.Mids != null) foreach (var j in run.Mids) if (Mathf.Abs(v - j.x) < j.y + 1.5f) mouth = true;
+                                if (mouth) continue;
+                                int seg = 1; while (seg < run.Along.Length - 1 && run.Along[seg] < v) seg++;
+                                float a0 = run.Along[seg - 1], a1 = run.Along[seg]; var p0 = run.P[seg - 1]; var p1 = run.P[seg];
+                                float tt = a1 > a0 ? (v - a0) / (a1 - a0) : 0f; var c = Vector2.Lerp(p0, p1, tt);
+                                var d = (p1 - p0); if (d.sqrMagnitude < 1e-6f) continue; d.Normalize();
+                                var left = new Vector2(-d.y, d.x); var at = c + left * xo;
+                                if (dx > 0f && run.DeckAt(seg - 1, tt) > 0.01f && Back(run.Cls) + dx > run.Walk - 0.3f) continue;     // off the deck's edge
+                                if (NearTree(at)) continue;
+                                float foot = run.FootY(seg - 1, tt, at);
+                                // the foot exactly as FilmLamps.Foot gives it to the count
+                                if (RoadCounters.Blocked(new Vector3(at.x, (foot + 0.12f) - 0.12f, at.y))) { blocked = true; continue; }
+                                Add(c, left, xo, armDir, type, run.Years, foot); done = true; if (dv != 0f && !blocked) moved++; break;
+                            }
+                            if (done) break;
                         }
-                        if (!done) dropped++;
+                        if (!done) { dropped++; if (blocked) ruleDropped++; }
+                        else if (blocked) ruleMoved++;
                     }
                 }
             }
-            Debug.Log("[Alatau] film lamps: " + lamps.Count + " street lamps on " + FilmRoads.Lamps.Count + " roads" + (withTrees ? $" ({moved} moved off a tree, {dropped} left out)" : " (street trees not ready yet)"));
+            Placed++;
+            Debug.Log("[Alatau] film lamps: " + lamps.Count + " street lamps on " + FilmRoads.Lamps.Count + " roads" + (withTrees ? $" ({moved} moved off a tree, {dropped} left out)" : " (street trees not ready yet)") +
+                      $"; rule 20: {ruleMoved} moved off a carriageway or out of a building, {ruleDropped} left out for want of a place");
         }
 
-        // a post at x across the road; its arm points across the road toward +x (armDir +1) or -x (armDir -1)
-        void Add(Vector2 c, Vector2 left, float x, float armDir, int type, Vector4 years)
+        // a post at x across the road; its arm points across the road toward +x (armDir +1) or -x (armDir -1); foot = the ground under it
+        // (the terrain, or the deck / embankment of a raised road of the redrawn map: LampRun.FootY)
+        void Add(Vector2 c, Vector2 left, float x, float armDir, int type, Vector4 years, float foot)
         {
             var p = c + left * x; var arm = left * armDir;
-            float y = CityGround.HeightAt(p.x, p.y) + 0.12f;
+            float y = foot + 0.12f;
             float yaw = Mathf.Atan2(arm.x, arm.y) * Mathf.Rad2Deg;           // local +z = the arm
             lamps.Add(new Lamp { P = new Vector3(p.x, y, p.y), Yaw = yaw, Type = (byte)type, Years = years });
             long k = Key(Mathf.FloorToInt(p.x / Cell), Mathf.FloorToInt(p.y / Cell));

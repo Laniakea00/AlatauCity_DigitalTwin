@@ -1,0 +1,19 @@
+# w48 round 2 frames (scenario 0, 2050 unless noted)
+1 view -3849 -19807 363 66 25: 93 paved alleys, round, benches on bays, not hidden by interchange verge
+2 view -3970 -20014 550 210 35: 93 park ground next to west interchange
+3 view -3008 -20122 140 240 12: 94 no walk ending in lawn by the overpass
+4 view -3500 -18800 90 150 25: 95/96 benches on bays, playground on alley
+5 view -3500 -18800 260 200 32: 97 walks to paved round, no grey patches
+6 view -3367 -18746 300 200 30: 96/99 school field with track, playground with path
+7 view -3200 -19900 300 120 30 and view -3020 -19598 320 200 28: 99 lawn yards, aprons, rest squares; 100 neighbours differ
+8 view -3208 -19458 371 246 31: 100 neighbours differ
+9 year 2026 view -2950 -19450 2600 200 55: 83/84 no old grid, no future pads
+10 year 2030 view -2950 -19450 1400 200 50: 84 earthworks cut to lot outlines
+11 year 2026 view -3316 -20534 300 30 30: 104 L00414 nothing before 2028; 101 continuous rows, lawn round houses
+12 view -3316 -20534 140 30 25: 103 straight playground edge with kerb
+13 view -2834 -20470 160 200 18: 105 straight paving edges, benches on bays
+14 view -3596 -19808 277 346 30: 82 plain lawn at model-ground edge
+15 view -2446 -19091 160 20 20: 85 plain concrete
+16 view -2950 -20480 220 120 22: 106 no moiré
+17 timeline 2026→2034 at view -2950 -19450 1400 200 50: pieces appear by year without flicker
+log: «ground types … outline segments», «ground props: … benches of the parks, … of the yards», «film trees on hard ground» = 0

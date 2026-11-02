@@ -87,7 +87,7 @@ namespace AlatauCity.DigitalTwin.Modules
             moneyNote = new Label(); moneyNote.style.display = DisplayStyle.None; cbk.Add(moneyNote);
             cbk.Add(SourceTags.Line(TwinModels.Build, TwinModels.Money));
             // the year runs smoothly in the presentation: the chart follows it every frame
-            bChart.schedule.Execute(() => { if (bChart.panel == null) return; float yf = Landmarks.LandmarkSystem.YearNow; if (Mathf.Abs(yf - bChart.Year) > 0.002f) { bChart.Year = yf; bChart.MarkDirtyRepaint(); } }).Every(33);
+            bChart.schedule.Execute(() => { if (bChart.panel == null) return; float yf = Landmarks.LandmarkSystem.ShownYear; if (Mathf.Abs(yf - bChart.Year) > 0.002f) { bChart.Year = yf; bChart.MarkDirtyRepaint(); } }).Every(33);
 
             Right();
             var nb = Widgets.Block(panel, Loc.T("c_nets"), Loc.T("c_nets_sub"));
@@ -168,7 +168,7 @@ namespace AlatauCity.DigitalTwin.Modules
                 }
                 // the chart starts in the first year of the timeline; the data start in TwinData.Y0
                 int k0 = TwinState.MinYear - TwinData.Y0; float[] Cut(float[] a) { var r = new float[a.Length - k0]; System.Array.Copy(a, k0, r, 0, r.Length); return r; }
-                bChart.Plan = Cut(pl); bChart.Fact = Cut(fa); bChart.Money = System.Array.ConvertAll(ser, Cut); bChart.Year = Mathf.Max(y, Landmarks.LandmarkSystem.YearNow); bChart.Refresh();
+                bChart.Plan = Cut(pl); bChart.Fact = Cut(fa); bChart.Money = System.Array.ConvertAll(ser, Cut); bChart.Year = Mathf.Max(y, Landmarks.LandmarkSystem.ShownYear); bChart.Refresh();
                 srcBar.Clear(); srcLeg.Clear(); int yi2 = TwinData.YI(y); float tot = 0; for (int k = 0; k < 4; k++) tot += ser[k][yi2];
                 string[] srcK = { "src_budget", "src_private", "src_ppp", "src_quasi" };
                 for (int k = 0; k < 4 && tot > 0; k++)
