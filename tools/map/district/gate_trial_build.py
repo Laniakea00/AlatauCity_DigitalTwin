@@ -731,7 +731,10 @@ for key, lst in sorted(ends_at.items()):
 ic_streets = [s["id"] for s in STREETS if s["id"].startswith("k_") and s["class"] == "expressway"]
 node("ic_a3_bakad", -2270.0, -20315.0, "cloverleaf", ic_streets, keep_existing=True, registry_id="interchange_a3_bakad",
      osm_ids=[s["source"].split(":", 1)[1] for s in STREETS if s["id"].startswith("k_")],
-     why_ru="существующий клевер с распределительными дорогами по А-3 (OSM/Overture), остаётся как есть; путепроводы БАКАД над А-3")
+     why_ru="существующий клевер с распределительными дорогами по А-3 (OSM/Overture), остаётся как есть; путепроводы БАКАД над А-3",
+     # tester r2 item 71: the loop k_92670eef → k_d080e3ad → k_dc8f8e80 (А-3 S → БАКАД E) carries 4.3–5.7k veh/h; layout kept
+     ramps={"А-3 S → БАКАД E": {"lanes": 2, "from_year": 2035,
+                                "why_ru": "реконструкция петли: спрос выше 1 200 авт./ч (норма второй полосы), модель qTwin"}})
 
 # twin roads cut by the area edge that no trial street continues: listed so merge can trim them (log only)
 for c in cuts:
@@ -1404,7 +1407,8 @@ phases = [{"queue": 1, "years": [2026, 2030],
 # qTwin: the line comes from Алматы-1 over the Turksib corridor east of А-3 and enters the city at its east edge south of the
 # БАКАД; it crosses the А-3 × БАКАД cloverleaf (А-3, its ramps, the TPU street) on a viaduct, so the station is elevated: two
 # tracks along the plot's north side (the side w44's land_transit gives the tracks: towards the motorways), a side platform on
-# the hall's side at the hall's upper floor, buffer stops at the west end (a terminus until the line goes on, 2050).
+# the hall's side, reached from the hall's upper floor by stairs and lifts (the viaduct clears the drives under it), buffer
+# stops at the west end (a terminus until the line goes on, 2050).
 RAIL_PLOT = (-2930.0, -20590.0, -2680.0, -20352.0)      # agglo_rail_station_1 footprint (rect `rail` of the objects)
 RAIL_GAP_M = 5.0          # track centres (w44 land_transit TRACK_BED_M; модель qTwin)
 RAIL_EDGE_M = 3.0         # north track axis from the plot's north edge
@@ -1417,11 +1421,17 @@ PLAT_X = (-2900.0, -2770.0)      # platform 130 m = w44 land_transit TRAIN_LEN_M
 PLAT_W_M = 8.0            # side platform (w44 PLATFORM_W_M)
 PLAT_EDGE_M = 1.75        # track axis to the platform edge (модель qTwin: car 3,5 m wide)
 PLAT_UP_M = 1.1           # high platform above the rail head (модель qTwin)
-# rail head heights (absolute, as road y): the platform section level, rising and falling at ≤ 11 ‰ so that the underside
-# (rail head − 1.8 m deck) clears every road it crosses by bridges.road_clearance_m 5,0 m. Road surfaces from the Gate run of
-# 01.11 (network.json: TPU street 640,1; А-3 643,6–644,1; ramps 638,2–644,2 m); checked again by rail_check() on each build.
+# rail head heights (absolute, as road y): the platform section level, rising and falling at ≤ 11 ‰. The deck's underside is
+# the rail head less RAIL_DECK_M and spans RAIL_DECK_HALF_M each side of each track axis (lib MODEL rail_deck_below_m /
+# rail_deck_half_m, as rule 25 «under_decks» and RailLayer take it); every point of it over a carriageway clears that
+# carriageway by bridges.road_clearance_m 5,0 m, over a drive or turnaround pad by fire_access.arches.height_min_m 4,5 m, both
+# with RAIL_MARGIN_M to spare. The station level is set over the highest ground under its deck (641,5 m at the buffer stops:
+# any drive at grade there passes), the hump over ramp s35 k_f46e8f8f (651,45 m needed at its deck edge). Road surfaces of the
+# runs of 01.11 (gate_trial r5, Gate r4 network.json / driveways.json); rail_check() measures it again on each build.
 RAIL_DECK_M = 1.8
-RAIL_PROFILE = [(0.0, 647.0), (230.0, 647.0), (600.0, 651.1), (700.0, 651.1)]
+RAIL_DECK_HALF_M = 2.6
+RAIL_MARGIN_M = 0.3
+RAIL_PROFILE = [(0.0, 648.2), (230.0, 648.2), (560.0, 651.6), (700.0, 651.6)]
 RAIL_FALL = 0.011
 
 
@@ -1496,11 +1506,15 @@ def rail_spec(area, edge_to):
             "why": MODEL + ": двухпутная линия (колея 1520) приходит с востока через коридор Турксиба и входит в город на его восточной "
                            "границе южнее БАКАД; развязку А-3 × БАКАД (А-3, её съезды, улица ТПУ) проходит по эстакаде, поэтому "
                            "станция эстакадная: пути вдоль северной стороны участка станции (сторона к магистралям, как у w44), "
-                           "боковая платформа со стороны вокзала на уровне его второго этажа, упоры в западном конце — тупиковая "
+                           "боковая платформа со стороны вокзала, вход с его второго этажа лестницами и лифтами, упоры в западном конце — тупиковая "
                            "станция 1-й очереди до продления линии (53,5 км к 2050). Кривая R %s м, поворот %s°; головка рельса "
-                           "%s м на станции, до %s м над А-3, уклоны ≤ %d ‰; низ пролёта над каждой дорогой ≥ 5,0 м "
-                           "(bridges.road_clearance_m)" % (dec(RAIL_R, 0), dec(turn, 1), dec(RAIL_PROFILE[0][1], 1),
-                                                           dec(RAIL_PROFILE[-1][1], 1), round(RAIL_FALL * 1000))}
+                           "%s м на станции, до %s м над А-3, уклоны ≤ %d ‰; низ пролёта (головка рельса − %s м, %s м в каждую "
+                           "сторону от оси пути) над каждой проезжей частью ≥ 5,0 м (bridges.road_clearance_m), над проездами "
+                           "и площадками ≥ 4,5 м (fire_access.arches.height_min_m), с запасом %s м; на станции — над самой "
+                           "высокой землёй под пролётом (%s м)" % (
+                               dec(RAIL_R, 0), dec(turn, 1), dec(RAIL_PROFILE[0][1], 1), dec(RAIL_PROFILE[-1][1], 1),
+                               round(RAIL_FALL * 1000), dec(RAIL_DECK_M, 1), dec(RAIL_DECK_HALF_M, 1), dec(RAIL_MARGIN_M, 1),
+                               dec(RAIL_PROFILE[0][1] - RAIL_DECK_M - 4.5 - RAIL_MARGIN_M, 1))}
     platforms = [{"id": "rail_agglo_p1", "line": "rail_agglo_1", "station": "agglo_rail_station_1", "side": "south",
                   "tracks": ["rail_agglo_t2"], "polygon": poly_pts(plat, 2), "y": y_pl, "length_m": round(PLAT_X[1] - PLAT_X[0], 1),
                   "width_m": PLAT_W_M, "years": Y4(2030),
@@ -1510,31 +1524,67 @@ def rail_spec(area, edge_to):
     return {"lines": [line], "platforms": platforms}
 
 
-def rail_check(rail, net_path):
-    """Clearance of the viaduct over the roads of a run's network.json (road y + 5.0 m ≤ rail head − deck): [(seg, class, x, z,
-    clear_m)]; and homes zones nearer than szz.rail_m (100 m) to an outer track."""
+def rail_check(rail, out_dir):
+    """Clearance under the viaduct as rule 25 «under_decks» measures it, on a run's network.json and driveways.json: the deck
+    (rail head − RAIL_DECK_M, RAIL_DECK_HALF_M each side of each track) over every carriageway (land_util carriage polygon,
+    bridges.road_clearance_m 5,0 m) and every drive and turnaround pad (fire_access.arches 4,5 m), sampled on a 0,5 m grid.
+    Returns [(id, what, x, z, clear_m, need_m)], the lowest point per road / drive."""
+    import shapely
+    sys.path.insert(0, os.path.join(C.MAP, "gen"))
+    import land_util as U
     out = []
-    if os.path.exists(net_path):
-        with open(net_path, encoding="utf-8") as f:
+    ln = rail["lines"][0]
+    tr = [np.array(t_["pts"], float) for t_ in ln["tracks"]]
+    fp = unary_union([LineString(q[:, :2]).buffer(RAIL_DECK_HALF_M, cap_style=2) for q in tr])
+    axes = [(LineString(q[:, :2]), np.r_[0.0, np.cumsum(np.hypot(*np.diff(q[:, :2], axis=0).T))], q[:, 2]) for q in tr]
+    nm = U.Norms()
+
+    def under(Q):                                    # deck underside over each point: the nearer track's rail head − deck
+        best = np.full(len(Q), np.inf)
+        dist = np.full(len(Q), np.inf)
+        for L, S, Y in axes:
+            P = shapely.points(Q)
+            d_ = shapely.distance(L, P)
+            y_ = np.interp(shapely.line_locate_point(L, P), S, Y) - RAIL_DECK_M
+            m = d_ < dist
+            best[m], dist[m] = y_[m], d_[m]
+        return best
+
+    def along(P):
+        P = np.asarray(P, float)
+        S = np.r_[0.0, np.cumsum(np.hypot(*np.diff(P[:, :2], axis=0).T))]
+        L = LineString(P[:, :2])
+        return lambda Q: np.interp(shapely.line_locate_point(L, shapely.points(Q)), S, P[:, 2])
+
+    def low(poly, surf, sid, what, need):
+        ov = poly.intersection(fp)
+        if ov.is_empty or ov.area < 0.01:
+            return
+        x0, z0, x1, z1 = ov.bounds
+        gx, gz = np.meshgrid(np.arange(x0 + 0.25, x1, 0.5), np.arange(z0 + 0.25, z1, 0.5))
+        gx, gz = gx.ravel(), gz.ravel()
+        m = shapely.contains_xy(ov, gx, gz)
+        Q = np.vstack([shapely.get_coordinates(ov), np.c_[gx[m], gz[m]]])
+        c = under(Q) - surf(Q)
+        k = int(np.argmin(c))
+        out.append((sid, what, round(float(Q[k, 0]), 1), round(float(Q[k, 1]), 1), round(float(c[k]), 2), need))
+
+    for name, need in (("network.json", 5.0), ("driveways.json", 4.5)):
+        path = os.path.join(out_dir, name)
+        if not os.path.exists(path):
+            continue
+        with open(path, encoding="utf-8") as f:
             net = json.load(f)
-        ln = rail["lines"][0]
-        cl = LineString([(q[0], q[1]) for q in ln["tracks"][0]["pts"]])
-        for sg in net["segments"]:
-            g = LineString([(q[0], q[1]) for q in sg["pts"]])
-            if not g.intersects(cl):
-                continue
-            arr = np.array(sg["pts"], float)
-            cs = np.r_[0.0, np.cumsum(np.hypot(*np.diff(arr[:, :2], axis=0).T))]
-            X = g.intersection(cl)
-            for x in getattr(X, "geoms", [X]):
-                if x.geom_type != "Point":
-                    continue
-                y_road = float(np.interp(g.project(x), cs, arr[:, 2]))
-                s_ = cl.project(x)
-                y_rail = float(np.interp(s_, np.r_[0.0, np.cumsum(np.hypot(*np.diff(np.array(ln["tracks"][0]["pts"])[:, :2], axis=0).T))],
-                                         np.array(ln["tracks"][0]["pts"])[:, 2]))
-                out.append((sg["id"], sg["class"], round(x.x), round(x.y), round(y_rail - RAIL_DECK_M - y_road, 2)))
-    return out
+        for sg, poly, lv in U.network_polys(net, nm, "carriage"):
+            if len(sg.get("pts") or []) >= 2 and poly.intersects(fp):
+                low(poly, along(sg["pts"]), sg["id"], f"{sg['class']} {sg.get('street') or ''}".strip(), need)
+        nodes = {n["id"]: n for n in net.get("nodes") or []}
+        for pd in net.get("pads") or []:
+            pg = Polygon(pd["polygon"]).buffer(0)
+            y = (nodes.get(pd["node"]) or {}).get("y")
+            if y is not None and pg.intersects(fp):
+                low(pg, lambda Q, y=float(y): np.full(len(Q), y), "pad_" + pd["node"], "разворотная площадка", need)
+    return sorted(out, key=lambda r_: r_[4] - r_[5])
 
 
 RAIL = rail_spec(AREA, "Алматы-1: остальные 12,4 км 1-й очереди — вне города (за восточной границей пробной зоны)")
@@ -1619,8 +1669,8 @@ if __name__ == "__main__":
     print(f"wrote {SPEC_OUT}: {len(txt) // 1024} KB; streets {len(STREETS)}, nodes {len(NODES)}, edge_joints {len(EDGE_JOINTS)}, "
           f"zones {len(ZONES)}, objects {len(OBJ)}; area {spec['area_ha']} ha")
     print(f"rail: {RAIL['lines'][0]['length_m']} m, edge {RAIL['lines'][0]['edge_joints']}, homes zones within 100 m {RAIL_SZZ}")
-    for r_ in rail_check(RAIL, os.path.join(C.OUT, "gate_trial", "network.json")):
-        print("  rail over", r_)
+    for r_ in rail_check(RAIL, os.path.join(C.OUT, "gate_trial")):
+        print("  rail over", r_, "LOW" if r_[4] < r_[5] else "")
     if "--no-check" not in sys.argv:
         ok = CHK.main([SPEC_OUT])
         sys.exit(0 if ok else 1)

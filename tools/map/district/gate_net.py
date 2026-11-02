@@ -288,9 +288,18 @@ def keep_name(p):
     return n
 
 
+# The east side of the А-3 diamond at ЖК Gate City (registry interchange_a3_km18_5) is outside the city: the area edge runs
+# along the А-3 there. Its northbound exit and entry ramps and a service road off the А-3 node cross that edge onto a leftover
+# piece of the twin's base map (a loop and stubs east of the А-3, no buildings; its onward streets open only in 2099), so no
+# car uses them in any year (merged roads.json of Gate r4: e16366, e14491, e14501, e16541 at v/c 0 in 2035 and 2050).
+# Retired (spec retire_existing); the diamond keeps its west ramps, which serve Gate City.
+ORPHAN_WHY = ("съезд / проезд ведёт за границу города на обрывок базовой карты двойника (петля и тупики к востоку от А-3, "
+              "зданий нет, дальше улицы только 2099 г.): машин нет ни в одном году — снят; развязка у ЖК Gate City "
+              "работает западными съездами")
+ORPHAN_OSM = {SH[k]: ORPHAN_WHY for k in ("c1053ec1", "0229484f", "4d44246d") if k in SH}
 for oid, (g, p) in sorted(OSM.items()):
     cls = osm_class(p, g)
-    if cls is None:
+    if cls is None or oid in ORPHAN_OSM:
         continue
     clip = g.intersection(GATE)
     if clip.length < 3.0:
@@ -310,6 +319,57 @@ for oid, (g, p) in sorted(OSM.items()):
            why="существующая дорога OSM/Overture, как есть (направление линии = направление движения)" if cls in ("expressway", "ramp")
            else "существующая дорога OSM, как есть")
     KEEP_IDS[oid] = sid
+# Existing roads that leave the area past the city edge and come back: gen_network keeps only the parts inside, so the part
+# that comes back in has nothing to stitch to (no district and no twin road out there). The road goes on inside: the piece
+# outside is drawn 0.3 m inside the edge as the same existing road.
+def edge_piece(key, sid, cls, name, why, axis=None, profile=None):
+    oid = SH.get(key)
+    if not oid:
+        return None
+    g = OSM[oid][0]
+    for q in [q for q in getattr(g.difference(GATE), "geoms", [g.difference(GATE)]) if q.geom_type == "LineString"]:
+        a_, b_ = q.coords[0], q.coords[-1]
+        if not (GATE.exterior.distance(Point(a_)) < 0.5 and GATE.exterior.distance(Point(b_)) < 0.5 and 20.0 < q.length < 400.0):
+            continue                                        # only a piece that leaves and comes back
+        if g.project(Point(a_)) > g.project(Point(b_)):
+            a_, b_ = b_, a_                                 # in the direction of travel
+        # the same path 0.3 m inside the edge: the area's inner ring between the points nearest to where the way leaves
+        # and comes back (the way can cut a corner of the edge by up to 2 m, so it is not simply shifted)
+        ring = GATE.buffer(-0.3, join_style=2).exterior
+        sa, sb = ring.project(Point(a_)), ring.project(Point(b_))
+
+        def ring_path(s0, s1):                             # along the ring's own direction, over its start if needed
+            if s0 <= s1:
+                return list(substring(ring, s0, s1).coords)
+            return list(substring(ring, s0, ring.length).coords) + list(substring(ring, 0.0, s1).coords)[1:]
+        c1, c2 = ring_path(sa, sb), ring_path(sb, sa)[::-1]
+        fw = min((LineString(c1), LineString(c2)), key=lambda q_: q_.length)     # the short way round, from a_ to b_
+        return street(sid, cls, list(fw.simplify(0.05).coords), name, 2025, oneway=True, years=C.EXISTING, axis=axis,
+                      layer="osm", profile=profile, why=why % q.length)
+    return None
+
+
+# А-3 southbound at the south-east edge: the area edge (city.json) runs along this carriageway, so the OSM way fa5592e4 leaves
+# the area for 141 m on the edge itself (x −3597…−3681); the part that comes back in (node n791 of the Gate runs) had no twin
+# road within 80 m (the twin's А-3 crosses the edge at J025, 142 m away). So the southbound А-3 is one road through Gate and
+# meets the city's А-3 only at J025 (northbound) and J026 (southbound).
+A3_SB_EDGE = edge_piece(
+    "fa5592e4", "s_a3_sb_edge", "expressway", "А-3 Алматы – Өскемен", axis="ax_a3",
+    profile={"carriageways": 1, "oneway": True, "lanes": [2, 0], "median_w": 0.0, "verge_w": [0.0, 10.0],
+             "sidewalk_w": [0.0, 0.0], "bike_w": [0.0, 0.0], "parking_w": [0.0, 0.0]},
+    why="существующая проезжая часть А-3 на юг (OSM fa5592e4), %.0f м по самой границе района: "
+        "граница города идёт по ней, и дорога OSM уходила из района и возвращалась; кусок проведён в 0,3 м "
+        "внутри границы как продолжение той же проезжей части (профиль — как у соседних кусков: одна "
+        "проезжая часть, 2 полосы), иначе южная часть А-3 в Gate начиналась на границе без связи с "
+        "А-3 города (стык в 142 м от J025)")
+# the А-3 × А-19 interchange at Ынтымақ (ic_a3_a19): its ramp 7c490ced leaves the area for 85 m at x −2043…−1997 and comes
+# back, so in the Gate runs it was two pieces with free ends on the edge (n954, n955) and the merge stitched them to the twin's
+# base-map leftover there, whose roads open only in 2099
+A3_A19_RAMP_EDGE = edge_piece(
+    "7c490ced", "s_a3_a19_ramp_edge", "ramp", "съезд развязки",
+    why="существующий съезд развязки А-3 × А-19 у Ынтымака (OSM 7c490ced), %.0f м за границей города: дорога OSM "
+        "уходила из района и возвращалась; кусок проведён в 0,3 м внутри границы как продолжение того же съезда, "
+        "иначе съезд был разорван на два куска с концами на границе")
 # the trial's village streets keep their ids and classes (level-1 design)
 for s in T.STREETS:
     if s["source"].startswith("keep_existing:") and s["id"].startswith("v_"):
@@ -386,7 +446,7 @@ for oid, (g, p) in OSM.items():
         RETIRED.append(oid)
     elif gi.intersection(DEV_IN.buffer(5)).length > 0.5 * gi.length and not houses_hit(gi.buffer(30.0)):
         RETIRED.append(oid)                      # a road that serves existing houses (ЖК Gate City, farms) stays
-RETIRED_SET = set(RETIRED)
+RETIRED_SET = set(RETIRED) | set(ORPHAN_OSM)
 # OSM service drives (sub driveway / parking_aisle / alley) would come out of gen_network as driveway_secondary, a class
 # CONTRACT §8 does not use: the ones that stay are kept as village lanes (in a village) or local side streets
 for oid, (g, p) in sorted(OSM.items()):

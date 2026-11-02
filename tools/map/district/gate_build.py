@@ -142,8 +142,9 @@ ic_existing("ic_a3_a19", -2052.5, -18338.8, "trumpet", [k_of("3cec7dd6"), k_of("
             ["be1950a1", "7c490ced", "b6783511", "8cd1a33b", "fda944b2"], "interchange_a3_yntymak_zhanadaur",
             "существующая развязка А-3 × А-19 (OSM), съезды как в данных; новых съездов в Gate не добавляется")
 ic_existing("ic_a3_gatecity", -3302.0, -23824.0, "diamond", [k_of("1424848a"), "s_gatecity"],
-            ["fd499b4d", "86370d28", "c1053ec1", "0229484f"], "interchange_a3_km16_5",
-            "существующий съезд А-3 у ЖК Gate City (OSM); Проспект Gate City приходит к его концевому узлу")
+            ["fd499b4d", "86370d28"], "interchange_a3_km18_5",
+            "существующий съезд А-3 у ЖК Gate City (OSM, реестр interchange_a3_km18_5 в 74 м); Проспект Gate City приходит к "
+            "его концевому узлу; восточные съезды (c1053ec1, 0229484f) за границей города сняты (retire_existing)")
 # Проспект Gate City ends at the ramp terminal of the existing interchange (OSM node where ramp fd499b4d meets the ЖК streets)
 GCs = N.SID["s_gatecity"]
 term = OSM[oid_full("fd499b4d")][0]
@@ -712,6 +713,12 @@ obj("pepsico", "move", REG["pepsico"]["geom"]["coordinates"], list(pep_c), "poin
     "по источнику: завод PepsiCo в мкр Ынтымақ строится — его корпус есть в OSM (здание двойника bid 48572, 28 041 м², 347 × 82 м); "
     "точка реестра стояла среди домов Ынтымака — объект на своём корпусе, корпус остаётся существующим зданием; "
     "вокруг — зона i_pepsico (промышленность)", yaw=-74.0, basis="по источнику")
+# the А-3 diamond at ЖК Gate City: registry interchange_a3_km18_5 (OSM ramps, 74 m from node ic_a3_gatecity; the level-0 spec
+# named km16_5, 1.9 km south, outside the city)
+obj("interchange_a3_km18_5", "keep", REG["interchange_a3_km18_5"]["geom"]["coordinates"], [-3302.0, -23824.0], "point_50m",
+    "по источнику: существующая развязка OSM (узел ic_a3_gatecity, ромб); в Gate её западные съезды fd499b4d и 86370d28 — "
+    "к Проспекту Gate City; восточные съезды c1053ec1 и 0229484f и проезд 4d44246d с узла А-3 ведут за границу города "
+    "на обрывок базовой карты (зданий нет, дальше улицы только 2099 г.) — сняты (retire_existing)", basis="по источнику")
 # hospital (Golden gets its own id), polyclinic (Growing-E gets its own id)
 hosp = Polygon(Z.ZBY["m_hospital"]["poly"]).buffer(0)
 hfp = box(-2600.0, -18270.0, -2420.0, -18060.0).intersection(hosp)
@@ -830,7 +837,7 @@ for n in N.NODES.values():
         continue
     NODES_OUT.append(d)
 ZONES_OUT = [{k: v for k, v in z.items() if not k.startswith("_")} for z in ZONES]
-replaced = sorted(set(N.RETIRED) | set(T.spec["replaced_osm"]))
+replaced = sorted((set(N.RETIRED) | set(T.spec["replaced_osm"])) - set(N.ORPHAN_OSM))
 
 # agglomeration rail at the TPU station (tester r2 item 55): the trial's design, cut at the district's east edge (the city's)
 RAIL = T.rail_spec(GATE, "Алматы-1: остальные 12,4 км 1-й очереди — вне города (за восточной границей района)")
@@ -863,6 +870,7 @@ spec = {
     "utilities": UTIL,
     "corridors": None,
     "replaced_osm": replaced,
+    "retire_existing": [{"osm": oid, "why_ru": why} for oid, why in sorted(N.ORPHAN_OSM.items())],
     "scheme_changes": [{"id": k, "why": v} for k, v in Z.SCHEME_CHANGES + N.SCHEME_CHANGES],
     "trial_changes": [{"id": k, "why": v} for k, v in N.TRIAL_CHANGED.items()] + [{"id": k, "why": v} for k, v in Z.CHANGES],
     "checks": {},
@@ -892,8 +900,8 @@ if __name__ == "__main__":
     print("targets", {k: TARGETS[k] for k in ("homes_2050", "population_2050", "jobs_2050")}, "FH %.3f FJ %.3f" % (FH, FJ))
     print("log", Counter(x["what"] for x in LOG))
     print(f"rail: {RAIL['lines'][0]['length_m']} m, edge {RAIL['lines'][0]['edge_joints']}, homes zones within 100 m {RAIL_SZZ}")
-    for r_ in T.rail_check(RAIL, os.path.join(C.OUT, "gate", "network.json")):
-        print("  rail over", r_)
+    for r_ in T.rail_check(RAIL, os.path.join(C.OUT, "gate")):
+        print("  rail over", r_, "LOW" if r_[4] < r_[5] else "")
     if "--no-check" not in sys.argv:
         ok = CHK.main([SPEC_OUT])
         sys.exit(0 if ok else 1)
