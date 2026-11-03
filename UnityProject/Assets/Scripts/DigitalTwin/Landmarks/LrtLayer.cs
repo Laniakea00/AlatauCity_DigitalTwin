@@ -54,7 +54,9 @@ namespace AlatauCity.DigitalTwin.Landmarks
         Material mat; Mesh carMesh, leadNight, tailNight; bool built, nightShown; int lastYear = -1; Scenario lastSc = (Scenario)(-1);
         static readonly int GhostId = Shader.PropertyToID("_Ghost"), BuildId = Shader.PropertyToID("_Build");
 
-        const float DeckW = 9.6f, DeckT = 1.9f, Above = 8.5f;
+        // the deck 1 m deep (the data's rail stands 1.2 m over the underside, its clearance 5 m), a pier every PierStep m of the
+        // line and a mast every MastStep m (the Astana viaduct: tall single columns, spans of 30 m)
+        const float DeckW = 9.6f, DeckT = 1.0f, Above = 8.5f, PierStep = 30f, MastStep = 50f, LowDeck = 2.5f;
         static readonly Color32 Conc = LM.C("#cfcbc3"), ConcD = LM.C("#aaa59c"), Ballast = LM.C("#77736c"), Rail = LM.C("#4b5057"), Pole = LM.C("#8d939a");
         // the Astana LRT (opened 16.05.2026) as the reference: a light concrete box girder with a white balustrade and a yellow edge, single
         // columns with a Y head, the line on a concrete median with kerbs; at street level a green track bed between kerbs, no fences
@@ -320,7 +322,9 @@ namespace AlatauCity.DigitalTwin.Landmarks
                         if (i < n - 2 && r.Sec[i + 1] != Tunnel) Portal(deck, p1, -h, hood);
                         continue;
                     }
-                    if (kind == Ground) { GroundSpan(deck, i, p0, p1, s0, s1, u0, u1); continue; }
+                    // a ramp's low end (the underside under LowDeck m over the ground) is a fill between retaining walls, no piers
+                    if (kind == Ground || Mathf.Min(p0.y - CityGround.HeightAt(p0.x, p0.z), p1.y - CityGround.HeightAt(p1.x, p1.z)) - DeckT < LowDeck)
+                    { GroundSpan(deck, i, p0, p1, s0, s1, u0, u1); continue; }
                     // deck slab: top, soffit, both faces
                     Vector3 a = p0 - s0 * DeckW * 0.5f, b = p0 + s0 * DeckW * 0.5f, c = p1 + s1 * DeckW * 0.5f, d = p1 - s1 * DeckW * 0.5f; var dn = Vector3.down * DeckT;
                     deck.Quad(a, b, c, d, Vector3.up, Conc, LM.Paving, 1f, new Vector2(a.x, a.z), new Vector2(b.x, b.z), new Vector2(c.x, c.z), new Vector2(d.x, d.z));
@@ -344,27 +348,20 @@ namespace AlatauCity.DigitalTwin.Landmarks
                         Strip(deck, p0, p1, s0, s1, tc - 0.72f, 0.14f, 0.2f, Rail, LM.Steel);
                         Strip(deck, p0, p1, s0, s1, tc + 0.72f, 0.14f, 0.2f, Rail, LM.Steel);
                     }
-                    // overhead line: mast + cantilevers every other point, contact wires
-                    if (i % 2 == 0)
+                    // overhead line: mast + cantilevers every MastStep m, contact wires
+                    if (Mathf.Floor(u0 / MastStep) != Mathf.Floor(u1 / MastStep))
                     {
                         var m0 = p0; deck.Beam(m0, m0 + Vector3.up * 7.2f, 0.35f, 0.35f, Pole, LM.Steel);
                         deck.Beam(m0 + Vector3.up * 6.9f - s0 * 3.2f, m0 + Vector3.up * 6.9f + s0 * 3.2f, 0.18f, 0.18f, Pole, LM.Steel);
                     }
                     foreach (float tc in new[] { -2.15f, 2.15f })
                         deck.Beam(p0 + s0 * tc + Vector3.up * 6.0f, p1 + s1 * tc + Vector3.up * 6.0f, 0.05f, 0.05f, Rail, LM.Steel);
-                    // pier every other point: a single column with a Y head under the deck (two arms out to the deck's bearings)
-                    if (i % 2 == 0)
-                    {
-                        float gy = CityGround.HeightAt(p0.x, p0.z), fork = Mathf.Max(gy + 1.5f, p0.y - DeckT - 3.0f);
-                        piers.Beam(new Vector3(p0.x, gy - 1.5f, p0.z), new Vector3(p0.x, fork, p0.z), 1.9f, 1.9f, Conc, LM.Solid);
-                        foreach (float sg in new[] { -1f, 1f })
-                            piers.Beam(new Vector3(p0.x, fork - 0.4f, p0.z), p0 + s0 * sg * (DeckW * 0.32f) + Vector3.down * (DeckT + 0.05f), 1.3f, 1.5f, Conc, LM.Solid);
-                    }
+                    // the piers come with the medians, once the film roads tell where the carriageways are (BuildMedians)
                 }
                 if (r.Ends != null && EndsOf(r, ph, deck)) any = true;
                 if (!any) continue;
                 Add(deck.ToMesh("LRT deck " + r.Name + " " + ph), ph, 1, "LRT deck · " + r.Name + " · phase " + (ph + 1));
-                Add(piers.ToMesh("LRT piers " + r.Name + " " + ph), ph, 0, "LRT piers · " + r.Name + " · phase " + (ph + 1));
+                if (piers.VertexCount > 0) Add(piers.ToMesh("LRT piers " + r.Name + " " + ph), ph, 0, "LRT piers · " + r.Name + " · phase " + (ph + 1));
             }
         }
         bool mediansBuilt;
@@ -373,7 +370,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
         /// carriageway, the other off it) gets none, so no kerb runs across the lanes.</summary>
         void BuildMedians()
         {
-            int spans = 0;
+            int spans = 0, piersN = 0;
             foreach (var r in Routes)
             {
                 if (r.Sec == null) continue;
@@ -385,12 +382,13 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 }
                 for (int ph = 0; ph < 3; ph++)
                 {
-                    var k = new LandmarkKit();
+                    var k = new LandmarkKit(); var pk = new LandmarkKit();
                     for (int i = 0; i < n - 1; i++)
                     {
                         if (r.Phase[i] != ph || r.Sec[i] != Elevated) continue;
                         Vector3 p0 = r.P[i], p1 = r.P[i + 1];
                         float g0 = CityGround.HeightAt(p0.x, p0.z), g1 = CityGround.HeightAt(p1.x, p1.z);
+                        if (Mathf.Floor(r.S[i] / PierStep) != Mathf.Floor(r.S[i + 1] / PierStep) && Pier(pk, r, i, side)) piersN++;
                         if (p0.y - g0 < 4f || p1.y - g1 < 4f) continue;                          // a ramp end: the deck is too low for a median
                         bool on0 = FilmRoads.OnSurface(new Vector3(p0.x, g0, p0.z), 0f, true), on1 = FilmRoads.OnSurface(new Vector3(p1.x, g1, p1.z), 0f, true);
                         if (on0 != on1) continue;
@@ -406,9 +404,31 @@ namespace AlatauCity.DigitalTwin.Landmarks
                         spans++;
                     }
                     if (k.VertexCount > 0) Add(k.ToMesh("LRT median " + r.Name + " " + ph), ph, 0, "LRT median · " + r.Name + " · phase " + (ph + 1));
+                    if (pk.VertexCount > 0) Add(pk.ToMesh("LRT piers " + r.Name + " " + ph), ph, 0, "LRT piers · " + r.Name + " · phase " + (ph + 1));
                 }
             }
-            Debug.Log($"[Alatau] LRT: concrete median under {spans} viaduct spans");
+            Debug.Log($"[Alatau] LRT: concrete median under {spans} viaduct spans, {piersN} piers (one per {PierStep:0} m, off the carriageways)");
+        }
+
+        /// <summary>A pier for span i (the PierStep mark in it): a single column with a Y head under the deck, its two arms out to the
+        /// deck's bearings. On a carriageway it moves along the line up to two points either way to the nearest spot off it, else none
+        /// (a longer span); none where the deck is a ramp's low end (drawn as a fill).</summary>
+        static bool Pier(LandmarkKit k, Route r, int i, Vector3[] side)
+        {
+            int n = r.P.Length;
+            foreach (int o in new[] { 0, 1, -1, 2, -2 })
+            {
+                int j = Mathf.Clamp(i + o, 0, n - 1); if (r.Sec[Mathf.Min(j, n - 2)] != Elevated) continue;
+                Vector3 p = r.P[j]; float gy = CityGround.HeightAt(p.x, p.z);
+                if (p.y - DeckT - gy < LowDeck) return false;
+                if (FilmRoads.OnSurface(new Vector3(p.x, gy, p.z), 0.8f, true)) continue;
+                float fork = Mathf.Max(gy + 1.5f, p.y - DeckT - 1.5f);
+                k.Beam(new Vector3(p.x, gy - 1.5f, p.z), new Vector3(p.x, fork, p.z), 1.9f, 1.9f, Conc, LM.Solid);
+                foreach (float sg in new[] { -1f, 1f })
+                    k.Beam(new Vector3(p.x, fork - 0.4f, p.z), p + side[j] * sg * (DeckW * 0.32f) + Vector3.down * (DeckT + 0.05f), 1.3f, 1.5f, Conc, LM.Solid);
+                return true;
+            }
+            return false;
         }
 
         /// <summary>A span on the ground: a green track bed between low concrete kerbs (no fences); where the bed stands more than
@@ -448,7 +468,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 Strip(k, p0, p1, s0, s1, tc + 0.72f, 0.14f, 0.2f, Rail, LM.Steel);
                 k.Beam(p0 + s0 * tc + up * 6.0f, p1 + s1 * tc + up * 6.0f, 0.05f, 0.05f, Rail, LM.Steel);
             }
-            if (i % 2 == 0)
+            if (Mathf.Floor(u0 / MastStep) != Mathf.Floor(u1 / MastStep))
             {
                 k.Beam(p0 + up * -0.6f, p0 + up * 7.2f, 0.35f, 0.35f, Pole, LM.Steel);
                 k.Beam(p0 + up * 6.9f - s0 * 3.2f, p0 + up * 6.9f + s0 * 3.2f, 0.18f, 0.18f, Pole, LM.Steel);
@@ -586,7 +606,9 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 }
                 // the ticket hall under the deck (glass, a white roof) and the stair and lift tower beside it, with the red LRT sign
                 var hc = W(0, 0, 0); float gy = CityGround.HeightAt(hc.x, hc.z);
-                if (p.y - gy > 8f) k.Box(new Vector3(hc.x, gy + 2.6f, hc.z), new Vector3(26f, 5.2f, 9f), yaw, glass, LM.Glass, 4f, white, LM.Roof);
+                // the ticket hall under the deck where it fits (its roof 0.3 m under the deck's underside)
+                float hallH = Mathf.Min(5.2f, p.y - 1.9f - 0.3f - gy);
+                if (hallH > 3.2f) k.Box(new Vector3(hc.x, gy + hallH * 0.5f, hc.z), new Vector3(26f, hallH, 9f), yaw, glass, LM.Glass, 4f, white, LM.Roof);
                 // the tower at a platform end, on the first side of the four clear of buildings (else where it always stood)
                 float tx = Half - 8f, tz = 13.5f;
                 foreach (var (cx, cz) in new[] { (Half - 8f, 13.5f), (Half - 8f, -13.5f), (8f - Half, 13.5f), (8f - Half, -13.5f) })

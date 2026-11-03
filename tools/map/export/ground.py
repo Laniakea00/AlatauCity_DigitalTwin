@@ -103,7 +103,7 @@ LOT_TYPE = {
     "residential_high": 16, "residential_mid": 16, "mixed_centre": 16,
     "residential_low": 5, "village_existing": 5,
     "school": 2, "kindergarten": 2,
-    "business": 10, "campus": 10, "college": 10, "university": 10, "medical": 10, "polyclinic": 10, "hospital": 10, "clinic": 10,
+    "business": 10, "resort": 10, "campus": 10, "college": 10, "university": 10, "medical": 10, "polyclinic": 10, "hospital": 10, "clinic": 10,
     "pharmacy_shop": 10, "police": 10, "fire_station": 10, "culture": 10, "worship": 10, "landmark": 10, "parking": 10,
     "transit": 10, "square": 3, "playground": 13, "sport_ground": 12, "sport": 12, "park": 6, "waterfront": 6,
     "industry": 7, "logistics": 7, "utility": 11, "substation": 11, "reserve": 8,
@@ -156,7 +156,7 @@ def is_major(e, profiles):
     return e.get("c") in MAJOR
 LOT_PLAN = {
     "residential_high": "res_high", "mixed_centre": "res_high", "residential_mid": "res_mid", "residential_low": "res_low",
-    "village_existing": "res_low", "school": "public", "kindergarten": "public", "business": "public", "campus": "public",
+    "village_existing": "res_low", "school": "public", "kindergarten": "public", "business": "public", "resort": "public", "campus": "public",
     "college": "public", "university": "public", "culture": "public", "worship": "public", "police": "public", "fire_station": "public",
     "landmark": "public", "medical": "health", "polyclinic": "health", "hospital": "health", "clinic": "health", "pharmacy_shop": "public",
     "transit": "transport", "parking": "transport", "square": "road", "playground": "green", "sport_ground": "green", "sport": "green",
@@ -215,6 +215,10 @@ def load_district(d, out_root, log):
     D["area"] = Polygon(area).buffer(0)
     if D["lots"] is None:
         raise SystemExit(f"{d}: no lots.json — the ground of a district comes from its lots")
+    for B in (D["blocks"] or {}).get("blocks") or []:
+        BLOCK_ZONE[(d, B["id"])] = B.get("zone") or ""
+    for L in D["lots"].get("lots") or []:
+        L["_d"] = d
     log(f"{d}: area {D['area'].area / 1e4:.0f} ha; " + ", ".join(f"{k} {'yes' if D[k] is not None else 'MISSING'}"
                                                          for k in ("blocks", "lots", "features", "driveways", "buildings")))
     return D
@@ -524,10 +528,19 @@ def make_nature(base_dir, nature_base, Ds, area, grid, log):
 
 
 # ================================================================== map_ground.bytes
+BLOCK_ZONE = {}                   # (district, block id): its zone id (load_district)
+
+
 def lot_type(L, built):
     t = LOT_TYPE.get(L["use"], 10)
     if t == 11 and L["id"] not in built:                              # utility land with nothing on it (motorway land, line corridors): a mown verge
         t = 15
+    # a large sports lot with nothing on it (a golf course, the autodrome's land): textured grass with trees, not a 300 ha
+    # football pitch (type 12 is drawn as turf to the lot's edge); the sports grounds of the quarters stay 12
+    if t == 12 and L["id"] not in built and float(L.get("area_m2") or 0.0) > 2e4:
+        # a golf course: textured grass with trees; other large empty sports land (the autodrome, whose track the data has
+        # not drawn): open steppe — from afar a 300 ha park reads as one flat green square
+        t = 6 if BLOCK_ZONE.get((L.get("_d"), L.get("block")), "").startswith("golf") else 8
     return t
 
 

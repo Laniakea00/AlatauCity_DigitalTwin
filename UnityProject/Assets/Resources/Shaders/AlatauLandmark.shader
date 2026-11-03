@@ -195,6 +195,9 @@ Shader "AlatauCity/Landmark"
                     #if defined(ALATAU_QT_GATE)
                     // the last 70 m of the district's lawns turn into the city's lighter lawn outside it (measured on the shots: the
                     // city's sunlit lawn ≈ 2× brighter and yellower), so the edge of the quarter does not show as a line of colour
+                    // the district's asphalt as the city's film roads (measured on the shots: the city's ≈ (64, 62, 66), the
+                    // district's ≈ (37, 41, 48), darker and bluer): its streets read as the city's own streets carried on
+                    if (isAsph) q.col *= float3(3.2, 2.6, 2.0);
                     if (isGrass && _AlatauGateR > 0.0)
                     {
                         float eg = smoothstep(_AlatauGateR - 70.0, _AlatauGateR - 4.0, length(IN.worldPos.xz - _AlatauGate.xy));

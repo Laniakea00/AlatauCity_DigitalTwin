@@ -130,7 +130,8 @@ STRIP_SHARE = 0.6          # … when the block takes at least this share of the
 ENTRY_MAX_M = 100.0        # m: farthest street a block cut off from the streets gets an entry lane to (model qTwin)
 ENTRY_EXTRA_M = 4.0        # m: the lane is the drive's red line plus two router cells wide (model qTwin)
 ENTRY_THROUGH = ("park", "reserve", "utility")   # block uses such a lane may cross (no buildings by rule there; model qTwin)
-FOOT_ONLY_USES = ("park", "square", "playground")   # lot uses entered on foot only: no drive, a street only for the years (model qTwin)
+FOOT_ONLY_USES = ("park", "square", "playground", "waterfront")   # lot uses entered on foot only: no drive, a street only for the
+# years (model qTwin); waterfront: the coast parks of a waterfront zone (lot_split none), Green 03.11: 37 shore lots had none
 GROW_TOL = 0.05            # a block not much bigger than lot_m2 (this share) is the registry plot as a whole
 REG_AREA_TOL_M2 = 1.0      # a registry plot short of the spec's lot_m2 by more than this grows inside its block round the spec point
 #                            (tester items 41, 64: the generated object has the spec's area) — m², the rounding of the plot

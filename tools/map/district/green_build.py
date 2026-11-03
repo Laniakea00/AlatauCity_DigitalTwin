@@ -23,6 +23,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(HERE), "gen"))
 T0 = time.time()
 import numpy as np  # noqa: E402
 import shapely  # noqa: E402
+import shapely.affinity  # noqa: E402
 from shapely.geometry import LineString, Point, Polygon, box  # noqa: E402
 from shapely.ops import substring, unary_union  # noqa: E402
 
@@ -444,7 +445,7 @@ def zone_out(z, poly, rules):
              "_src": z["src"], "_base": z["id"]}
         if z.get("density"):
             # the scheme's «floors_typical» is a text range ("5–9"): the land tools read a number there, so it goes as text
-            dd = dict(z["density"])
+            dd = {k: v for k, v in z["density"].items() if not str(k).startswith("_")}
             ft = dd.pop("floors_typical", None)
             if ft is not None and not isinstance(ft, (int, float)):
                 dd["floors_typical_ru"] = str(ft)
@@ -456,15 +457,27 @@ def zone_out(z, poly, rules):
 
 # the 30-storey landmark tower at the tip of the IRCC cape (registry green_tower_30, scheme point (5100, 21400)): its own zone
 # with the tower's height (≈ 105 m; ≥ 50 m — «нужно согласование», heights.airfield_approval_radius_km)
-TOWER_AT = (5100.0, 21400.0)
+# The scheme point lies in the red lines of s_blv_lake (the plot was 0 ha, run of 02.11): the tower stands on the nearest
+# piece of the zone between the red lines, above the design flood, at least TOWER_FROM_RED_M from the red lines, on a plot of
+# at least TOWER_MIN_M2 (модель qTwin)
+TOWER_SEED = (5100.0, 21400.0)
+TOWER_FROM_RED_M, TOWER_MIN_M2, TOWER_R = 40.0, 8000.0, 75.0
+_LN0 = LU.Norms()
 _irc = Z.ZBY["ircc"]
 _red_near = unary_union([LineString(x["line"]).buffer(N.red_w(x["class"], x.get("profile")) / 2.0 + 0.05, cap_style=2)
-                         for x in N.STREETS if LineString(x["line"]).distance(Point(TOWER_AT)) < 400.0])
-_free = _irc["poly"].difference(_red_near).buffer(0)
-_blk = min(getattr(_free, "geoms", [_free]), key=lambda g: g.distance(Point(TOWER_AT)))
-TOWER_FP = _blk.intersection(Point(TOWER_AT).buffer(75.0)).buffer(0)
+                         for x in N.STREETS if LineString(x["line"]).distance(Point(TOWER_SEED)) < 900.0])
+_free = _irc["poly"].difference(_red_near).difference(LU.flood_poly(_irc["poly"].buffer(60.0), _LN0)[0]).buffer(0)
+_cands = [g for g in getattr(_free, "geoms", [_free]) if g.geom_type == "Polygon" and g.area >= TOWER_MIN_M2
+          and not g.buffer(-TOWER_FROM_RED_M).is_empty]
+_blk = min(_cands, key=lambda g: g.buffer(-TOWER_FROM_RED_M).distance(Point(TOWER_SEED)))
+_core = _blk.buffer(-TOWER_FROM_RED_M)
+_tp = shapely.ops.nearest_points(_core, Point(TOWER_SEED))[0]
+TOWER_AT = (round(_tp.x, 1), round(_tp.y, 1))
+TOWER_FP = _blk.intersection(Point(TOWER_AT).buffer(TOWER_R)).buffer(0)
 if TOWER_FP.geom_type != "Polygon":
     TOWER_FP = max(TOWER_FP.geoms, key=lambda g: g.area)
+LOG.append({"what": "доминанта: участок перенесён с красных линий на ближайший свободный кусок квартала", "seed": list(TOWER_SEED),
+            "at": list(TOWER_AT), "m": round(math.dist(TOWER_SEED, TOWER_AT)), "ha": round(TOWER_FP.area / 1e4, 2)})
 _irc["poly"] = _irc["poly"].difference(TOWER_FP).buffer(0)
 Z.ZPLAN.append({"id": "gc_tower", "use": "mixed_centre", "name_ru": "Доминанта у озера (30 этажей)", "poly": TOWER_FP,
                 "years": [2036, 2040],
@@ -541,6 +554,15 @@ for k, P in enumerate(N.UNSERVED):
     LOG.append({"what": "участок без подъезда переведён в резерв", "ha": round(q_.area / 1e4, 1), "at": [round(v) for v in P.centroid.coords[0]]})
     Z.SCHEME_CHANGES.append((f"x_unserved_{k + 1}", f"{q_.area / 1e4:.1f} га у ({P.centroid.x:.0f}, {P.centroid.y:.0f}) — резерв: "
                              "до участка не дойти улицей"))
+# the marina's own plot: the Unity model's pad (LandmarkData marina: 200 × 140 m, yaw 30 at (4825, 25272), 2033–2037) on the
+# shore of the quiet bay — one zone of its own, so the registry lot takes the whole pad (it stood in the water with no plot)
+MARINA_XZ, MARINA_YAW, MARINA_W, MARINA_D = (4825.0, 25272.0), 30.0, 200.0, 140.0
+MARINA_PAD = shapely.affinity.translate(shapely.affinity.rotate(box(-MARINA_W / 2, -MARINA_D / 2, MARINA_W / 2, MARINA_D / 2),
+                                                                -MARINA_YAW, origin=(0, 0)), *MARINA_XZ)
+zone_out({"id": "z_marina", "use": "waterfront", "src": "v0", "years": [2033, 2037], "name_ru": "Марина Капшагай (пристань и клуб)",
+          "why": "участок под модель Unity marina 200 × 140 м (LandmarkData, разворот 30°): марина, клуб и набережная — у воды по "
+                 "flood.floodplain_allowed (причалы без капитальных зданий)"}, MARINA_PAD, {"lot_split": "none"})
+Z.SCHEME_CHANGES.append(("z_marina", f"участок марины ({MARINA_PAD.area / 1e4:.1f} га) вынут из зоны wf_n_1: модель Unity 200 × 140 м целиком"))
 for z in Z.ZPLAN:
     zone_out(z, z["poly"], z["rules"])
 _gap = GREEN.difference(unary_union([Polygon(z["polygon"]).buffer(0) for z in ZONES]))
@@ -626,9 +648,8 @@ for z in ZONES:
 # level 485,5 м (flood.kapchagay_levels_m + freeboard: land keeps that land as park), the logistics parks lose their land to
 # truck yards and fire gaps between sheds, Green-Сити to the 22 m fire gaps of its towers. Their density is set to what
 # their blocks hold (× 0.97), and the homes and jobs they cannot hold go to the other zones by the common factors.
-HOLD = {"res_e": {"homes_per_ha": (50.1, 0.454)}, "res_lake": {"homes_per_ha": (50.1, 0.414)},
-        "gc": {"homes_per_ha": (93.3, 0.943), "jobs_per_ha": (177.7, 0.891)},
-        "ircc": {"jobs_per_ha": (138.8, 0.954)}, "ircc_p2": {"jobs_per_ha": (138.8, 0.205)},
+# (res_e, res_lake, ircc and ircc_p2 are resort zones since 03.11: their densities come from RESORT_* below)
+HOLD = {"gc": {"homes_per_ha": (93.3, 0.943), "jobs_per_ha": (177.7, 0.891)},
         # logistics: the second run at 24.8 / 26.9 / 20.6 jobs per ha still held 89 / 90 / 94 % (sheds are not linear in the need)
         "log_1": {"jobs_per_ha": (24.8, 0.891)}, "log_2": {"jobs_per_ha": (26.9, 0.903)}, "log_3": {"jobs_per_ha": (20.6, 0.94)}}
 HOLD_K = 0.97
@@ -643,6 +664,36 @@ for z in ZONES:
         Z.SCHEME_CHANGES.append((z["id"], f"{key} {d_run:g} → {z['rules'][key]:g}: кварталы зоны вмещают {ratio:.0%} площади "
                                           "по прогону gen_buildings (земля ниже паводка 485,5 м — парк, дворы складов, пожарные "
                                           "разрывы); остальное — в другие зоны"))
+
+
+# resort zones (owner 03.11.2026): the twin's 66 000 leisure jobs of Green in 2050 (buildings.csv «отдых» 66 223 inside the
+# jobs target) at the twin's m² per leisure job, shared by each zone's dry net land (net of red lines, above the design flood,
+# off the shore band) × its far_dry (green_zones.RESORT); RESORT_HOLD: the share of that floor area a zone's blocks held in the
+# last gen_buildings run (got / need × 0.97, as HOLD), the rest goes to the other resort zones
+LEIS_T = 66000
+M2_LEIS = LU.twin_m2()[1].get("leisure", 120.0)
+# run of 03.11 (first resort run): ircc_p2 held 172 800 of 221 971 m² (0.778: half its land below the design flood, the rest
+# narrow), the others 97–99 %; gen_buildings placed 97.2 % of the leisure floor area in all — LEIS_K aims that much over
+RESORT_HOLD = {"ircc_p2": round(0.778 * HOLD_K, 3)}
+LEIS_K = 1.02
+_RZ = [z for z in ZONES if z["use"] == "resort"]
+_RFLOOD = LU.flood_poly(unary_union([Polygon(z["polygon"]).buffer(0) for z in _RZ]).buffer(60.0), _LN0)[0] if _RZ else Polygon()
+RESORT_W, RESORT_DRY = {}, {}
+for z in _RZ:
+    dry = Polygon(z["polygon"]).buffer(0).intersection(NET_LAND).difference(_RFLOOD).area
+    far_d = float((Z.ZBY.get(z["_base"], {}).get("density") or {}).get("_far_dry") or 0.8)
+    RESORT_DRY[z["id"]] = dry / 1e4
+    RESORT_W[z["id"]] = far_d * dry / M2_LEIS * RESORT_HOLD.get(z["id"], 1.0)
+_KR = LEIS_T * LEIS_K / max(sum(RESORT_W.values()), 1e-9)
+for z in _RZ:
+    r = z["rules"]
+    r["jobs_per_ha"] = round(_KR * RESORT_W[z["id"]] / max(NETHA[z["id"]], 1e-6), 1) if NETHA[z["id"]] > 0.05 else 0.0
+    r["homes_per_ha"] = 0
+    r["far"] = round(r["jobs_per_ha"] * M2_LEIS / 1e4 * 1.25 + 0.05, 2)
+LOG.append({"what": "курортные зоны: места отдыха по сухой чистой земле × far_dry", "K": round(_KR, 3),
+            "zones": {z["id"]: {"dry_ha": round(RESORT_DRY[z["id"]], 1), "net_ha": round(NETHA[z["id"]], 1),
+                                "jobs_per_ha": z["rules"]["jobs_per_ha"], "jobs": round(z["rules"]["jobs_per_ha"] * NETHA[z["id"]])}
+                      for z in _RZ}})
 
 
 def _hv(z):
@@ -668,6 +719,8 @@ for z in ZONES:
     if _jv(z) and r.get("jobs_per_ha"):
         r["jobs_per_ha"] = round(r["jobs_per_ha"] * FJ, 1)
     m2j = 100.0 if z["use"] in ("logistics", "industry") else (50.0 if z["use"] == "medical" else 90.0)
+    if z["use"] == "resort":
+        continue            # its FAR is set above; floors and height cap stay the zone's (≤ 48 m: airfield approval)
     need = ((r.get("homes_per_ha") or 0) * 75.0 + (r.get("jobs_per_ha") or 0) * m2j) / 1e4
     if r.get("far") is not None and need * 1.25 > r["far"]:
         r["far"] = round(need * 1.25 + 0.05, 1)
@@ -695,6 +748,10 @@ TARGETS = {"homes_2050": HOMES_T, "population_2050": int(round(HOMES_T * RES_PER
                      "прогону gen_buildings (HOLD в green_build.py)" % (FH, FJ)}
 # parks: the park zones of the approved scheme (owner 31.10) on net land (without red lines); the map's measure is its park,
 # square and boulevard greens (features.json), as green_numbers.py counts them
+TARGETS["leisure_jobs_2050"] = LEIS_T
+TARGETS["leisure_source"] = ("решение владельца 03.11.2026: места отдыха Green в 2050 г. — как в двойнике (buildings.csv, отдых 66 223; "
+                             "≈ 7,9 млн м² отелей, курортов и аттракционов по %.0f м² на место): 4 млн туристов в год; входят в "
+                             "цель рабочих мест; зоны resort — по сухой чистой земле × far_dry (green_zones.RESORT)" % M2_LEIS)
 TARGETS["parks_ha"] = round(sum(NETHA[z["id"]] for z in ZONES if z["use"] == "park"), 1)
 TARGETS["parks_source"] = ("парки схемы уровня 0 (зоны park, утверждены 31.10) на чистой земле без красных линий; на карте — зелень "
                            "park + square + boulevard (features.json); минимум СНиП РК 2008 — 10 + 6 м² на жителя")
@@ -784,11 +841,17 @@ for o in V0["objects"]:
         MOVES.append(("settlement_zarechnoe", was, d["to"], "одна точка у Growing-E (spec_issues)"))
     if rid == "marina_kapchagay":
         d["kind"] = "landmark"
-        d["lot_m2"] = 20000
-        d["years"] = Y4(2034)
+        d["to"] = [MARINA_XZ[0], MARINA_XZ[1]]
+        d["yaw"] = MARINA_YAW
+        d["footprint"] = poly_pts(MARINA_PAD)
+        d["lot_m2"] = round(MARINA_PAD.area)
+        d["years"] = Y4(2037)
         d["basis"] = "по правилу"
-        MOVES.append(("marina_kapchagay", o.get("from"), o.get("to"), "точка двойника в 718 м от воды на суше 481 м; марина — "
-                      "в тихой бухте у дороги «На ASP Arena», у воды (схема 31.10)"))
+        d["why"] = (d.get("why") or "") + ("; участок — модель Unity marina 200 × 140 м (LandmarkData: (4825, 25272), разворот 30°, "
+                                           "стройка 2033–2037), своя зона z_marina у воды (причалы без капитальных зданий)")
+        MOVES.append(("marina_kapchagay", o.get("from"), d["to"], "точка двойника в 718 м от воды на суше 481 м; марина — "
+                      "в тихой бухте у дороги «На ASP Arena», у воды (схема 31.10); участок — по модели Unity (точка схемы "
+                      f"{o.get('to')} была в воде, без участка)"))
     if rid == "green_tower_30":
         d["to"] = [round(TOWER_FP.centroid.x, 1), round(TOWER_FP.centroid.y, 1)]
         d["why"] = (o.get("why") or "") + f"; участок — своя зона gc_tower ({TOWER_FP.area / 1e4:.1f} га, до 110 м) на мысу курорта"

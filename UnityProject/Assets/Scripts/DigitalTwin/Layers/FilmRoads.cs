@@ -113,7 +113,8 @@ namespace AlatauCity.DigitalTwin
                 // carriageways either side of a green strip (2); a bike path is one bike-coloured ribbon (4); a pedestrian street is all
                 // pavement. Old data: pavement + carriageway exactly as before.
                 int nr = 0;
-                if (walk > 0f) rib[nr++] = new Vector4(half + walk, 0f, 0f, st.Drive ? 0.10f : 0.12f);
+                // (one carriageway of a divided road: the pavement from its inner kerb out to its outer side only)
+                if (walk > 0f) rib[nr++] = st.POuter == 0 ? new Vector4(half + walk, 0f, 0f, st.Drive ? 0.10f : 0.12f) : new Vector4(half + walk * 0.5f, st.POuter * walk * 0.5f, 0f, 0.12f);
                 if (st.NoCars && st.PLanes0 && st.Kind != "bike_path") { if (st.PMedian > 0.5f) rib[nr++] = new Vector4(st.PMedian * 0.5f - 0.2f, 0f, 2f, 0.15f); }   // a boulevard's green strip, no carriageway
                 else if (st.PMedian > 0.5f && half > st.PMedian * 0.5f + 1f)
                 {
@@ -149,7 +150,7 @@ namespace AlatauCity.DigitalTwin
                         prev = jR != jL && i < pts.Count - 1 ? Row(i, jR) : b;
                     }
                 }
-                if (dk != null) Structures(si, st, along, half + walk, walk > 0f ? 0.12f : lift, yrsV);
+                if (dk != null) Structures(si, st, along, st.POuter < 0 ? half + 0.4f : half + walk, st.POuter > 0 ? half + 0.4f : half + walk, walk > 0f ? 0.12f : lift, yrsV);
                 }
                 if (nv > 1) UseProfile(st, st.Prof0);
                 if (V.Count > 180000) Flush();
@@ -317,8 +318,11 @@ namespace AlatauCity.DigitalTwin
                 }
                 structQuads++;
             }
-            void Structures(int self, Stroke st, List<float> al, float outer, float up, Vector4 yrs)
+            // outerL / outerR: how far the structure reaches on the left / right of the line (one carriageway of a divided road stops at
+            // its inner kerb on the median side: no wall or abutment in its twin's lanes); no wall piece where another road passes below
+            void Structures(int self, Stroke st, List<float> al, float outerL, float outerR, float up, Vector4 yrs)
             {
+                float outer = Mathf.Max(outerL, outerR);
                 var P = st.P; var dk = st.Deck; var H = st.H; int n = P.Count;
                 Vector2 Left(int i) { Vector2 d = (P[Mathf.Min(i + 1, n - 1)] - P[Mathf.Max(i - 1, 0)]).normalized; return new Vector2(-d.y, d.x); }
                 float Top(int i, Vector2 p) { float g = CityGround.HeightAt(p.x, p.y) + up; return dk[i] > 0f ? Mathf.Lerp(g, H[i] + up, dk[i]) : g; }
@@ -326,18 +330,23 @@ namespace AlatauCity.DigitalTwin
                 {
                     if (dk[i - 1] <= 0.01f && dk[i] <= 0.01f) continue;
                     int code = StAt(st.St, (al[i - 1] + al[i]) * 0.5f); if (code == 5) continue;
-                    bool span = code == 3 || code == 4; Vector2 l0 = Left(i - 1), l1 = Left(i);
+                    // a span only where its deck stands over the ground (a «bridge» lying on the terrain is drawn as road)
+                    bool span = (code == 3 || code == 4) && Mathf.Min(Top(i - 1, P[i - 1]) - CityGround.HeightAt(P[i - 1].x, P[i - 1].y),
+                                                                       Top(i, P[i]) - CityGround.HeightAt(P[i].x, P[i].y)) > 2.5f;
+                    Vector2 l0 = Left(i - 1), l1 = Left(i);
                     for (int sd = -1; sd <= 1; sd += 2)
                     {
-                        Vector2 a = P[i - 1] + l0 * (outer * sd), b = P[i] + l1 * (outer * sd);
+                        float os = sd > 0 ? outerL : outerR;
+                        Vector2 a = P[i - 1] + l0 * (os * sd), b = P[i] + l1 * (os * sd);
                         float ta = Top(i - 1, a), tb = Top(i, b);
+                        if (RoadBelow(self, (a + b) * 0.5f, Mathf.Min(ta, tb) - 0.8f, 0.5f)) continue;
                         float ba = span ? ta - 1.5f : CityGround.HeightAt(a.x, a.y) - 0.6f, bb = span ? tb - 1.5f : CityGround.HeightAt(b.x, b.y) - 0.6f;
                         if (ta - ba < 0.05f && tb - bb < 0.05f) continue;
                         Quad2(new Vector3(a.x, ba, a.y), new Vector3(b.x, bb, b.y), new Vector3(b.x, tb, b.y), new Vector3(a.x, ta, a.y), al[i - 1], al[i], yrs);
                     }
                     if (span)
                     {
-                        Vector2 a0 = P[i - 1] - l0 * outer, a1 = P[i - 1] + l0 * outer, b0 = P[i] - l1 * outer, b1 = P[i] + l1 * outer;
+                        Vector2 a0 = P[i - 1] - l0 * outerR, a1 = P[i - 1] + l0 * outerL, b0 = P[i] - l1 * outerR, b1 = P[i] + l1 * outerL;
                         Quad2(new Vector3(a0.x, Top(i - 1, a0) - 1.5f, a0.y), new Vector3(b0.x, Top(i, b0) - 1.5f, b0.y), new Vector3(b1.x, Top(i, b1) - 1.5f, b1.y),
                               new Vector3(a1.x, Top(i - 1, a1) - 1.5f, a1.y), al[i - 1], al[i], yrs);
                     }
@@ -361,7 +370,8 @@ namespace AlatauCity.DigitalTwin
                     float m0 = Mathf.Max(0f, st.St[k]), m1 = Mathf.Min(al[n - 1], st.St[k + 1]); if (m1 - m0 < 4f) continue;
                     foreach (float m in new[] { m0, m1 })
                     {
-                        At(m, out var c, out var left, out float top); Vector2 a = c - left * outer, b = c + left * outer;
+                        At(m, out var c, out var left, out float top); Vector2 a = c - left * outerR, b = c + left * outerL;
+                        if (top - CityGround.HeightAt(c.x, c.y) < 2.5f || RoadBelow(self, c, top - 1.5f, 0.5f)) continue;               // no abutment on the ground or in a road below
                         Wall(a, b, CityGround.HeightAt(a.x, a.y) - 0.6f, CityGround.HeightAt(b.x, b.y) - 0.6f, top - 1.5f, m);          // abutment
                     }
                     // a pier is a row of columns under the whole width of the deck, the outer two under its edges (so that it reads from the
@@ -369,10 +379,10 @@ namespace AlatauCity.DigitalTwin
                     // asphalt, not a median: it may stand in the central reserve of a dual road) and moves along the span on its own (≤ PierSkew)
                     // where the span crosses a road below at a skew. Of the places for a pier the straightest row is taken; a row standing in
                     // one line carries a cap beam under the deck where nothing passes under the beam with less than 4.5 m of headroom
-                    float reach = Mathf.Max(1f, outer - ColAcross - 0.3f);
-                    int nc = Mathf.Max(2, Mathf.CeilToInt(2f * reach / PierGap) + 1);
+                    float reachL = Mathf.Max(0.5f, outerL - ColAcross - 0.3f), reachR = Mathf.Max(0.5f, outerR - ColAcross - 0.3f);
+                    int nc = Mathf.Max(2, Mathf.CeilToInt((reachL + reachR) / PierGap) + 1);
                     var colO = new float[nc]; var colD = new float[nc]; var bestD = new float[nc];
-                    for (int j = 0; j < nc; j++) colO[j] = -reach + 2f * reach * j / (nc - 1);
+                    for (int j = 0; j < nc; j++) colO[j] = -reachR + (reachL + reachR) * j / (nc - 1);          // under the deck's own width
                     bool Clear(float m, float o) { if (m <= m0 + 2f || m >= m1 - 2f) return false; At(m, out var c, out var left, out float top); return !RoadBelow(self, c + left * o, top - 3f, PierClear); }
                     // the columns' moves along the span at m (colD) and how far from one line they stand (sum of |move|); < 0: no room
                     float Fits(float m)
@@ -610,7 +620,7 @@ namespace AlatauCity.DigitalTwin
             public List<Vector2> P; public TwinData.RoadClass Cls; public Vector4 Years; public int A, B; public float Len; public bool Ramp, OneWay, Fixed;
             // the redrawn map (film_roads v2): roads edge, norms class, profile, interchange, surface heights, structures; the cross-section
             // from the profile (PHalf < 0: by class as before); Deck[i] 0 = on the terrain … 1 = at H[i] (an embankment or a deck)
-            public int Edge = -1, Prof = -1, Ic = -1; public string Kind; public float[] H, St, Deck; public float PHalf = -1f, PWalk, PMedian; public int PLanes; public bool NoCars;
+            public int Edge = -1, Prof = -1, Ic = -1, POuter; public string Kind; public float[] H, St, Deck; public float PHalf = -1f, PWalk, PMedian; public int PLanes; public bool NoCars;
             /// <summary>A drive to buildings or a fire lane (driveways.json): no through traffic, no lamps, no markings. PLanes0: the profile has no lanes.</summary>
             public bool Drive, PLanes0;
             /// <summary>A reconstruction (roads.json `ps`): Prof0 = the opening profile; from StageY[k] (per scenario) the profile StageP[k],
@@ -664,10 +674,13 @@ namespace AlatauCity.DigitalTwin
             public bool Has; public string Kind; public int LanesFwd, LanesBack; public float LaneW, MedianW, RedLineW, Carriage, Outer;
             public float SidewalkL, SidewalkR, VergeL, VergeR, BikeL, BikeR, ParkingL, ParkingR;
         }
+        /// <summary>One carriageway of a divided road (the map draws each direction as its own line, profile lanes [n, 0] with the
+        /// whole road's median): its lanes only, the median lies between it and its twin, the pavements on its outer side.</summary>
+        static bool OneCarriageway(TwinData.RoadProfile pr) => pr != null && pr.LanesF > 0 && pr.LanesB <= 0 && pr.MedianW > 0.5f;
         static void Halves(TwinData.RoadProfile pr, string kind, out float car, out float outer)
         {
             float lw = pr.LaneW > 0f ? pr.LaneW : 3f;
-            car = (Mathf.Max(0, pr.LanesF) + Mathf.Max(0, pr.LanesB)) * lw * 0.5f + pr.MedianW * 0.5f + (pr.Parking[0] + pr.Parking[1]) * 0.5f;
+            car = (Mathf.Max(0, pr.LanesF) + Mathf.Max(0, pr.LanesB)) * lw * 0.5f + (OneCarriageway(pr) ? 0f : pr.MedianW * 0.5f) + (pr.Parking[0] + pr.Parking[1]) * 0.5f;
             float side = Mathf.Max(pr.Sidewalk[0] + pr.Verge[0] + pr.Bike[0], pr.Sidewalk[1] + pr.Verge[1] + pr.Bike[1]);
             if (kind == "bike_path") { car = Mathf.Max(0.75f, (pr.Bike[0] + pr.Bike[1]) * 0.5f); side = Mathf.Max(pr.Verge[0], pr.Verge[1]); }
             outer = car + side;
@@ -762,13 +775,15 @@ namespace AlatauCity.DigitalTwin
             var pr = s.Prof >= 0 && s.Prof < TwinData.RoadProfiles.Length ? TwinData.RoadProfiles[s.Prof] : null; if (pr == null) return;
             s.PLanes0 = pr.LanesF + pr.LanesB <= 0; if (s.PLanes0) s.NoCars = true;      // a boulevard's green strip with paths: no cars by design
             Halves(pr, s.Kind, out float car, out float outer);
-            s.PHalf = car; s.PWalk = outer - car; s.PMedian = pr.MedianW;
+            s.PHalf = car; s.PWalk = outer - car; s.PMedian = OneCarriageway(pr) ? 0f : pr.MedianW;
+            // the side its pavements are on (+1 left, −1 right of the line's direction; 0 both): the median side has none
+            s.POuter = !OneCarriageway(pr) ? 0 : pr.Sidewalk[0] + pr.Verge[0] + pr.Bike[0] >= pr.Sidewalk[1] + pr.Verge[1] + pr.Bike[1] ? 1 : -1;
             s.PLanes = s.OneWay || s.Ramp ? Mathf.Max(1, pr.LanesF) : Mathf.Max(1, Mathf.Max(pr.LanesF, pr.LanesB));
         }
         /// <summary>The stroke with profile 'prof' (its cross-section fields as ApplyProfile sets them).</summary>
         static void UseProfile(Stroke s, int prof)
         {
-            s.Prof = prof; s.PHalf = -1f; s.PWalk = 0f; s.PMedian = 0f; s.PLanes = 0; s.PLanes0 = false; ApplyProfile(s);
+            s.Prof = prof; s.PHalf = -1f; s.PWalk = 0f; s.PMedian = 0f; s.PLanes = 0; s.PLanes0 = false; s.POuter = 0; ApplyProfile(s);
         }
         /// <summary>A reconstruction of the stroke's edge (roads.json `ps`, w43 round 7: a ramp gets more lanes from a year, the geometry
         /// stays): its stages with their years (never before the stroke's own) and cross-sections; the stroke keeps its opening profile.</summary>
@@ -816,7 +831,7 @@ namespace AlatauCity.DigitalTwin
                 if (i > 0) acc += (st.P[i] - st.P[i - 1]).magnitude;
                 float e = st.H[i] - CityGround.HeightAt(st.P[i].x, st.P[i].y);
                 d[i] = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.5f, 2.5f, e));
-                int c = StAt(st.St, acc); if (c == 3 || c == 4) d[i] = 1f;
+                int c = StAt(st.St, acc); if ((c == 3 || c == 4) && e > 2f) d[i] = 1f;          // a span lying on the terrain stays on it
                 any |= d[i] > 0f;
             }
             st.Deck = any ? d : null;

@@ -552,7 +552,12 @@ class Network:
             su = G.project(u.P, pt)[0]
             sl = G.project(l.P, pt)[0]
             half = self._footprint_half(l, ang)
-            u.over.append({"s": su, "lower": l, "sl": sl, "half": half, "pt": pt, "ang": ang})
+            # the upper deck's own half width at the skew: the span reaches past the lower road's edge by it, so the
+            # abutments and walls stand off the lower lanes (≤ 30 m)
+            pu = u.prof or self.N.profile(u.cls)
+            wu = (pu["cw_w"] + sum(pu["shoulder_w"])) if u.oneway else self.N.cross_width(pu)
+            skew = min(30.0, wu / 2.0 / max(math.tan(math.radians(max(ang, 20.0))), 1e-3))
+            u.over.append({"s": su, "lower": l, "sl": sl, "half": half, "pt": pt, "ang": ang, "skew": skew})
         for w in self.ways:
             if w.y is None:
                 w.y = np.interp(w.S, [0, w.L], [w.g[0], w.g[-1]])
@@ -838,7 +843,7 @@ class Network:
             kinds[dy > fill] = "embankment"
             kinds[dy < -fill] = "cut"
             for o in w.over + getattr(w, "rails", []):
-                m = np.abs(w.S - o["s"]) <= o["half"]
+                m = np.abs(w.S - o["s"]) <= o["half"] + o.get("skew", 0.0)
                 kinds[m] = "overpass"
             # the spec's own spans: a bridge over a canal or stream drawn as a line (not in the water polygons) and
             # an overpass are structures over their whole length
@@ -962,12 +967,18 @@ def _smooth(S, g, win):
 
 
 def _grade_limit(y, S, g):
-    """Clamp the grade to ≤ g (forward then backward pass; the line stays as close to y as the grade allows)."""
-    y = y.copy()
-    for i in range(1, len(y)):
-        ds = S[i] - S[i - 1]
-        y[i] = min(max(y[i], y[i - 1] - g * ds), y[i - 1] + g * ds)
-    for i in range(len(y) - 2, -1, -1):
-        ds = S[i + 1] - S[i]
-        y[i] = min(max(y[i], y[i + 1] - g * ds), y[i + 1] + g * ds)
-    return y
+    """Clamp the grade to ≤ g, the same whichever way the line runs: the mean of the clamp along it and of the clamp against
+    it (each a forward then a backward pass; the mean of two lines of grade ≤ g keeps it). One pass direction alone put the two
+    carriageways of a divided road, drawn in opposite directions, one on a 10–20 m fill and its twin in a cut over the same
+    ground (owner 03.11.2026)."""
+    def once(y_, S_):
+        y_ = y_.copy()
+        for i in range(1, len(y_)):
+            ds = S_[i] - S_[i - 1]
+            y_[i] = min(max(y_[i], y_[i - 1] - g * ds), y_[i - 1] + g * ds)
+        for i in range(len(y_) - 2, -1, -1):
+            ds = S_[i + 1] - S_[i]
+            y_[i] = min(max(y_[i], y_[i + 1] - g * ds), y_[i + 1] + g * ds)
+        return y_
+    S = np.asarray(S, float)
+    return 0.5 * (once(np.asarray(y, float), S) + once(np.asarray(y, float)[::-1], (S[-1] - S)[::-1])[::-1])

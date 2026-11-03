@@ -580,8 +580,10 @@ def terminal_connector(res, F, t, h):
 
 
 def lift_minor(res, F, why):
-    """The minor road passes over the major road around C (its ways lifted over the major's footprint)."""
-    half = F.major.half_width() + 12.0
+    """The minor road passes over the major road around C (its ways lifted over the major's footprint). The major's half width
+    is taken at most MAX_LIFT_HALF: an estimate from a pair of carriageways that are not a pair (the A-3 at km 48, its other
+    carriageway on the district border) lifted the street 650 m long instead of ≈ 60 m (owner 03.11.2026)."""
+    half = min(F.major.half_width(), MAX_LIFT_HALF) + 12.0
     for w in F.minor.cws.values():
         s, _, _ = G.project(w.P, F.C)
         ang = math.radians(max(20.0, 90.0 - G.line_angle_deg(F.u, w.tan(s)) if False else G.line_angle_deg(F.u, w.tan(s))))
@@ -589,8 +591,11 @@ def lift_minor(res, F, why):
         res.lift(w, s - h, s + h, why)
 
 
+MAX_LIFT_HALF = 40.0              # m: the widest road crossed (an 8-lane expressway with its median and verges)
+
+
 def lift_major(res, F, why):
-    half = F.minor.half_width() + 12.0
+    half = min(F.minor.half_width(), MAX_LIFT_HALF) + 12.0
     for w in F.major.cws.values():
         s, _, _ = G.project(w.P, F.C)
         ang = math.radians(G.line_angle_deg(F.u, F.mtan(0.0)))

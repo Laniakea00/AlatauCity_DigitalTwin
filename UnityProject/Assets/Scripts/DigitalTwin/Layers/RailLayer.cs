@@ -69,6 +69,20 @@ namespace AlatauCity.DigitalTwin
                     }
                     if (L.ends != null)
                         for (int e = 0; e + 1 < L.ends.Length; e += 2) nStops += BufferStops(k, T, new Vector2(L.ends[e], L.ends[e + 1]));
+                    // the district edge where the line goes on in the plan but the map draws nothing beyond yet: the deck ends on an
+                    // abutment down to the ground, with buffer stops, instead of stopping in the air
+                    if (L.joints != null)
+                        for (int e = 0; e + 1 < L.joints.Length; e += 2)
+                        {
+                            var j = new Vector2(L.joints[e], L.joints[e + 1]);
+                            bool goesOn = false;                                     // another line of the file starts there
+                            foreach (var L2 in rj.lines)
+                                if (L2 != L && L2?.tracks != null)
+                                    foreach (var t2 in L2.tracks)
+                                        if (t2?.p != null && t2.p.Length >= 6 && (Mathf.Min((new Vector2(t2.p[0], t2.p[1]) - j).magnitude,
+                                            (new Vector2(t2.p[t2.p.Length - 3], t2.p[t2.p.Length - 2]) - j).magnitude) < 30f)) goesOn = true;      // file: x, z, y
+                            if (!goesOn && Abutments(pk, T, j) > 0) nStops += BufferStops(k, T, j);
+                        }
                     Add(k.ToMesh("Railway " + L.id), L.y, "Railway · " + L.name);
                     Add(pk.ToMesh("Railway piers " + L.id), L.y, "Railway piers · " + L.name);
                 }
@@ -210,6 +224,26 @@ namespace AlatauCity.DigitalTwin
         {
             Vector3 a = p0 + s0 * o0, b = p0 + s0 * o1, c = p1 + s1 * o1, d = p1 + s1 * o0;
             k.Quad(a, b, c, d, Vector3.up, col, LM.Roof, 1f, new Vector2(a.x, a.z), new Vector2(b.x, b.z), new Vector2(c.x, c.z), new Vector2(d.x, d.z));
+        }
+
+        /// <summary>At a joint e the line reaches with nothing beyond: under each track end within 30 m whose deck stands over the
+        /// ground, a concrete abutment wall from the ground to the deck's underside (6 m wide across, 3 m along). Returns how many.</summary>
+        static int Abutments(LandmarkKit k, List<Vector3[]> T, Vector2 e)
+        {
+            int n = 0;
+            foreach (var P in T)
+            {
+                int m = P.Length; bool first = (new Vector2(P[0].x, P[0].z) - e).sqrMagnitude < (new Vector2(P[m - 1].x, P[m - 1].z) - e).sqrMagnitude;
+                var p = first ? P[0] : P[m - 1]; var q = first ? P[1] : P[m - 2];
+                if ((new Vector2(p.x, p.z) - e).magnitude > 30f) continue;
+                var d = p - q; d.y = 0f; if (d.sqrMagnitude < 1e-4f) continue; d.Normalize();
+                var c = p - d * 1.5f; float gy = CityGround.HeightAt(c.x, c.z), top = p.y - DeckBelow;
+                if (top - gy < 1f) continue;
+                float yaw = Mathf.Atan2(d.x, d.z) * Mathf.Rad2Deg;
+                k.Box(new Vector3(c.x, (gy - 1f + top) * 0.5f, c.z), new Vector3(6f, top - gy + 1f, 3f), yaw, ConcD, LM.Solid, 3f, Conc, LM.Solid);
+                n++;
+            }
+            return n;
         }
 
         /// <summary>Buffer stops at the end of each track nearest to the line's dead end e (within 30 m): a red beam on two struts

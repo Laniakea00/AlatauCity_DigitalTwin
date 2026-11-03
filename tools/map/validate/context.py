@@ -77,19 +77,13 @@ class Ctx:
     @property
     def flood_485(self):
         if self._flood is None:
-            import shapely
-            f = paths.w34("derived", "kapchagay_levels.geojson")
-            g = shapely.Polygon()
-            if os.path.exists(f):
-                for ft in jio.load_geojson(f):
-                    p = ft.get("properties") or {}
-                    lv = p.get("real_m", p.get("level_m", p.get("level")))
-                    try:
-                        if lv is not None and abs(float(lv) - 485.0) < 0.6:
-                            g = shapely.geometry.shape(ft["geometry"])
-                    except (TypeError, ValueError):
-                        pass
-            self._flood = g.intersection(self.area) if not g.is_empty else g
+            # the design level + freeboard (flood.kapchagay_levels_m npu_design_max + flood.freeboard_m = real 485.5 m,
+            # twin 483.5 m: FloodModel.Datum), the same land gen_blocks_lots keeps as park (land_util.flood_poly)
+            gen = os.path.join(MAP, "gen")
+            if gen not in sys.path:
+                sys.path.insert(0, gen)
+            import land_util
+            self._flood = land_util.flood_poly(self.area, land_util.Norms())[0]
         return self._flood
 
     @property

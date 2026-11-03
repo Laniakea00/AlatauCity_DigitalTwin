@@ -208,6 +208,11 @@ def _relief(ctx, P):
     return float(np.min(h)), float(np.max(h))
 
 
+# validator.water_building_exceptions words → building kinds / models that may stand at the water
+WATER_EXC_KINDS = {"причалы": {"pier", "jetty"}, "причал": {"pier", "jetty"}, "марина": {"marina"},
+                   "пляжные павильоны": {"beach_pavilion", "pavilion"}}
+
+
 def check_4(ctx):
     m = K.missing(ctx, 4, "buildings", "network")
     if m:
@@ -220,13 +225,16 @@ def check_4(ctx):
     flood = flood if flood is not None else U.Polygon()
     for g in (water, strip, flood):
         shapely.prepare(g)              # many small footprints against a few large polygons: prepared predicates (g first)
-    exc = set(K.nv(ctx, "validator.water_building_exceptions"))
+    # the norm names the exceptions in words (причалы, марина, пляжные павильоны): a building is one by its kind or model
+    exc = set()
+    for w in K.nv(ctx, "validator.water_building_exceptions") or []:
+        exc |= WATER_EXC_KINDS.get(str(w).strip().lower(), {str(w)})
     B = K.buildings(ctx)
     btree = shapely.STRtree([b["_p"] for b in B])
     seg_l = [(s, U.seg_line(s)) for s in (ctx.network or {}).get("segments", [])]
     stree = shapely.STRtree([sl for _, sl in seg_l]) if seg_l else None
     for b in B:
-        if b.get("kind") in exc or b["source"] == "existing_osm":
+        if b.get("kind") in exc or b.get("model") in exc or b["source"] == "existing_osm":
             continue
         p = b["_p"]
         for g, why in ((water, "в воде"), (strip, f"в водоохранной полосе {strip_w} м"), (flood, "ниже паводка (НПУ + запас)")):

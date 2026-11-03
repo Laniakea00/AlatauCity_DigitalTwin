@@ -1228,16 +1228,22 @@ def water_geoms(work, buffer_m=0.0):
     return pol, lin
 
 
+TWIN_DATUM_M = 2.0      # real mark (GLO-30) = twin terrain height + 2 m at the reservoir (FloodModel.Datum, geo/terrain.py)
+
+
 def flood_poly(work, norms):
-    """Land below the Kapchagay design level + freeboard (flood.kapchagay_levels_m npu_design_max + flood.freeboard_m)."""
+    """Land below the Kapchagay design level + freeboard (flood.kapchagay_levels_m npu_design_max + flood.freeboard_m).
+    The levels are real marks, the terrain is the twin's (real − TWIN_DATUM_M): the twin's land is compared with the real
+    level less the datum (real 485.5 m = twin 483.5 m). Returns (polygon, the real level)."""
     lvl = norms.num("flood.kapchagay_levels_m", "npu_design_max") + norms.num("flood.freeboard_m")
+    lvl_twin = lvl - TWIN_DATUM_M
     T = terrain()
     x0, z0, x1, z1 = work.bounds
     xs = np.arange(x0, x1 + T.step, T.step)
     zs = np.arange(z0, z1 + T.step, T.step)
     X, Z = np.meshgrid(xs, zs)
     H = T.height(X, Z)
-    cells = [box(x - T.step / 2, z - T.step / 2, x + T.step / 2, z + T.step / 2) for x, z, hh in zip(X.ravel(), Z.ravel(), H.ravel()) if hh < lvl]
+    cells = [box(x - T.step / 2, z - T.step / 2, x + T.step / 2, z + T.step / 2) for x, z, hh in zip(X.ravel(), Z.ravel(), H.ravel()) if hh < lvl_twin]
     return clean(unary_union(cells).intersection(work)) if cells else Polygon(), lvl
 
 

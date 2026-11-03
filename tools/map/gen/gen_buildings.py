@@ -57,6 +57,8 @@ def kind_for(use, floors):
         return "tower" if floors >= 16 else "business"
     if use == "industry":
         return "industry"
+    if use == "leisure":
+        return "hotel" if floors >= 5 else "resort"       # the twin's leisure kinds (buildings.csv, CityStats «отдых»)
     return "public"
 
 
@@ -157,6 +159,12 @@ def run(d, out, spec_path=None, dense_zones=frozenset(), _memo=None):
     red = memo["red_polys"]
     new_red = [(s, p) for s, p, lv in red if s["years"][0] > 2025]
     nt = U.strtree([p for _, p in new_red]) if new_red else None
+    # the existing roads are drawn at their class's width (OSM village roads rebuilt by the class table): a house their
+    # carriageway covers by a quarter or by 50 m² goes too (owner 03.11.2026: houses stood on the village roads' lanes)
+    if "old_car" not in memo:
+        memo["old_car"] = [(s, p) for s, p, lv in U.network_polys(net, norms, "carriage") if s["years"][0] <= 2025]
+    old_car = memo["old_car"]
+    ot = U.strtree([p for _, p in old_car]) if old_car else None
     ltree = U.strtree([L["_p"] for L in lots])
     csv_fl = {int(b_): (int(f_), float(h_)) for b_, f_, h_ in zip(rows.bid.values, rows.floors.values, rows.height_m.values)}
     out = []
@@ -165,8 +173,14 @@ def run(d, out, spec_path=None, dense_zones=frozenset(), _memo=None):
         hit = []
         if nt is not None:
             hit = [new_red[j][0]["id"] for j in nt.query(fp, predicate="intersects") if new_red[j][1].intersection(fp).area > 1.0]
+        if not hit and ot is not None:
+            for j in ot.query(fp, predicate="intersects"):
+                a_ = old_car[j][1].intersection(fp).area
+                if a_ >= 50.0 or a_ >= 0.25 * fp.area:
+                    hit.append(old_car[j][0]["id"])
         if hit:
-            log("существующий дом снесён: его пересекает новая улица", [hh["bid"] if hh["bid"] is not None else hh["src"]], streets=hit)
+            log("существующий дом снесён: его пересекает новая улица или проезжая часть дороги по ширине её класса",
+                [hh["bid"] if hh["bid"] is not None else hh["src"]], streets=hit)
             if hh["bid"] is not None:
                 removed.append(hh["bid"])
             continue
@@ -683,7 +697,8 @@ def run(d, out, spec_path=None, dense_zones=frozenset(), _memo=None):
         jobs_t = ha * (rules.get("jobs_per_ha") or 0)
         fl_lo, fl_hi = rules.get("floors") or [3, 9]
         cap_h = rules.get("height_cap_m")
-        job_use = "industry" if z and z["use"] in ("logistics", "industry") else ("social" if z and z["use"] == "medical" else "business")
+        job_use = "industry" if z and z["use"] in ("logistics", "industry") else ("social" if z and z["use"] == "medical" else
+                                                                                  ("leisure" if z and z["use"] == "resort" else "business"))
         fixed = [c_ for c_ in cs if c_.get("_fixed_gfa") is not None]
         for c_ in fixed:
             c_["_floors_set"] = max(c_["_floors"][0], min(c_["_floors"][1], int(math.ceil(c_["_fixed_gfa"] / c_["fp"].area))))
@@ -966,6 +981,36 @@ def run(d, out, spec_path=None, dense_zones=frozenset(), _memo=None):
     allb.sort(key=lambda r: (r["lot"] or "", r["footprint"][0][0], r["footprint"][0][1]))
     for i, r in enumerate(allb):
         r["id"] = f"b{i:05d}"
+
+    # the twin's solar rows stay only on the plan's solar land (zones «Поля СЭС», id z_solar*), cut round the streets (the
+    # walk band + 2 m) and the buildings (+ 3 m); pieces shorter than 10 m or under 20 m² go (owner 03.11.2026: the rows stood
+    # over the new industrial belt's sheds, yards and streets)
+    if solar:
+        sol_land = shapely.union_all([zp for zid, (z, zp, _r) in zones.items() if zid.startswith("z_solar")])
+        hard = [g.buffer(2.0) for _s, g, _lv in U.network_polys(net, norms, "walk")]
+        hard += [U.from_coords(r["footprint"]).buffer(3.0) for r in allb]
+        tree = shapely.STRtree(hard)
+        shapely.prepare(sol_land)
+        kept, n_off, n_cut = [], 0, 0
+        for f in solar:
+            p = U.from_coords(f["polygon"])
+            if sol_land.is_empty or not sol_land.contains(p.centroid):
+                n_off += 1
+                continue
+            near = [hard[i] for i in tree.query(p, predicate="intersects")]
+            q = p.difference(shapely.union_all(near)) if near else p
+            if near:
+                n_cut += 1
+            for g in getattr(q, "geoms", [q]):
+                if g.geom_type != "Polygon" or g.area < 20.0:
+                    continue
+                mr = g.minimum_rotated_rectangle.exterior.coords
+                if max(math.dist(mr[0], mr[1]), math.dist(mr[1], mr[2])) < 10.0:
+                    continue
+                kept.append(dict(f, polygon=U.coords(g)))
+        log("панели СЭС двойника: только на землях СЭС плана, вырезаны улицы и здания", [], off_solar_land=n_off, cut=n_cut,
+            before=len(solar), after=len(kept))
+        solar[:] = kept
 
     # built-in kindergartens where the houses stand (rule 14 as the validator measures it): a multi-storey house that no
     # kindergarten plot or built-in group reaches on foot within the radius puts a one-group built-in kindergarten on its lot

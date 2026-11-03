@@ -493,7 +493,7 @@ ic_existing("ic_a3_km55", 360.0, 13800.0, "diamond", None, None,
 # alongside the carriageway, merge angle < 2°, radius ≥ 60 m, terminal 150 m east of the A-3 as a 4-arm crossing); the
 # street passes over both carriageways (grade_separation); the west half is Growing-West's (spec_issues: J147, J146).
 RAMP_R = 60.0
-TERM_M = 150.0
+TERM_M = 220.0                    # the terminal off the A-3: past the street's ramp down from its overpass (was 150 m: on the deck)
 
 
 def _off(L, s_, d):
@@ -528,11 +528,21 @@ def half_diamond(nid, sid, J, nb_id, sb_id, yr, kmname):
         raise SystemExit(f"{nid}: {sid} не пересекает {nb_id}")
     X = X if X.geom_type == "Point" else X.geoms[0]
     sc = Lnb.project(X)
-    T_ = Ls.interpolate(Ls.project(X) + TERM_M)
-    T_ = (T_.x, T_.y)
+    s_t = Ls.project(X) + TERM_M
+    T_ = Ls.interpolate(s_t)
+    # the street is divided (gen_network draws its carriageways cw_offset off the axis): each ramp ends on the carriageway on
+    # its own side — the exit, coming from the south, on the southern one; the entry, leaving to the north, on the northern
+    # one. Ending on the axis they crossed the near carriageway, the crossing came out separated and the street passed over
+    # both ramps, which met only each other (owner 03.11.2026); a joint node at each end ties it to its carriageway
+    _pr = LU.profile_from_norms(_LN, SID[sid]["class"])
+    e_cw = _pr.get("median_w", 0.0) / 2.0 + _pr["lanes"][0] * _pr["lane_w"] / 2.0 if len(_pr["lanes"]) == 2 and _pr.get("median_w", 0.0) > 0 else 0.0
+    _a, _b = Ls.interpolate(s_t - 5.0), Ls.interpolate(s_t + 5.0)
+    _d = np.array([_b.x - _a.x, _b.y - _a.y]); _d /= max(np.linalg.norm(_d), 1e-9)
+    _cw = [(T_.x + _d[1] * e_cw * k, T_.y - _d[0] * e_cw * k) for k in (1.0, -1.0)]
+    T_ex, T_en = min(_cw, key=lambda q: q[1]), max(_cw, key=lambda q: q[1])
     ex = fillet([_off(Lnb, sc - 430, 0.0), _off(Lnb, sc - 370, 1.2), _off(Lnb, sc - 310, 3.2), _off(Lnb, sc - 255, 5.6),
-                 _off(Lnb, sc - 150, 30.0), (T_[0], T_[1] - 70.0), T_], RAMP_R)
-    en = fillet([T_, (T_[0], T_[1] + 70.0), _off(Lnb, sc + 150, 30.0), _off(Lnb, sc + 255, 5.6), _off(Lnb, sc + 330, 3.2),
+                 _off(Lnb, sc - 150, 30.0), (T_ex[0], T_ex[1] - 70.0), T_ex], RAMP_R)
+    en = fillet([T_en, (T_en[0], T_en[1] + 70.0), _off(Lnb, sc + 150, 30.0), _off(Lnb, sc + 255, 5.6), _off(Lnb, sc + 330, 3.2),
                  _off(Lnb, sc + 400, 1.2), _off(Lnb, sc + 465, 0.0)], RAMP_R)
     # the speed-change lane follows the carriageway every 10 m (a 60 m chord on a curved carriageway crossed it 1 m after the
     # ramp's start at km 50, run 3: the lane was cut there, rule 7 «1 м из 100 м»); the ramp ends exactly on its line
@@ -549,6 +559,9 @@ def half_diamond(nid, sid, J, nb_id, sb_id, yr, kmname):
                why=MODEL + f": восточная половина ромба {nid} — ручной съезд (переходно-скоростная полоса вдоль северной проезжей "
                            f"части {nb_id}, радиус ≥ {RAMP_R:.0f} м, примыкание к {sid} в {TERM_M:.0f} м от А-3)")
         ids.append(rid_)
+        _te = T_ex if rid_.endswith("_exit") else T_en
+        node(f"{rid_}_t", _te[0], _te[1], "joint", [rid_, sid],
+             why_ru=f"съезд примыкает к проезжей части {sid} на своей стороне (в {e_cw:.1f} м от оси улицы), в одном уровне")
     node(nid, J[0], J[1], "grade_separation", [nb_id, sid], major=nb_id, major_pair=sb_id, hand_ramps=ids,
          why_ru=f"новая развязка А-3 {kmname} по схеме: улица проходит над обеими проезжими частями, съезды восточной стороны "
                 f"(северная проезжая часть {nb_id} — в районе) ручные: {', '.join(ids)}; западная половина (съезды с южной проезжей "

@@ -433,7 +433,8 @@ Shader "AlatauCity/Ground"
                     yard = lerp(yard, yAvg * (0.96 + 0.08 * fd), saturate((px - 2.5) / 7.0) * 0.75);
                     // a quarter only exists between roads: far from any street (special zones, the airfield, empty plots) the land stays land;
                     // where the data has lots, the lots decide
-                    float noBlock = smoothstep(50.0, 61.0, sd) * (1.0 - gData);
+                    // (once the redrawn map's ground is loaded, land without a piece of it is land too: no old plan's random yards)
+                    float noBlock = max(smoothstep(50.0, 61.0, sd), step(0.5, _AlatauGtOn)) * (1.0 - gData);
                     f = lerp(f, land, noBlock * built * done);
                     // inside a motorway interchange (FilmRoads.PublishZones) the land between the ramps is a mown verge, never yards; the
                     // data's own pieces (a park, a lot) next to an interchange keep their ground (item 93)

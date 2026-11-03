@@ -1365,7 +1365,9 @@ def stroke_outer(s, profiles):
     if isinstance(pi, int) and 0 <= pi < len(profiles):
         pr = profiles[pi]; ln = pr.get("lanes") or [1, 1]; lw = float(pr.get("lane_w") or 3.0) or 3.0
         sw, vg, bk, pk = ((pr.get(k) or [0, 0]) for k in ("sidewalk_w", "verge_w", "bike_w", "parking_w"))
-        car = (max(0, ln[0]) + max(0, ln[1])) * lw * 0.5 + float(pr.get("median_w") or 0) * 0.5 + (pk[0] + pk[1]) * 0.5
+        # one carriageway of a divided road (lanes [n, 0] with the road's median): its lanes only, as FilmRoads.OneCarriageway
+        one_cw = ln[0] > 0 and ln[1] <= 0 and float(pr.get("median_w") or 0) > 0.5
+        car = (max(0, ln[0]) + max(0, ln[1])) * lw * 0.5 + (0.0 if one_cw else float(pr.get("median_w") or 0) * 0.5) + (pk[0] + pk[1]) * 0.5
         side = max(sw[0] + vg[0] + bk[0], sw[1] + vg[1] + bk[1])
         if s.get("t") == "bike_path":
             car = max(0.75, (bk[0] + bk[1]) * 0.5); side = max(vg[0], vg[1])
