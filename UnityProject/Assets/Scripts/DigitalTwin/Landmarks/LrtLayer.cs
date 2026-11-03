@@ -56,11 +56,12 @@ namespace AlatauCity.DigitalTwin.Landmarks
 
         // the deck 1 m deep (the data's rail stands 1.2 m over the underside, its clearance 5 m), a pier every PierStep m of the
         // line and a mast every MastStep m (the Astana viaduct: tall single columns, spans of 30 m)
+        const float BedUp = 0.3f;              // the at-grade track bed over the ground (m)
         const float DeckW = 9.6f, DeckT = 1.0f, Above = 8.5f, PierStep = 30f, MastStep = 50f, LowDeck = 2.5f;
         static readonly Color32 Conc = LM.C("#cfcbc3"), ConcD = LM.C("#aaa59c"), Ballast = LM.C("#77736c"), Rail = LM.C("#4b5057"), Pole = LM.C("#8d939a");
         // the Astana LRT (opened 16.05.2026) as the reference: a light concrete box girder with a white balustrade and a yellow edge, single
         // columns with a Y head, the line on a concrete median with kerbs; at street level a green track bed between kerbs, no fences
-        static readonly Color32 Balustrade = LM.C("#f1f0eb"), Yellow = LM.C("#f2c230"), Kerb = LM.C("#d9d5cc"), TrackGrass = LM.C("#6d8f4a");
+        static readonly Color32 RailTop = LM.C("#a7adb3"), Balustrade = LM.C("#f1f0eb"), Yellow = LM.C("#f2c230"), Kerb = LM.C("#d9d5cc"), TrackGrass = LM.C("#6d8f4a");
         /// <summary>Concrete median under a viaduct: half width (m) and kerb height over the ground.</summary>
         const float MedianHalf = 2.6f, MedianUp = 0.2f;
 
@@ -78,6 +79,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             mat = new Material(sh) { name = "LRT" };
             var rj = JsonUtility.FromJson<RoutesJ>(ta.text);
             foreach (var r in rj.routes) Routes.Add(MakeRoute(r));
+            trackGrid.Clear(); foreach (var r in Routes) IndexTrack(r);
             if (rj.stations != null) extraStations = rj.stations;          // stations of the concept extensions (airport), not in the plan's list
             MakeStations();
             for (int ri = 0; ri < Routes.Count; ri++) BuildRoute(Routes[ri]);
@@ -197,6 +199,9 @@ namespace AlatauCity.DigitalTwin.Landmarks
                         if (cap < r.P[i].y) { r.P[i].y = cap; low[i] = true; }
                     }
             }
+            // a track at street level stands on its bed 0.3 m over the ground at least: the data's rail level there is the ground's,
+            // and the street's own median ribbon (0.15 m over the terrain) covered the bed and its rails (owner 03.11.2026)
+            for (int i = 0; i < n; i++) if (pk[i] == Ground) r.P[i].y = Mathf.Max(r.P[i].y, g[i] + BedUp);
             Phases(r);
             float[] km = new float[3]; for (int i = 0; i < n - 1; i++) km[r.Sec[i]] += (r.S[i + 1] - r.S[i]) / 1000f;
             string End(int e) => r.Ends == null ? "-" : r.Ends[e] == 1 ? "depot" : r.Ends[e] == 2 ? "continues" : "terminus";
@@ -464,8 +469,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             foreach (float tc in new[] { -2.15f, 2.15f })
             {
                 Strip(k, p0, p1, s0, s1, tc, 2.8f, 0.06f, Ballast, LM.Roof);
-                Strip(k, p0, p1, s0, s1, tc - 0.72f, 0.14f, 0.2f, Rail, LM.Steel);
-                Strip(k, p0, p1, s0, s1, tc + 0.72f, 0.14f, 0.2f, Rail, LM.Steel);
+                foreach (float ro in new[] { -0.72f, 0.72f }) k.Beam(p0 + s0 * (tc + ro) + up * 0.15f, p1 + s1 * (tc + ro) + up * 0.15f, 0.12f, 0.16f, RailTop, LM.Steel);
                 k.Beam(p0 + s0 * tc + up * 6.0f, p1 + s1 * tc + up * 6.0f, 0.05f, 0.05f, Rail, LM.Steel);
             }
             if (Mathf.Floor(u0 / MastStep) != Mathf.Floor(u1 / MastStep))
@@ -634,6 +638,38 @@ namespace AlatauCity.DigitalTwin.Landmarks
                         && !hit.collider.name.StartsWith("Terrain") && hit.point.y > CityGround.HeightAt(q.x, q.z) + 1.5f) return false;
                 }
             return true;
+        }
+
+        static readonly Dictionary<long, List<Vector4>> trackGrid = new Dictionary<long, List<Vector4>>();
+        const float TrackCell = 50f;
+        static long TKey(int x, int z) => ((long)(x + 100000) << 32) | (uint)(z + 100000);
+        /// <summary>Is a world point on an LRT track bed at street level (within 'margin' of its 9.2 m bed)? The film's people keep off it.</summary>
+        public static bool OnTrack(float x, float z, float margin = 0.5f)
+        {
+            if (trackGrid.Count == 0) return false;
+            if (!trackGrid.TryGetValue(TKey(Mathf.FloorToInt(x / TrackCell), Mathf.FloorToInt(z / TrackCell)), out var l)) return false;
+            var q = new Vector2(x, z);
+            foreach (var s in l)
+            {
+                Vector2 a = new Vector2(s.x, s.y), b = new Vector2(s.z, s.w), d = b - a; float L2 = d.sqrMagnitude;
+                float t = L2 > 1e-6f ? Mathf.Clamp01(Vector2.Dot(q - a, d) / L2) : 0f;
+                if ((a + d * t - q).magnitude < 4.6f + margin) return true;
+            }
+            return false;
+        }
+        static void IndexTrack(Route r)
+        {
+            for (int i = 0; i + 1 < r.P.Length; i++)
+            {
+                if (r.Sec == null || r.Sec[i] != Ground) continue;
+                Vector3 a = r.P[i], b = r.P[i + 1]; var s = new Vector4(a.x, a.z, b.x, b.z);
+                int x0 = Mathf.FloorToInt((Mathf.Min(a.x, b.x) - 6f) / TrackCell), x1 = Mathf.FloorToInt((Mathf.Max(a.x, b.x) + 6f) / TrackCell);
+                int z0 = Mathf.FloorToInt((Mathf.Min(a.z, b.z) - 6f) / TrackCell), z1 = Mathf.FloorToInt((Mathf.Max(a.z, b.z) + 6f) / TrackCell);
+                for (int x = x0; x <= x1; x++) for (int z = z0; z <= z1; z++)
+                {
+                    long k = TKey(x, z); if (!trackGrid.TryGetValue(k, out var l)) trackGrid[k] = l = new List<Vector4>(); l.Add(s);
+                }
+            }
         }
 
         void Add(Mesh m, int phase, int kind, string name)

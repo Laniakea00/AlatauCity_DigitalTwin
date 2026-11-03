@@ -33,7 +33,9 @@ namespace AlatauCity.DigitalTwin
         {
             built = true; PublishZones();
             var sh = Shader.Find("AlatauCity/Road"); if (sh == null) { Debug.LogWarning("[Alatau] film roads: shader missing"); return; }
-            var mat = new Material(sh) { name = "Film roads" };
+            var mat = new Material(sh) { name = "Film roads" }; var cur = mat;
+            // the Gate District's streets: the area mask that hides the city's roads inside the district does not apply to them
+            var matGate = new Material(sh) { name = "Film roads · Gate District" }; matGate.SetFloat("_NoGate", 1f);
             root = new GameObject("Film roads");
             var V = new List<Vector3>(); var U0 = new List<Vector4>(); var U1 = new List<Vector4>(); var U2 = new List<Vector4>(); var U3 = new List<Vector4>(); var T = new List<int>();
             var along = new List<float>(); int meshes = 0; float km = 0;
@@ -43,7 +45,7 @@ namespace AlatauCity.DigitalTwin
                 var m = new Mesh { name = "Film roads " + meshes, indexFormat = UnityEngine.Rendering.IndexFormat.UInt32 };
                 m.SetVertices(V); m.SetUVs(0, U0); m.SetUVs(1, U1); m.SetUVs(2, U2); m.SetUVs(3, U3); m.SetTriangles(T, 0); m.RecalculateNormals(); m.RecalculateBounds();
                 var go = new GameObject(m.name); go.transform.SetParent(root.transform, false);
-                go.AddComponent<MeshFilter>().sharedMesh = m; var mr = go.AddComponent<MeshRenderer>(); mr.sharedMaterial = mat;
+                go.AddComponent<MeshFilter>().sharedMesh = m; var mr = go.AddComponent<MeshRenderer>(); mr.sharedMaterial = cur;
                 mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off; mr.receiveShadows = true;
                 V.Clear(); U0.Clear(); U1.Clear(); U2.Clear(); U3.Clear(); T.Clear(); meshes++;
             }
@@ -69,10 +71,11 @@ namespace AlatauCity.DigitalTwin
             long tile = long.MinValue;
             void TileBreak(Vector2 p) { long k = TileKey(p); if (k != tile) { Flush(); tile = k; } }
             var order = new List<int>(strokes.Count); for (int i = 0; i < strokes.Count; i++) order.Add(i);
-            order.Sort((a, b) => TileKey(TileAt(strokes[a])).CompareTo(TileKey(TileAt(strokes[b]))));
+            order.Sort((a, b) => strokes[a].Gate != strokes[b].Gate ? strokes[a].Gate.CompareTo(strokes[b].Gate) : TileKey(TileAt(strokes[a])).CompareTo(TileKey(TileAt(strokes[b]))));
             foreach (int si in order)
             {
                 var st = strokes[si];
+                if (st.Gate && cur != matGate) { Flush(); cur = matGate; tile = long.MinValue; }
                 TileBreak(TileAt(st));
                 // a reconstruction (StageP): the lamps stand by the widest (last) cross-section in every year; the ribbons and the deck or
                 // embankment sides are drawn once per cross-section, each shown from its year until the next one's (Until)
@@ -157,10 +160,14 @@ namespace AlatauCity.DigitalTwin
             }
             // junctions: a round patch of plain asphalt (and of pavement under it) where streets meet, so their ends never show and lines
             // never cross inside a junction. A motorway or ring road that runs straight through keeps its markings (ramps just merge).
-            var nodeList = new List<Junction>(nodes.Values); nodeList.Sort((a, b) => TileKey(a.P).CompareTo(TileKey(b.P)));
+            Flush(); cur = mat; tile = long.MinValue;
+            var nodeList = new List<Junction>(); var gateNodes = new HashSet<Junction>();
+            foreach (var kv in nodes) { nodeList.Add(kv.Value); if (kv.Key <= GateNode0) gateNodes.Add(kv.Value); }
+            nodeList.Sort((a, b) => gateNodes.Contains(a) != gateNodes.Contains(b) ? gateNodes.Contains(a).CompareTo(gateNodes.Contains(b)) : TileKey(a.P).CompareTo(TileKey(b.P)));
             foreach (var nd in nodeList)
             {
                 if (nd.Deg < 2) continue;
+                if (gateNodes.Contains(nd) && cur != matGate) { Flush(); cur = matGate; tile = long.MinValue; }
                 if (nd.Fast && nd.Through) continue;
                 TileBreak(nd.P);
                 if (nd.Deg == 2 && nd.Through) continue;
@@ -627,6 +634,31 @@ namespace AlatauCity.DigitalTwin
             /// whose carriageway half width, lanes (of one direction on a ramp or a one-way carriageway) and median are StageHalf / StageLanes /
             /// StageMedian. Null without one.</summary>
             public int Prof0 = -1; public int[] StageP, StageLanes; public Vector4[] StageY; public float[] StageHalf, StageMedian;
+            /// <summary>A street of the Gate District round Iconic (gate_roads.json): drawn over the district's area, which hides the city's.</summary>
+            public bool Gate;
+        }
+        /// <summary>FilmRoads draws the Gate District's streets (as the city's: lanes, markings, pavements) in place of the page's own asphalt
+        /// (IconicDistrict leaves its asphalt out); the cars of the district run at GateLift over the terrain.</summary>
+        public static bool GateDrawn { get; private set; }
+        public const float GateLift = 0.26f;
+        const int GateNode0 = -50000000;                  // junction ids of the Gate streets (ends within 1.5 m share one)
+        static void AddGateStrokes(List<Stroke> res)
+        {
+            var lines = FilmTraffic.GateLines(); if (lines == null || lines.Count == 0) return;
+            float yr = 2030f; foreach (var l in Landmarks.LandmarkCatalog.All()) if (l.Id == "iconic") yr = l.EndYear + 1;
+            var yv = new Vector4(yr, yr, yr, yr);
+            var ends = new List<(Vector2 p, int id)>(); int next = GateNode0;
+            int Id(Vector2 p) { foreach (var e in ends) if ((e.p - p).sqrMagnitude < 2.25f) return e.id; ends.Add((p, next)); return next--; }
+            foreach (var (P, half, one, ring) in lines)
+            {
+                var pts = new List<Vector2>(P); float L = 0f; for (int i = 1; i < pts.Count; i++) L += (pts[i] - pts[i - 1]).magnitude;
+                if (L < 1f) continue;
+                var st = new Stroke { Cls = TwinData.RoadClass.Main, Years = yv, A = Id(pts[0]), B = Id(pts[pts.Count - 1]), P = pts, Len = L, Ramp = false,
+                    OneWay = one || ring, Fixed = true, Gate = true, Kind = "gate_street" };
+                st.PHalf = half; st.PWalk = one ? 0f : 2.5f; st.PLanes = one ? 1 : ring ? 2 : half >= 10f ? 3 : 2;
+                res.Add(st);
+            }
+            GateDrawn = true;
         }
         static List<Stroke> drawn; static Dictionary<int, List<int>> drawnAt;
 
@@ -1244,6 +1276,7 @@ namespace AlatauCity.DigitalTwin
                 res.Add(st);
             }
             DropStubs(res);
+            AddGateStrokes(res);
             return res;
         }
 

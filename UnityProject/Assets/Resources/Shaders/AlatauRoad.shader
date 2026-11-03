@@ -23,6 +23,7 @@ Shader "AlatauCity/Road"
         #pragma target 3.5
         #include "Assets/Shaders/AlatauFilm.cginc"
         float _AlatauYear, _AlatauYearF, _AlatauGrow, _AlatauScenIdx, _AlatauLampOn; float4 _AlatauMaket, _AlatauBlackoutZone;
+        float _NoGate;                           // 1: the Gate District's own streets (FilmRoads), not hidden by its area mask
         struct Input { float4 road; float4 dims; float4 years; float4 lamp; float3 worldPos; };
         void vert(inout appdata_full v, out Input o) { UNITY_INITIALIZE_OUTPUT(Input, o); o.road = v.texcoord; o.dims = v.texcoord1; o.years = v.texcoord2; o.lamp = v.texcoord3; }
         float Line(float d, float halfW, float aa) { return saturate((halfW - abs(d)) / max(aa, 1e-4) + 0.5); }
@@ -57,7 +58,7 @@ Shader "AlatauCity/Road"
             float now = _AlatauGrow > 0.5 ? _AlatauYearF + 1.0 : (_AlatauYear < 1 ? 2050.0 : _AlatauYear);
             clip(now + 0.5 - yr);
             if (until > 0.5) clip(until + 1999.5 - now);                     // replaced by its reconstruction from 'until' on
-            if (AlatauOnPad(IN.worldPos) > 0.5) clip(-1.0);                  // no road through a landmark's plot
+            if ((_NoGate > 0.5 ? AlatauOnPadOnly(IN.worldPos) : AlatauOnPad(IN.worldPos)) > 0.5) clip(-1.0);    // no road through a landmark's plot (_NoGate: the Gate District's own streets)
             float x = IN.road.x, v = IN.road.y, hw = IN.dims.x, oneWay = step(IN.dims.w, -0.5), lanes = max(abs(IN.dims.w), 1.0), len = IN.dims.z;
             float ax = abs(x), xw = fwidth(x), vw = fwidth(v);
             float3 pa = AlatauMat(IN.worldPos.xz, 6.0).pattern, pp = AlatauMat(IN.worldPos.xz, 7.0).pattern;

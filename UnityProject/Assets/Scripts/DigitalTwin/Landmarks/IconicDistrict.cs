@@ -84,6 +84,9 @@ namespace AlatauCity.DigitalTwin.Landmarks
             // (up to 32 m) by their centre, so their outer ends stuck out up to 15 m past the round in a sawtooth of shards over the
             // map's own ground; the buildings stand whole
             float areaR = AreaRadius(d); var m = d.Mesh; var gm = ClipGround(m, areaR, out int cut, out int gone);
+            // the district's streets are the city's film roads (FilmRoads draws gate_roads.json as its own streets): the page's asphalt
+            // (ground tag 31) is left out, the paving and lawns under and round it stay
+            if (Resources.Load<TextAsset>("Film/Traffic/gate_roads") != null) gm = WithoutAsphalt(gm);
             // every vertex on the terrain (the page's ground is flat at 0): walls keep their plan, so a building stays upright
             int nv = gm.P.Length;
             var pos = new Vector3[nv];
@@ -225,6 +228,18 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 for (int i = 1; i + 1 < poly.Count; i++) { I.Add(b0); I.Add(b0 + i); I.Add(b0 + i + 1); }
             }
             return new QTwinData.QMesh { P = P.ToArray(), N = N.ToArray(), U = U.ToArray(), Fy = Fy?.ToArray(), Tag = Tg.ToArray(), I = I.ToArray() };
+        }
+        /// <summary>The mesh without its ground asphalt: triangles under 1 m whose corners are all tag 31.</summary>
+        static QTwinData.QMesh WithoutAsphalt(QTwinData.QMesh m)
+        {
+            var I = new List<int>(m.I.Length);
+            for (int t = 0; t + 2 < m.I.Length; t += 3)
+            {
+                int a = m.I[t], b = m.I[t + 1], c = m.I[t + 2];
+                if (m.Tag[a] == 31 && m.Tag[b] == 31 && m.Tag[c] == 31 && Mathf.Max(m.P[a].y, Mathf.Max(m.P[b].y, m.P[c].y)) < 1f) continue;
+                I.Add(a); I.Add(b); I.Add(c);
+            }
+            return new QTwinData.QMesh { P = m.P, N = m.N, U = m.U, Fy = m.Fy, Tag = m.Tag, Part = m.Part, I = I.ToArray() };
         }
         /// <summary>Does a triangle whose corners all lie outside the round still cross it (an edge passing inside)?</summary>
         static bool Crosses(Vector3 a, Vector3 b, Vector3 c, float R)

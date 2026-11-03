@@ -538,9 +538,8 @@ def lot_type(L, built):
     # a large sports lot with nothing on it (a golf course, the autodrome's land): textured grass with trees, not a 300 ha
     # football pitch (type 12 is drawn as turf to the lot's edge); the sports grounds of the quarters stay 12
     if t == 12 and L["id"] not in built and float(L.get("area_m2") or 0.0) > 2e4:
-        # a golf course: textured grass with trees; other large empty sports land (the autodrome, whose track the data has
-        # not drawn): open steppe — from afar a 300 ha park reads as one flat green square
-        t = 6 if BLOCK_ZONE.get((L.get("_d"), L.get("block")), "").startswith("golf") else 8
+        # (golf courses and sports parks: RecreationLayer draws their fairways, courts and fields on it)
+        t = 6
     return t
 
 

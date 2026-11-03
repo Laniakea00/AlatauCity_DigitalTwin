@@ -233,6 +233,7 @@ namespace AlatauCity.DigitalTwin
         {
             if (LandmarkSystem.OnPlot(q.x, q.y, 2f)) return false;
             if (FilmRoads.InInterchange(q.x, q.y)) return false;
+            if (LrtLayer.OnTrack(q.x, q.y)) return false;                 // the LRT's track bed at street level: no one walks on the rails
             if (segs != null)
                 foreach (var s in segs)
                 {

@@ -383,6 +383,34 @@ namespace AlatauCity.DigitalTwin
         // ------------------------------------------------------------------ the streets of the Gate district (not film roads: its own model)
         [System.Serializable] class GateRoadJ { public int o; public float[] p; }
         [System.Serializable] class GateRoadsJ { public GateRoadJ[] roads; }
+        /// <summary>The Gate district's streets in world coordinates (gate_roads.json in the frame of Iconic, IconicFrame X/Z/Yaw) with the
+        /// half width its asphalt has (as AddGateWays measures it), one-way and ring flags: FilmRoads draws them as the city's streets.
+        /// Null without the data.</summary>
+        public static List<(Vector2[] P, float Half, bool OneWay, bool Ring)> GateLines()
+        {
+            var ta = Resources.Load<TextAsset>("Film/Traffic/gate_roads"); if (ta == null) return null;
+            GateRoadsJ data; try { data = JsonUtility.FromJson<GateRoadsJ>(ta.text); } catch { return null; }
+            if (data?.roads == null) return null;
+            float a = Landmarks.IconicFrame.Yaw * Mathf.Deg2Rad, ca = Mathf.Cos(a), sa = Mathf.Sin(a); bool asph = GateAsphaltReady();
+            var res = new List<(Vector2[], float, bool, bool)>();
+            foreach (var r in data.roads)
+            {
+                if (r.p == null || r.p.Length < 6) continue;
+                int m = r.p.Length / 3; bool one = r.o == 1; float eMin = float.MaxValue, eMax = 0f, rl = 0f;
+                for (int j = 0; j < m; j++)
+                {
+                    float x = r.p[3 * j] / 249.5f, z = r.p[3 * j + 2] / 202f, e = x * x + z * z; eMin = Mathf.Min(eMin, e); eMax = Mathf.Max(eMax, e);
+                    if (j > 0) rl += new Vector2(r.p[3 * j] - r.p[3 * j - 3], r.p[3 * j + 2] - r.p[3 * j - 1]).magnitude;
+                }
+                bool ring = !one && eMin > 0.72f && eMax < 1.15f && rl > 20f;
+                float half = one ? 2.5f : ring ? 4.6f : 7f;
+                if (!one && asph) { float mh = MeasureHalf(r.p, m); if (mh > 0f) half = mh; }
+                var P = new Vector2[m];
+                for (int j = 0; j < m; j++) { float x = r.p[3 * j], z = r.p[3 * j + 2]; P[j] = new Vector2(Landmarks.IconicFrame.X + x * ca + z * sa, Landmarks.IconicFrame.Z - x * sa + z * ca); }
+                res.Add((P, half, one, ring));
+            }
+            return res;
+        }
         bool gateAdded;
         /// <summary>The centre lines of the district's asphalt (Resources/Film/Traffic/gate_roads.json, the district's local frame, traced from
         /// gate_district.bytes): two-way streets with a lane each side, the two small roundabouts one-way counterclockwise. Only while the
@@ -439,7 +467,8 @@ namespace AlatauCity.DigitalTwin
                     Vector2 t = d.P[Mathf.Min(j + 1, m - 1)] - d.P[Mathf.Max(j - 1, 0)]; t = t.sqrMagnitude > 1e-6f ? t.normalized : Vector2.up;
                     d.T[j] = t; d.R[j] = new Vector2(t.y, -t.x);
                     if (j > 0) d.Cum[j] = d.Cum[j - 1] + (d.P[j] - d.P[j - 1]).magnitude;
-                    Vector2 p = d.P[j], rr = d.R[j] * half; float off = ly[j] + Lift;
+                    // on the carriageway FilmRoads draws for the district's streets (FilmRoads.GateLift), else on the page's asphalt
+                    Vector2 p = d.P[j], rr = d.R[j] * half; float off = FilmRoads.GateDrawn ? FilmRoads.GateLift : ly[j] + Lift;
                     d.YC[j] = CityGround.HeightAt(p.x, p.y) + off; d.YR[j] = CityGround.HeightAt(p.x + rr.x, p.y + rr.y) + off; d.YL[j] = CityGround.HeightAt(p.x - rr.x, p.y - rr.y) + off;
                 }
                 d.Len = d.Cum[m - 1];

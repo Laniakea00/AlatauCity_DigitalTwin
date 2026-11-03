@@ -453,6 +453,17 @@ AFacade AlatauFacade(float2 wall, float hy, float H, float floorsN, float style,
 sampler2D _AlatauPadTex; float _AlatauPadOn; float4 _AlatauGate; float _AlatauGateOn, _AlatauGateHalf; sampler2D _AlatauGateTex;
 // No early return inside the Gate test: compiled to WebGL that shape (a sampled branch whose result decides
 // whether the pad texture is read) crashes Chrome's shader compiler on Windows (D3D11 GPU process stack overflow).
+// only the landmark plots (not the Gate District's area): the district's own streets that FilmRoads draws over it
+float AlatauOnPadOnly(float3 wpos)
+{
+    float pad = 0.0;
+    if (_AlatauPadOn > 0.5)
+    {
+        float2 uv = float2(2.29357798e-5 * wpos.x + 0.5, 1.62074554e-5 * wpos.z + 0.491085899);
+        pad = tex2Dlod(_AlatauPadTex, float4(uv, 0, 0)).r;
+    }
+    return pad;
+}
 float AlatauOnPad(float3 wpos)
 {
     float pad = 0.0;
