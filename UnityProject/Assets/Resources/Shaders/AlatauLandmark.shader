@@ -44,6 +44,7 @@ Shader "AlatauCity/Landmark"
         #include "Assets/Shaders/AlatauQTwin.cginc"
         #endif
         float _Reveal, _Build, _Ghost, _Hi, _Facade, _Land, _Glow, _H, _Park;
+        float _AlatauGateR;                     // radius of the Gate District's area (IconicFrame.AreaR), metres
         // night (FilmLook): _AlatauDark 0..1 how dark it is (a cool sky fill keeps the models legible), _AlatauLampOn the city's lights
         float _AlatauDark, _AlatauLampOn;
         // buildings of a complex (LandmarkSystem.Parts): x reveal, y build, z facade, w landscaping · x glow, y height, z outline, w progress
@@ -191,6 +192,15 @@ Shader "AlatauCity/Landmark"
                     q.col *= lerp(float3(1, 1, 1), pp * lerp(1.0, pao, 0.5), k) * lerp(1.0, 0.86 + 0.28 * macro, film);
                     // lawns as the city's grass: a natural olive instead of the page's bright green, with broad mown patches
                     if (isGrass) q.col = lerp(q.col, q.col.ggg * float3(0.80, 1.0, 0.55), 0.30 * film) * lerp(1.0, 0.84 + 0.32 * ANoise(IN.worldPos.xz * 0.0065 + 2.0), film);
+                    #if defined(ALATAU_QT_GATE)
+                    // the last 70 m of the district's lawns turn into the city's lighter lawn outside it (measured on the shots: the
+                    // city's sunlit lawn ≈ 2× brighter and yellower), so the edge of the quarter does not show as a line of colour
+                    if (isGrass && _AlatauGateR > 0.0)
+                    {
+                        float eg = smoothstep(_AlatauGateR - 70.0, _AlatauGateR - 4.0, length(IN.worldPos.xz - _AlatauGate.xy));
+                        q.col *= lerp(float3(1, 1, 1), float3(4.4, 2.9, 2.0), eg);
+                    }
+                    #endif
                 }
                 float3 f0 = lerp(float3(0.04, 0.04, 0.04), q.col, q.metal);
                 float gloss = (1.0 - q.rough) * (1.0 - q.rough);

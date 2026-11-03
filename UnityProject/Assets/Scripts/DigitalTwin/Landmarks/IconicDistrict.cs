@@ -27,6 +27,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             GateTexId = Shader.PropertyToID("_AlatauGateTex"), GateHalfId = Shader.PropertyToID("_AlatauGateHalf");
         const int Tiles = 4;                                       // the district is cut into 4 × 4 renderers, so the camera culls them
         const float Lift = 0.12f;                                  // the ground of the district a hair above the terrain
+        const float AsphaltLift = 0.06f;                           // its asphalt over its paving
 
         // ------------------------------------------------------------------ the area (static: the landmark plots ask before it is built)
         static bool frame; static Vector2 fc; static float fca, fsa;
@@ -89,7 +90,9 @@ namespace AlatauCity.DigitalTwin.Landmarks
             for (int i = 0; i < nv; i++)
             {
                 var p = gm.P[i]; var w = org + rot * new Vector3(p.x, 0f, p.z);
-                pos[i] = new Vector3(p.x, CityGround.HeightAt(w.x, w.z) - baseY + p.y + Lift, p.z);
+                // the streets' asphalt (tag 31) 6 cm over the paving: where the two overlap at the edge of the area, each draped
+                // on the terrain through its own triangles, they no longer show through each other in a sawtooth
+                pos[i] = new Vector3(p.x, CityGround.HeightAt(w.x, w.z) - baseY + p.y + Lift + (gm.Tag[i] == 31 ? AsphaltLift : 0f), p.z);
             }
             // cut into tiles by the centre of each triangle
             float tileW = 2f * d.Half / Tiles; var lists = new List<int>[Tiles * Tiles];
@@ -159,6 +162,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             tex.SetPixelData(d.Mask, 0); tex.Apply(false, true);
             Shader.SetGlobalTexture(GateTexId, tex); Shader.SetGlobalFloat(GateHalfId, d.Half);
             Shader.SetGlobalVector(GateId, new Vector4(host.X, host.Z, fca, fsa)); Shader.SetGlobalFloat(GateOnId, 0f);
+            Shader.SetGlobalFloat("_AlatauGateR", IconicFrame.AreaR);          // the shader blends the district's lawn edge into the city's
             root.SetActive(false);                                               // Update switches it on and clears the city out of its area
             Debug.Log($"[Alatau] Gate District (QTwin): {tris} triangles in {lists.Length} tiles, {nt} trees, at ({host.X:0}, {host.Z:0}) yaw {host.Yaw:0}, ground {baseY:0.0} m; its ground cut on the round of its area (r {areaR:0.0} m): {cut} pieces cut, {gone} outside dropped");
         }
