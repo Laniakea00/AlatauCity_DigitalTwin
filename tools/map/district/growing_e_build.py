@@ -1010,6 +1010,8 @@ for z in Z.ZPLAN:
 
 def _wedge(poly, a0, a1, r, step=40.0):
     """Points within r of `poly` in the bearing range a0..a1 (azimuth from +z toward +x, as in rule 15)."""
+    if poly.geom_type != "Polygon":                  # a zone cut in parts (owner_reloc 05.11.2026): its hull, the wider wedge
+        poly = poly.convex_hull
     b = poly.exterior
     pts = [b.interpolate(t_) for t_ in np.arange(0.0, b.length, step)] + [poly.centroid]
     angs = np.radians(np.linspace(a0, a1 if a1 >= a0 else a1 + 360.0, 13))

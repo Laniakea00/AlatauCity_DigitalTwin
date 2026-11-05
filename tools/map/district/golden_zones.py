@@ -116,6 +116,8 @@ def plan():
                                           "как Z-L3 — склады, без жилья (рядом полигон Әли)"})
             SCHEME_CHANGES.append(("Z-L3e", f"{rest.area / 1e4:.0f} га без зоны в схеме у Әли — склады, как соседняя Z-L3 "
                                             "(жильё у полигона не ставится)"))
+    import owner_reloc as OR  # noqa: E402
+    OR.apply("golden", out, lambda zid, u, d: use_rules(u, d), SCHEME_CHANGES)     # owner 05.11.2026: industry to the edges
     return out
 
 

@@ -94,6 +94,8 @@ def plan():
                     "rules": use_rules(z["id"], z["use"], d), "why": z.get("why", "схема уровня 0"), "density": d, "src": "v0",
                     "population_existing": z.get("population_existing")})
         taken = taken.union(p)
+    import owner_reloc as OR  # noqa: E402
+    OR.apply("growing_e", out, use_rules, SCHEME_CHANGES)                        # owner 05.11.2026: industry to the edges
     return out
 
 

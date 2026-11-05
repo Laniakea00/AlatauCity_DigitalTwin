@@ -205,7 +205,9 @@ KAIST_PAD = shapely.affinity.translate(shapely.affinity.rotate(box(-KAIST_W / 2,
 # подходящую»): the pad at (−465, −8276) lay 18 % on the Terenkara and its 35 m water belt; moved to dry land in the city park
 # «Төменгі Тереңқара» (zones Z-P4_p2 / Z-P1_p9), 1.5 km west of the Golden centre: no water within 40 m, no arterial or district
 # street through it, no existing house (searched over a 100 m grid within 3 km of C1); local streets go round it, as KAIST
-KPARK_XZ, KPARK_YAW, KPARK_W, KPARK_D = (-2200.0, -9400.0), 0.0, 360.0, 280.0
+# Owner 05.11.2026, second round («всё ещё в воде … передвинь парк к городу и людям»): the pad by the pond of the plan's water
+# zone Z-W was moved again, into the housing of northern Golden: no plan or OSM water within 330 m, 94 % housing round it
+KPARK_XZ, KPARK_YAW, KPARK_W, KPARK_D = (-2300.0, -7300.0), 0.0, 360.0, 280.0
 KPARK_PAD = shapely.affinity.translate(shapely.affinity.rotate(box(-KPARK_W / 2, -KPARK_D / 2, KPARK_W / 2, KPARK_D / 2), -KPARK_YAW,
                                                                origin=(0, 0)), *KPARK_XZ)
 
@@ -984,7 +986,7 @@ put("korean_clinics", "by_rule", None, (-1050.0, -10150.0), "Z-M1", 15000.0, "cl
     MODEL + ": в медкластере (места в источнике нет)")
 obj("k_park", "move", regpt("k_park"), list(KPARK_XZ), "district_only",
     "решение владельца 05.11.2026: прежний участок у Теренкары на 18 % лежал на реке и её водоохранной полосе — K-Park перенесён "
-    "на сухую землю в городской парк «Төменгі Тереңқара», в 1,5 км к западу от центра Golden; модель Unity kpark 360 × 280 м "
+    "в жилые кварталы северного Golden, в 2 км от центра, вдали от воды (второй перенос: у пруда «Төменгі Тереңқара» парк стоял у воды); модель Unity kpark 360 × 280 м "
     "целиком, местные улицы его обходят; зона Z-P3 остаётся парком", basis="по источнику", kind="landmark",
     footprint=KPARK_PAD, years=Y4(2027), yaw=KPARK_YAW)
 obj("k_park_parts", "move", regpt("k_park"), list(KPARK_XZ), "district_only", "внутри K-Park (его модель)", basis="по источнику")
@@ -1019,8 +1021,9 @@ _ag = near_d492(-3300.0)
 _base_ag = next((z["_base"] for z in ZONES if Polygon(z["polygon"]).buffer(0).contains(Point(_ag))), "Z-L1")
 put("agro_processing_golden", "by_rule", None, _ag, _base_ag, 150000.0, "logistics", Y4(2030),
     MODEL + ": кластер агропереработки — у существующей дороги d492aa6d между Косөзеном и А-3 (схема: (−4300, −4100))")
-put("kosozen_logistics", "by_rule", None, (-2400.0, -4000.0), "Z-L2", 150000.0, "logistics", Y4(2038),
-    MODEL + ": источник — «между Косөзеном и Капчагайской трассой»; зона Z-L2 у Западного проспекта")
+put("kosozen_logistics", "by_rule", None, (-11883.0, -3406.0), "Z-R0_indB", 150000.0, "logistics", Y4(2038),
+    MODEL + ": источник — «между Косөзеном и Капчагайской трассой»; решение владельца 05.11.2026: склады — в Западный промпарк (зона B), "
+    "на месте Z-L2 теперь жильё")
 obj("space_comm_centre", "keep", [-442.0, -10648.0], [-442.0, -10648.0], "point_50m",
     "существующий объект, контур OSM 25 га (зона Z-U1); кампус рядом, не на нём", basis="по источнику")
 obj("landfill_ali", "keep", regpt("landfill_ali"), regpt("landfill_ali"), "settlement_1km",

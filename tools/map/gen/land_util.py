@@ -769,13 +769,31 @@ def shift_like(street_years, base_year, use="housing"):
 
 
 # ------------------------------------------------------------------------------------------------------------ geometry
+def _union_safe(parts):
+    try:
+        return shapely.union_all(parts, grid_size=0.001)
+    except shapely.errors.GEOSException:
+        pass
+    g = Polygon()
+    for q in sorted(parts, key=lambda q: -q.area):
+        try:
+            g = g.union(q.buffer(0))
+        except shapely.errors.GEOSException:
+            continue                              # a hairline sliver GEOS cannot place: dropped
+    return g
+
+
 def clean(g):
     if g is None:
         return Polygon()
     if not g.is_valid:
         g = shapely.make_valid(g)
     if g.geom_type == "GeometryCollection":
-        g = unary_union([q for q in g.geoms if q.geom_type in ("Polygon", "MultiPolygon")])
+        parts = [q for q in g.geoms if q.geom_type in ("Polygon", "MultiPolygon")]
+        try:
+            g = unary_union(parts)
+        except shapely.errors.GEOSException:     # «Result area inconsistent» on a near-degenerate piece: the union on a 1 mm
+            g = _union_safe(parts)                # grid, else piece by piece
     return g
 
 

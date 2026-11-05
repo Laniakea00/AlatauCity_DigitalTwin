@@ -41,6 +41,7 @@ MIN_HA = 20.0
 SKIP_ZONES = ("track",)                      # the existing autodrome stays as it is
 NO_GOLF = ("golf_",)                         # owner 05.11.2026: the East Golf Club rows are removed
 GOLF_SITE = ("green", "f1")                  # owner 05.11.2026: the big golf course and the sports quarter
+GOLF_PLAYED = None                           # fairways, greens, tees and lakes of the last course (golf_course sets it)
 
 rng = np.random.default_rng(2035)
 doc = {"v": 2, "made_by": "tools/map/export/recreation.py (модель qTwin)", "turf": [], "fairways": [], "greens": [], "bunkers": [],
@@ -265,6 +266,8 @@ def golf_course(poly, y, street):
             if lp.area > 1500:
                 doc["ponds"].append({"t": tri(lp, 10.0), "y": y}); lakes.append(lp)
     lakes_u = unary_union(lakes) if lakes else Polygon()
+    global GOLF_PLAYED
+    GOLF_PLAYED = played.union(lakes_u)
     # (no cart paths: drawn as thin ribbons over the rough they read as stray lines from above)
     # groves in the rough between the holes, denser at the course's edge; a tree line along the boundary
     groves = rough.difference(lakes_u.buffer(12))
@@ -366,6 +369,115 @@ def sports_quarter(poly, y, street, plots=SPORT_PLOTS, gap=34.0):
     return len(placed)
 
 
+# ====================================================================================================== golf & sports park (owner 05.11.2026, round 2)
+# «пусть они будут разбросаны»: no grid of plots. The four big venues stand apart along the edge of the site, each turned to the
+# edge it stands on; the golf course fills the middle and wraps round them; the small sports plots are scattered in the free land
+# round the course (random positions and angles, ≥ 90 m apart), each on its own fenced, planted plot; a promenade loop round the
+# site with a path from every plot to it.
+BIG_VENUES = [("hippodrome", 820, 420), ("stadium", 300, 230), ("tennis_centre", 250, 190), ("arena", 220, 160)]
+SMALL_PLOTS = [("football", 150, 110), ("tennis", 150, 110), ("basketball", 150, 110), ("padel", 120, 90), ("skate", 130, 100),
+               ("playground", 120, 90), ("football", 150, 110), ("ropes", 130, 100), ("picnic", 150, 110), ("tennis", 150, 110),
+               ("basketball", 150, 110), ("playground", 120, 90), ("padel", 120, 90), ("picnic", 150, 110)]
+
+
+def _rect(cx, cz, a_deg, w, d):
+    """A w (along a_deg) × d rectangle round (cx, cz)."""
+    a = math.radians(a_deg); u = (math.cos(a), math.sin(a)); n = (-u[1], u[0])
+    return Polygon([(cx + u[0] * sx * w / 2 + n[0] * sz * d / 2, cz + u[1] * sx * w / 2 + n[1] * sz * d / 2)
+                    for sx, sz in ((-1, -1), (1, -1), (1, 1), (-1, 1))])
+
+
+def _plot(kind, cx, cz, a_deg, w, d, y):
+    """A sport on its own plot: the plot (lawn, fence, gate) and the facility 30 m smaller, local +z along the long side."""
+    yaw = uyaw(a_deg)
+    item("plot", cx, cz, yaw, w, d, y)
+    if kind == "picnic":
+        grove(_rect(cx, cz, a_deg, w - 24, d - 24), 40, 0.3)
+    item(kind, cx, cz, yaw, w - 30, d - 30, y)
+    tree_ring(_rect(cx, cz, a_deg, w + 12, d + 12), 12.0, 0.85)
+
+
+def _edge_angle(edge, s):
+    p0 = edge.interpolate(max(s - 20, 0)); p1 = edge.interpolate(min(s + 20, edge.length))
+    return math.degrees(math.atan2(p1.y - p0.y, p1.x - p0.x))
+
+
+def golf_resort(q, y, st):
+    inner = q.buffer(-25.0)
+    edge = q.exterior
+    placed = []            # (kind, rect)
+    # ---- the big venues along the edge, as far from each other as they fit; the first by the access street
+    for i, (kind, w, d) in enumerate(BIG_VENUES):
+        best, best_s = None, -1e18
+        for s in np.arange(0, edge.length, 30.0):
+            p = edge.interpolate(s)
+            a = _edge_angle(edge, s) + rng.uniform(-10, 10)
+            nx, nz = -math.sin(math.radians(a)), math.cos(math.radians(a))
+            for sgn in (1, -1):
+                cx, cz = p.x + nx * sgn * (d / 2 + 30), p.y + nz * sgn * (d / 2 + 30)
+                r = _rect(cx, cz, a, w, d)
+                if not inner.contains(r) or any(r.buffer(70).intersects(o) for _, o in placed):
+                    continue
+                spread = min([r.centroid.distance(o.centroid) for _, o in placed] or [5000.0])
+                sc = spread - (r.centroid.distance(st) * 0.5 if (i == 0 and st is not None) else 0.0)
+                if sc > best_s:
+                    best, best_s = (cx, cz, a, r), sc
+        if best is None:
+            continue
+        cx, cz, a, r = best
+        _plot(kind, cx, cz, a, w, d, y)
+        placed.append((kind, r))
+        # its car park toward the edge
+        out = edge.interpolate(edge.project(Point(cx, cz)))
+        pk = Point((out.x * 2 + cx) / 3, (out.y * 2 + cz) / 3)
+        if inner.contains(pk.buffer(30)) and not any(pk.buffer(35).intersects(o) for _, o in placed):
+            item("parking", pk.x, pk.y, uyaw(a), 100, 36, y)
+    venues = unary_union([r for _, r in placed]) if placed else Polygon()
+    # ---- the golf course over the rest, round the venues
+    golf_land = q.buffer(-20.0).difference(venues.buffer(60.0)).buffer(-5).buffer(5)
+    gq = max(polys(golf_land), key=lambda g: g.area)
+    n0 = len(doc["items"])
+    n_holes = golf_course(gq, y, st)
+    played = (GOLF_PLAYED if GOLF_PLAYED is not None else Polygon()).buffer(35.0)
+    # the clubhouse, its car park and the driving range are part of the course too
+    for it in doc["items"][n0:]:
+        if it["k"] in ("clubhouse", "parking", "driving_range"):
+            played = played.union(_rect(it["x"], it["z"], 90.0 - it["yaw"], it["w"], it["d"]).buffer(30.0))
+    # ---- small plots scattered round the course: free land not played, within 330 m of the site's edge
+    band = inner.difference(q.buffer(-330.0)).difference(played).difference(venues.buffer(45.0))
+    small = []
+    minx, minz, maxx, maxz = band.bounds
+    for kind, w, d in SMALL_PLOTS:
+        for _ in range(600):
+            cx, cz = rng.uniform(minx, maxx), rng.uniform(minz, maxz)
+            if not band.contains(Point(cx, cz)):
+                continue
+            a = _edge_angle(edge, edge.project(Point(cx, cz))) + rng.uniform(-35, 35)
+            r = _rect(cx, cz, a, w, d)
+            if not band.contains(r) or any(r.centroid.distance(o.centroid) < 90 + (w + d) / 3 for o in small):
+                continue
+            _plot(kind, cx, cz, a, w, d, y)
+            small.append(r)
+            break
+    allp = [r for _, r in placed] + small
+    # ---- promenade loop round the site and a path from each plot to it
+    loop = q.buffer(-14.0)
+    loop_l = max(polys(loop), key=lambda g: g.area).exterior.simplify(4.0) if not loop.is_empty else None
+    if loop_l is not None:
+        line_out(loop_l, 6.0, y, "promenade")
+        for r in allp:
+            c = r.centroid
+            g = loop_l.interpolate(loop_l.project(c))
+            ln = LineString([(c.x, c.y), (g.x, g.y)]).difference(r)
+            if ln.length < 400:
+                line_out(ln.difference(played), 4.0, y, "promenade")
+    # trees in the free land between the plots and the course
+    rest = inner.difference(played).difference(unary_union([r.buffer(15) for r in allp]) if allp else Polygon())
+    for g in polys(rest):
+        if g.area > 4000:
+            grove(g, int(g.area / 1600), 0.4)
+    return n_holes, len(placed), len(small), gq.area
+
 # ====================================================================================================== theme park and water park
 def theme_park(poly, y, land=None):
     c, ang, L, W = frame(poly)
@@ -452,20 +564,8 @@ for d in DISTRICTS:
             q = q.simplify(2.0)
             st = near_street(q)
             if (d, z) == GOLF_SITE:
-                # the larger part (≈ 60 %) the golf course, the rest by the access street the sports quarter; a 40 m tree belt between
-                c, ang, Lx, Wz = frame(q)
-                sx, sz = to_local(c, ang, st.x, st.y) if st is not None else (0.0, -Wz)
-                cut = Lx * 0.08 * (1 if sx > 0 else -1)
-                half = Polygon([to_world(c, ang, x_, z_) for x_, z_ in ((cut, -Wz), (Lx, -Wz), (Lx, Wz), (cut, Wz))]) if sx > 0 else \
-                    Polygon([to_world(c, ang, x_, z_) for x_, z_ in ((-Lx, -Wz), (cut, -Wz), (cut, Wz), (-Lx, Wz))])
-                sport_part = q.intersection(half).buffer(-20)
-                golf_part = q.difference(half).buffer(-20)
-                gq = max(polys(golf_part), key=lambda g: g.area)
-                sq = max(polys(sport_part), key=lambda g: g.area)
-                tree_ring(q.intersection(half.buffer(22)).difference(half.buffer(-22)).buffer(0), 9.0, 0.95, pine=True)
-                n1 = golf_course(gq, y, st)
-                n2 = sports_quarter(sq, y, st)
-                what = f"golf course, {n1} holes ({gq.area / 1e4:.0f} ha) + sports quarter, {n2} plots ({sq.area / 1e4:.0f} ha)"
+                nh, nb, ns, ga = golf_resort(q, y, st)
+                what = f"golf & sports park: golf {nh} holes ({ga / 1e4:.0f} ha), {nb} big venues and {ns} sports plots scattered round it"
             else:
                 n = sports_quarter(q, y, st, plots=[p for p in SPORT_PLOTS if p[0] != "hippodrome"])
                 what = f"sports quarter, {n} plots"

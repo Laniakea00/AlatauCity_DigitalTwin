@@ -219,10 +219,11 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 Id = "kpark", Name = "K-Park", Short = "K-Park", Company = "Корейские партнёры · ACA",
                 Purpose = "Корейский парк: сад, культурно-деловой центр, музей, смотровая башня 65 м · 10 га", Model = "kpark",
                 District = 1, Status = LStatus.Construction, StatusNote = "первый камень — 14.09.2025",
-                // owner 05.11.2026 («стоит на воде … поменяй его локацию»): moved off the Terenkara flood strip (18 % of the old pad was river
+                // owner 05.11.2026, second round («всё ещё в воде … передвинь парк к городу и людям»): into the housing of northern
+                // Golden (−2300, −7300), no water within 330 m. First round: moved off the Terenkara flood strip (18 % of the old pad was river
                 // and its 35 m water belt) to dry land in the city park «Төменгі Тереңқара», 1.5 km west of the Golden centre (golden.json
                 // k_park, golden_build KPARK_XZ); was (−465, −8276), before stage 7 (−515, −8826). Height: the 65 m observation tower
-                StartYear = 2025, EndYear = 2027, YearOfficial = false, X = -2200f, Z = -9400f, Yaw = 0f, PadW = 360f, PadD = 280f, Height = 65f, Radius = 190f, ViewYaw = 200f, ViewPitch = 30f,
+                StartYear = 2025, EndYear = 2027, YearOfficial = false, X = -2300f, Z = -7300f, Yaw = 0f, PadW = 360f, PadD = 280f, Height = 65f, Radius = 190f, ViewYaw = 200f, ViewPitch = 30f,
                 Source = "Kazinform", SourceDate = "14.09.2025"
             }.F("Площадь", "10 га").F("Сроки", "завершение не объявлено (в демо — 2027)").Stage2("вторая очередь парка", 2031, 2033));
             L.Add(new Landmark

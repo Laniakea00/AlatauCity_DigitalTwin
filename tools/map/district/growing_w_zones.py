@@ -88,6 +88,8 @@ def plan():
     if river:
         CHANGES.append((", ".join(river), "использование waterfront → park: в зоне реки по схеме только парк, набережная и "
                                           "велодорожка (у land waterfront — жилая зона с квартирами)"))
+    import owner_reloc as OR  # noqa: E402
+    OR.apply("growing_w", out, lambda zid, u, d: use_rules(u, d), CHANGES)       # owner 05.11.2026: industry to the edges
     return out
 
 
