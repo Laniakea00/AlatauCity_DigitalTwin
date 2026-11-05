@@ -143,93 +143,197 @@ namespace AlatauCity.DigitalTwin.Landmarks
             Trees(k, 26f, 100f, 132f, 100f, 12f, 8f, 14f);
         }
 
-        // ------------------------------------------------------------------ K-Park (10 ha, Korean garden): a ring walk round the park, a
-        // paved axis from the south gate (a red-columned gate with a tiled roof) to a stone plaza, a lotus pond with an island pavilion and
-        // an arched bridge, four hanok pavilions (white walls, red columns, grey tiled roofs with lifted eaves), groves of trees on the lawns,
-        // flower beds, stone lanterns and lamps.
+        // ------------------------------------------------------------------ K-Park (10 ha, owner 05.11.2026: «улучши парк, как он должен
+        // быть красивым»; content after the Association of Koreans of Kazakhstan: park zones, a cultural and business centre for conferences
+        // and exhibitions, a library with an interactive museum, a 65 m observation tower; 2027, 90 years of the Koryo-saram). Local +z is
+        // north, the main gate is on the south side:
+        //   south  — entrance plaza with an iljumun gate, haetae guardians, mugunghwa beds and the name stone;
+        //   axis   — a cherry-blossom alley to the central plaza with the observation tower (a slim core, a glass deck at 56 m, spire to 65 m);
+        //   west   — the cultural and business centre: a long hall under a tiled roof with lifted eaves, glass front to the plaza;
+        //   east   — the library and interactive museum: a white two-storey block with a roof garden and a hanok porch;
+        //   north  — the Korean garden: a lotus pond with an island pavilion and an arched bridge, a stone pagoda, a rock garden,
+        //            pine groves and a tea house; north-east a festival lawn with a small amphitheatre; south-east a playground.
+        // The park lies flush with the ground (the earth slab under it shows grass at its edge, not a dark plinth).
         static void KPark(LandmarkKit k)
         {
-            var paveK = LM.C("#cdbfa6"); var col = LM.C("#8c2f22"); var wall = LM.C("#efe9dc"); var tile = LM.C("#4b5058"); var tileDark = LM.C("#3c4047");
+            var paveK = LM.C("#d6cdb9"); var paveK2 = LM.C("#b9ad95"); var col = LM.C("#8c2f22"); var wall = LM.C("#efe9dc"); var tile = LM.C("#4b5058"); var tileDark = LM.C("#3c4047");
+            var sakura = LM.C("#f1b6cb"); var sakura2 = LM.C("#e99ab6"); var pine = LM.C("#2f5a35"); var mugung = LM.C("#c85a9a"); var rock = LM.C("#8f8a80");
+            var lawn = LM.C("#6f9150"); var deck = LM.C("#9c7a52"); var hedge = LM.C("#3f6532"); var glassK = LM.C("#3b5a6e"); var tower = LM.C("#e8e6e0");
             k.Planted = true;
-            k.Prism(LandmarkKit.RoundRect(0, 0, 360f, 280f, 60f, 6), -16f, 0.35f, PaveDark, LM.Solid, 3f, LM.C("#76925a"), LM.Plant, false, LandmarkKit.GreenTag);
-            // ring walk inside the edge and the axis from the south gate to the plaza
-            var ringO = LandmarkKit.RoundRect(0, 0, 330f, 250f, 48f, 6); var ringI = LandmarkKit.RoundRect(0, 0, 322f, 242f, 44f, 6);
-            Band(k, ringI, ringO, 0.35f, 0.5f, Stone, paveK, LM.Paving, LandmarkKit.GreenTag);
-            k.Prism(LandmarkKit.Rect(60f, -78f, 8f, 94f), 0.35f, 0.5f, Stone, LM.Solid, 1f, paveK, LM.Paving);
-            k.Prism(LandmarkKit.Circle(60f, -10f, 22f, 24), 0.35f, 0.52f, Stone, LM.Solid, 1f, paveK, LM.Paving);
-            k.Prism(LandmarkKit.Rect(5f, -10f, 90f, 6f), 0.35f, 0.5f, Stone, LM.Solid, 1f, paveK, LM.Paving);
-            k.Prism(LandmarkKit.Rect(60f, 50f, 6f, 100f), 0.35f, 0.5f, Stone, LM.Solid, 1f, paveK, LM.Paving);
-            // lotus pond with a stone rim, an island and an arched bridge
-            // an irregular shore (two lobes and a cove), a low stone edge with a reed margin
+            // the earth under the park: its sides are grass, its top the lawn, 0.25 m over the ground
+            k.Prism(LandmarkKit.RoundRect(0, 0, 360f, 280f, 50f, 6), -12f, 0.25f, LM.C("#5d7d45"), LM.Plant, 3f, lawn, LM.Plant, false, LandmarkKit.GreenTag);
+            // a clipped hedge round the edge, open at the south gate and at three side gates
+            var hO = LandmarkKit.RoundRect(0, 0, 356f, 276f, 48f, 6); var hI = LandmarkKit.RoundRect(0, 0, 350f, 270f, 45f, 6);
+            for (int i = 0; i < hI.Count; i++)
+            {
+                int j = (i + 1) % hI.Count; var m = (hI[i] + hI[j]) * 0.5f;
+                if ((Mathf.Abs(m.x) < 22f && m.y < 0f) || (Mathf.Abs(m.y + 10f) < 14f && Mathf.Abs(m.x) > 150f) || (Mathf.Abs(m.x - 60f) < 12f && m.y > 0f)) continue;
+                k.Prism(new List<Vector2> { hI[i], hI[j], hO[j], hO[i] }, 0.25f, 1.6f, hedge, LM.Plant, 1f, hedge, LM.Plant, false, 1f);
+            }
+            // ring walk inside the hedge
+            var ringO = LandmarkKit.RoundRect(0, 0, 334f, 254f, 40f, 6); var ringI = LandmarkKit.RoundRect(0, 0, 326f, 246f, 36f, 6);
+            Band(k, ringI, ringO, 0.25f, 0.4f, paveK2, paveK, LM.Paving, LandmarkKit.GreenTag);
+
+            // ---- south: entrance plaza, the gate, the guardians, beds and the name stone
+            k.Prism(LandmarkKit.RoundRect(0f, -120f, 84f, 34f, 14f, 4), 0.25f, 0.42f, paveK2, LM.Solid, 1f, paveK, LM.Paving);
+            for (int s = -1; s <= 1; s += 2)
+            {
+                for (int c = 0; c < 2; c++) k.Beam(new Vector3(s * (5f + c * 7f), 0.42f, -126f), new Vector3(s * (5f + c * 7f), 8.6f, -126f), 0.9f, 0.9f, col, LM.Solid);
+                k.Box(new Vector3(s * 16f, 1.4f, -138f), new Vector3(2.2f, 2f, 3f), 0f, rock, LM.Solid, 1f, rock, LM.Solid);           // haetae on plinths
+                k.Box(new Vector3(s * 16f, 3.0f, -138.5f), new Vector3(1.6f, 1.4f, 1.8f), 0f, LM.C("#a39d92"), LM.Solid, 1f, LM.C("#a39d92"), LM.Solid);
+                for (int b = 0; b < 3; b++)
+                    k.Prism(LandmarkKit.RoundRect(s * (28f + b * 9f), -122f, 7f, 16f, 3f, 2), 0.42f, 0.85f, Stone, LM.Solid, 1f, b == 1 ? LM.C("#e3b23c") : mugung, LM.Plant);
+            }
+            k.Box(new Vector3(0f, 8.9f, -126f), new Vector3(30f, 0.6f, 5.2f), 0f, col, LM.Solid, 1f, col, LM.Solid);
+            k.Loft(LandmarkKit.Rect(0f, -126f, 34f, 8f), 9.2f, LandmarkKit.Rect(0f, -126f, 24f, 1.0f), 12.2f, tile, LM.Metal, 1f);
+            k.Box(new Vector3(0f, 12.35f, -126f), new Vector3(25f, 0.4f, 1.1f), 0f, tileDark, LM.Solid, 1f, tileDark, LM.Roof);
+            k.Box(new Vector3(-30f, 1.0f, -134f), new Vector3(9f, 1.6f, 1.6f), 0f, rock, LM.Solid, 1f, LM.C("#6e695f"), LM.Solid);  // name stone
+
+            // ---- the axis: a cherry alley from the gate to the central plaza, and a cross walk to the two buildings
+            k.Prism(LandmarkKit.Rect(0f, -78f, 12f, 76f), 0.25f, 0.42f, paveK2, LM.Solid, 1f, paveK, LM.Paving);
+            k.Prism(LandmarkKit.Rect(0f, -40f, 200f, 8f), 0.25f, 0.4f, paveK2, LM.Solid, 1f, paveK, LM.Paving);
+            k.Prism(LandmarkKit.Rect(0f, 40f, 6f, 88f), 0.25f, 0.4f, paveK2, LM.Solid, 1f, paveK, LM.Paving);
+            for (int i = 0; i < 8; i++)
+            {
+                float z = -110f + i * 9.5f;
+                foreach (float s in new[] { -1f, 1f })
+                {
+                    k.Tree(new Vector3(s * 10f, 0.42f, z), 6.5f + (i % 3) * 0.6f, (i & 1) == 0 ? sakura : sakura2, i * 1.3f + s);
+                    if (i % 2 == 0) k.Box(new Vector3(s * 7.2f, 1.0f, z + 4.7f), new Vector3(0.7f, 1.3f, 0.7f), 0f, Stone, LM.Solid, 1f, Warm, LM.Light);  // stone lanterns
+                }
+            }
+            // central plaza: a round paved court with a ring of benches and the tower in its middle
+            k.Prism(LandmarkKit.Circle(0f, -12f, 30f, 40), 0.25f, 0.45f, paveK2, LM.Solid, 1f, paveK, LM.Paving);
+            k.Prism(LandmarkKit.Circle(0f, -12f, 13f, 32), 0.45f, 0.5f, Stone, LM.Solid, 1f, LM.C("#c9bfa9"), LM.Paving);
+            for (int i = 0; i < 12; i++)
+            {
+                float a = i * Mathf.PI * 2f / 12f; if (Mathf.Abs(Mathf.Sin(a) + 1f) < 0.2f) continue;
+                k.Box(new Vector3(Mathf.Cos(a) * 24f, 0.75f, -12f + Mathf.Sin(a) * 24f), new Vector3(3.2f, 0.45f, 0.8f), -a * Mathf.Rad2Deg + 90f, deck, LM.Solid, 1f, deck, LM.Solid);
+            }
+            // the observation tower, 65 m: a tapering white core, four fins, a glass ring deck at 56 m under a disc roof, a spire
+            k.Tube(new Vector3(0f, 0.5f, -12f), new Vector3(0f, 54f, -12f), 4.2f, 2.8f, 16, tower, LM.Solid);
+            for (int f = 0; f < 4; f++)
+            {
+                float a = f * 90f * Mathf.Deg2Rad + 0.785f; var dir = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
+                k.Slab(new Vector3(0f, 0.5f, -12f) + dir * 3.8f, new Vector3(0f, 0.5f, -12f) + dir * 9f, new Vector3(0f, 18f, -12f) + dir * 3.3f, new Vector3(0f, 30f, -12f) + dir * 3.2f, 0.5f, tower, LM.Solid);
+            }
+            k.Cylinder(new Vector3(0f, 53.5f, -12f), 9.5f, 0.8f, 24, tower, LM.Solid, 1f, tower, LM.Solid);
+            k.Cylinder(new Vector3(0f, 54.3f, -12f), 9.0f, 4.2f, 24, glassK, LM.Glass, 1f, tower, LM.Solid);
+            k.Cylinder(new Vector3(0f, 58.5f, -12f), 10.5f, 0.6f, 24, col, LM.Solid, 1f, tile, LM.Roof, 1.2f);
+            k.Tube(new Vector3(0f, 60f, -12f), new Vector3(0f, 65f, -12f), 0.5f, 0.1f, 8, Stone, LM.Steel);
+            k.Box(new Vector3(0f, 2.6f, -12f), new Vector3(12f, 4.2f, 12f), 45f, glassK, LM.Glass, 1f, tower, LM.Roof);        // ticket pavilion at its foot
+
+            // ---- west: the cultural and business centre (conference hall and exhibitions), a long hanok hall with a glass front
+            k.Prism(LandmarkKit.Rect(-102f, -60f, 96f, 52f), 0.25f, 0.5f, paveK2, LM.Solid, 1f, paveK, LM.Paving);
+            k.Box(new Vector3(-102f, 4.6f, -60f), new Vector3(76f, 8.4f, 30f), 0f, wall, LM.Solid, 2f, wall, LM.Roof);
+            k.Box(new Vector3(-102f, 4.2f, -44.9f), new Vector3(68f, 6.8f, 0.2f), 0f, glassK, LM.Glass, 1f, glassK, LM.Glass);
+            Hanok(k, -102f, -60f, 80f, 34f, 0.5f, wall, col, tile, tileDark);
+            // ---- east: library and interactive museum, two storeys, a roof garden and a red porch toward the axis
+            k.Prism(LandmarkKit.Rect(102f, -60f, 92f, 52f), 0.25f, 0.5f, paveK2, LM.Solid, 1f, paveK, LM.Paving);
+            k.Box(new Vector3(104f, 5.2f, -62f), new Vector3(66f, 9.4f, 32f), 0f, wall, LM.Solid, 2f, wall, LM.Roof);
+            k.Box(new Vector3(104f, 3.2f, -45.9f), new Vector3(58f, 4.6f, 0.2f), 0f, glassK, LM.Glass, 1f, glassK, LM.Glass);
+            k.Box(new Vector3(104f, 8.0f, -45.9f), new Vector3(58f, 2.2f, 0.2f), 0f, glassK, LM.Glass, 1f, glassK, LM.Glass);
+            k.Prism(LandmarkKit.Rect(104f, -62f, 60f, 26f), 9.9f, 10.4f, Stone, LM.Solid, 1f, LM.C("#5f8a46"), LM.Plant);         // roof garden
+            for (int i = 0; i < 6; i++) k.Tree(new Vector3(80f + i * 9.5f, 10.4f, -62f + (i % 2) * 6f - 3f), 4f, Leaf2, i * 0.7f);
+            Hanok(k, 104f, -40f, 22f, 8f, 0.5f, wall, col, tile, tileDark);
+
+            // ---- north: the Korean garden — a lotus pond, an island pavilion, an arched bridge, a pagoda, a rock garden, a tea house
             List<Vector2> Shore(float grow)
             {
                 var l = new List<Vector2>();
-                for (int i = 0; i < 48; i++)
+                for (int i = 0; i < 56; i++)
                 {
-                    float a = i * Mathf.PI * 2f / 48f;
-                    float r = 1f + 0.13f * Mathf.Sin(2f * a + 0.6f) + 0.07f * Mathf.Sin(3f * a + 1.9f) - 0.05f * Mathf.Cos(5f * a);
-                    l.Add(new Vector2(-70f + Mathf.Cos(a) * (60f * r + grow), 25f + Mathf.Sin(a) * (34f * r + grow)));
+                    float a = i * Mathf.PI * 2f / 56f;
+                    float r = 1f + 0.14f * Mathf.Sin(2f * a + 0.6f) + 0.08f * Mathf.Sin(3f * a + 1.9f) - 0.05f * Mathf.Cos(5f * a);
+                    l.Add(new Vector2(-62f + Mathf.Cos(a) * (64f * r + grow), 64f + Mathf.Sin(a) * (36f * r + grow)));
                 }
                 return l;
             }
-            k.Prism(Shore(4f), 0.35f, 0.5f, GrassDark, LM.Solid, 1f, LM.C("#6f8a46"), LM.Plant);
-            k.Prism(Shore(1.2f), 0.35f, 0.58f, Stone, LM.Solid, 1f, Stone, LM.Paving);
-            k.Prism(Shore(0f), 0.35f, 0.6f, Stone, LM.Solid, 1f, Water, LM.Water);
-            k.Prism(LandmarkKit.Circle(-60f, 30f, 12f, 16), 0.35f, 1.0f, Stone, LM.Solid, 1f, Grass, LM.Plant);
-            for (int i = 0; i < 9; i++)
+            k.Prism(Shore(5f), 0.25f, 0.4f, GrassDark, LM.Solid, 1f, LM.C("#6f8a46"), LM.Plant);
+            k.Prism(Shore(1.4f), 0.25f, 0.5f, rock, LM.Solid, 1f, LM.C("#a8a196"), LM.Paving);
+            k.Prism(Shore(0f), 0.25f, 0.52f, rock, LM.Solid, 1f, Water, LM.Water);
+            k.Prism(LandmarkKit.Circle(-52f, 70f, 13f, 18), 0.25f, 0.95f, rock, LM.Solid, 1f, Grass, LM.Plant);
+            for (int i = 0; i < 14; i++)                                                                                    // lotus pads
             {
-                float t0 = i / 9f, t1 = (i + 1) / 9f; float xa = Mathf.Lerp(-48f, -4f, t0), xb = Mathf.Lerp(-48f, -4f, t1);
-                float ya = 1.0f + Mathf.Sin(t0 * Mathf.PI) * 2.2f, yb = 1.0f + Mathf.Sin(t1 * Mathf.PI) * 2.2f;
-                k.Slab(new Vector3(xa, ya, 28f), new Vector3(xb, yb, 28f), new Vector3(xb, yb, 32f), new Vector3(xa, ya, 32f), 0.35f, col, LM.Solid);
+                float a = i * 2.39f, rr = 18f + (i % 4) * 7f;
+                k.Cylinder(new Vector3(-80f + Mathf.Cos(a) * rr * 0.7f, 0.54f, 56f + Mathf.Sin(a) * rr * 0.35f), 1.8f, 0.05f, 8, LM.C("#4f7d3a"), LM.Plant, 1f, (i % 3 == 0) ? LM.C("#f3b8cf") : LM.C("#4f7d3a"), LM.Plant);
             }
-            for (int i = 0; i < 7; i++) { float x = -64f + i * 7f; k.Cylinder(new Vector3(x, 0.62f, 8f + (i % 3) * 3f), 1.6f, 0.08f, 8, LM.C("#3f6b3a"), LM.Plant, 1f, LM.C("#d98aa0"), LM.Plant); }
-            // pavilions: island (small), east hall, north hall, west tea house
-            Hanok(k, -60f, 30f, 12f, 10f, 1.0f, wall, col, tile, tileDark);
-            Hanok(k, 60f, 62f, 40f, 18f, 0.5f, wall, col, tile, tileDark);
-            Hanok(k, 60f, -10f, 22f, 14f, 0.52f, wall, col, tile, tileDark);
-            Hanok(k, -130f, -60f, 26f, 14f, 0.5f, wall, col, tile, tileDark);
-            // south gate on the axis
-            for (int s = -1; s <= 1; s += 2) k.Beam(new Vector3(60f + s * 5f, 0.4f, -122f), new Vector3(60f + s * 5f, 7.5f, -122f), 0.8f, 0.8f, col, LM.Solid);
-            k.Box(new Vector3(60f, 7.8f, -122f), new Vector3(16f, 0.6f, 4.4f), 0f, tileDark, LM.Solid, 1f, tile, LM.Roof);
-            k.Loft(LandmarkKit.Rect(60f, -122f, 16f, 4.4f), 8.1f, LandmarkKit.Rect(60f, -122f, 11f, 0.6f), 10f, tile, LM.Metal, 1f);
-            // flower beds along the axis, stone lanterns and lamps
-            for (int i = 0; i < 4; i++)
+            for (int i = 0; i < 10; i++)                                                                                    // arched bridge to the island
             {
-                float z = -112f + i * 22f;
-                k.Prism(LandmarkKit.RoundRect(50f, z, 6f, 14f, 2f, 2), 0.35f, 0.7f, Stone, LM.Solid, 1f, i % 2 == 0 ? LM.C("#c94f6d") : LM.C("#e3b23c"), LM.Plant);
-                k.Prism(LandmarkKit.RoundRect(70f, z, 6f, 14f, 2f, 2), 0.35f, 0.7f, Stone, LM.Solid, 1f, i % 2 == 0 ? LM.C("#e3b23c") : LM.C("#c94f6d"), LM.Plant);
-                k.Box(new Vector3(45f, 1.1f, z + 9f), new Vector3(0.9f, 1.5f, 0.9f), 0f, Stone, LM.Solid, 1f, Warm, LM.Light);
-                k.Box(new Vector3(75f, 1.1f, z + 9f), new Vector3(0.9f, 1.5f, 0.9f), 0f, Stone, LM.Solid, 1f, Warm, LM.Light);
+                float t0 = i / 10f, t1 = (i + 1) / 10f; float xa = Mathf.Lerp(-30f, -42f, t0), xb = Mathf.Lerp(-30f, -42f, t1);
+                float za = Mathf.Lerp(32f, 60f, t0), zb = Mathf.Lerp(32f, 60f, t1);
+                float ya = 0.9f + Mathf.Sin(t0 * Mathf.PI) * 2.4f, yb = 0.9f + Mathf.Sin(t1 * Mathf.PI) * 2.4f;
+                k.Slab(new Vector3(xa - 1.8f, ya, za), new Vector3(xb - 1.8f, yb, zb), new Vector3(xb + 1.8f, yb, zb), new Vector3(xa + 1.8f, ya, za), 0.35f, col, LM.Solid);
             }
-            // groves on the lawns, kept off the walks, the pond and the pavilions
+            Hanok(k, -52f, 70f, 11f, 11f, 0.95f, wall, col, tile, tileDark);                                               // island pavilion (jeongja)
+            Hanok(k, -136f, 92f, 24f, 13f, 0.4f, wall, col, tile, tileDark);                                               // tea house
+            // five-storey stone pagoda on a small mound
+            k.Prism(LandmarkKit.Circle(28f, 96f, 9f, 16), 0.25f, 1.2f, GrassDark, LM.Solid, 1f, Grass, LM.Plant);
+            for (int s = 0; s < 5; s++)
+            {
+                float w = 4.6f - s * 0.55f, y = 1.2f + s * 2.1f;
+                k.Box(new Vector3(28f, y + 0.7f, 96f), new Vector3(w * 0.7f, 1.4f, w * 0.7f), 0f, LM.C("#b7b0a3"), LM.Solid, 1f, LM.C("#b7b0a3"), LM.Solid);
+                k.Box(new Vector3(28f, y + 1.65f, 96f), new Vector3(w, 0.5f, w), 0f, LM.C("#9e978a"), LM.Solid, 1f, LM.C("#9e978a"), LM.Solid);
+            }
+            k.Tube(new Vector3(28f, 11.7f, 96f), new Vector3(28f, 14.2f, 96f), 0.35f, 0.15f, 8, LM.C("#8d8578"), LM.Solid);
+            // rock garden: raked gravel with standing stones
+            k.Prism(LandmarkKit.RoundRect(-10f, 104f, 40f, 18f, 6f, 3), 0.25f, 0.38f, Stone, LM.Solid, 1f, LM.C("#ddd7ca"), LM.Paving);
+            for (int i = 0; i < 5; i++) k.Box(new Vector3(-24f + i * 7f, 1.1f, 103f + (i % 2) * 3f), new Vector3(2.4f - (i % 3) * 0.4f, 1.6f + (i % 2) * 0.8f, 2f), i * 23f, rock, LM.Solid, 1f, rock, LM.Solid);
+            // ---- north-east: the festival lawn and a half-ring amphitheatre facing a small stage
+            for (int r = 0; r < 5; r++)
+                k.Prism(Sector(new Vector2(118f, 66f), 16f + r * 4.5f, 19.5f + r * 4.5f, 200f, 340f), 0.25f, 0.6f + r * 0.45f, Stone, LM.Solid, 1f, LM.C("#cdc4b2"), LM.Paving);
+            k.Prism(LandmarkKit.Circle(118f, 66f, 11f, 24), 0.25f, 0.9f, Stone, LM.Solid, 1f, deck, LM.Paving);
+            k.Loft(LandmarkKit.Rect(118f, 74f, 22f, 6f), 6.5f, LandmarkKit.Rect(118f, 74f, 16f, 1f), 8.2f, tile, LM.Metal, 1f);
+            for (int s = -1; s <= 1; s += 2) k.Beam(new Vector3(118f + s * 9.5f, 0.9f, 74f), new Vector3(118f + s * 9.5f, 6.5f, 74f), 0.6f, 0.6f, col, LM.Solid);
+            // ---- south-east: the children's playground on soft red rubber
+            k.Prism(LandmarkKit.RoundRect(132f, -6f, 40f, 34f, 8f, 3), 0.25f, 0.4f, Stone, LM.Solid, 1f, LM.C("#c4473a"), LM.Solid);
+            var toy = new[] { LM.C("#f2c230"), LM.C("#2f8fd8"), LM.C("#e0261b"), LM.C("#5cbf48") };
+            for (int i = 0; i < 6; i++) k.Box(new Vector3(118f + (i % 3) * 13f, 1.6f, -14f + (i / 3) * 15f), new Vector3(4f, 2.6f + (i % 2), 3f), i * 30f, toy[i % 4], LM.Solid, 1f, toy[(i + 1) % 4], LM.Solid);
+
+            // ---- trees: pine groves and cherry clumps on the lawns, clear of the walks, water and buildings
             bool Free(float x, float z)
             {
-                float u = x / 165f, v = z / 125f; if (u * u + v * v > 0.86f) return false;
-                if (Mathf.Abs(x - 60f) < 17f && z < 110f) return false;                       // axis
-                if (Mathf.Abs(z + 10f) < 9f && x > -45f && x < 85f) return false;            // cross walk
-                if (Mathf.Abs(x + 70f) < 82f && Mathf.Abs(z - 25f) < 52f) return false;       // pond
-                if (Mathf.Abs(x - 60f) < 30f && z > 40f && z < 85f) return false;            // north hall
-                if (Mathf.Abs(x - 60f) < 26f && Mathf.Abs(z + 10f) < 26f) return false;       // plaza
-                if (Mathf.Abs(x + 130f) < 20f && Mathf.Abs(z + 60f) < 14f) return false;      // tea house
+                float u = x / 160f, v = z / 120f; if (u * u + v * v > 0.88f) return false;
+                if (Mathf.Abs(x) < 18f && z < 90f) return false;                                     // axis and the north walk
+                if (Mathf.Abs(z + 40f) < 10f && Mathf.Abs(x) < 104f) return false;                   // cross walk
+                if (x * x + (z + 12f) * (z + 12f) < 36f * 36f) return false;                          // central plaza
+                if (Mathf.Abs(x + 102f) < 52f && Mathf.Abs(z + 60f) < 30f) return false;             // cultural centre
+                if (Mathf.Abs(x - 102f) < 50f && Mathf.Abs(z + 58f) < 32f) return false;             // museum
+                if (Mathf.Abs(z + 120f) < 22f && Mathf.Abs(x) < 70f) return false;                   // entrance plaza
+                float px = (x + 62f) / 76f, pz = (z - 64f) / 46f; if (px * px + pz * pz < 1f) return false;     // pond
+                if (Mathf.Abs(x - 118f) < 36f && Mathf.Abs(z - 62f) < 28f) return false;             // amphitheatre
+                if (Mathf.Abs(x - 132f) < 26f && Mathf.Abs(z + 6f) < 22f) return false;              // playground
+                if (Mathf.Abs(x - 28f) < 13f && Mathf.Abs(z - 96f) < 13f) return false;              // pagoda
+                if (Mathf.Abs(x + 10f) < 24f && Mathf.Abs(z - 104f) < 12f) return false;             // rock garden
+                if (Mathf.Abs(x + 136f) < 18f && Mathf.Abs(z - 92f) < 12f) return false;             // tea house
                 return true;
             }
             int n = 0;
-            for (float x = -160f; x <= 160f; x += 9f)
-                for (float z = -120f; z <= 120f; z += 9f)
+            for (float x = -158f; x <= 158f; x += 8.5f)
+                for (float z = -122f; z <= 122f; z += 8.5f)
                 {
                     float h = Mathf.Abs(Mathf.Sin(x * 0.173f + z * 0.311f) * Mathf.Cos(x * 0.051f - z * 0.087f));
-                    // groves: dense where a slow noise is high, open lawns elsewhere
-                    if (h < 0.35f) continue;
+                    if (h < 0.42f) continue;                                                           // groves, with open lawns between
                     float jx = x + Mathf.Sin(z * 1.7f + x) * 3f, jz = z + Mathf.Cos(x * 1.3f - z) * 3f;
                     if (!Free(jx, jz)) continue;
-                    ParkTree(k, jx, jz, 7f + h * 6f, n++);
+                    float kind = Hash(jx, jz);
+                    if (kind < 0.30f) k.Tree(new Vector3(jx, 0.25f, jz), 6f + h * 2f, kind < 0.15f ? sakura : sakura2, n * 0.37f);
+                    else if (kind < 0.62f) k.Tree(new Vector3(jx, 0.25f, jz), 9f + h * 6f, pine, n * 0.41f);
+                    else ParkTree(k, jx, jz, 8f + h * 6f, n);
+                    n++;
                 }
-            // a double row of trees along the ring walk
-            for (int i = 0; i < 64; i++)
+            // trees along the ring walk, cherry and green in turn; lamps between them
+            for (int i = 0; i < 72; i++)
             {
-                float a = i * Mathf.PI * 2f / 64f; float x = Mathf.Cos(a) * 148f, z = Mathf.Sin(a) * 110f;
-                if (Mathf.Abs(x - 60f) < 10f && z < 0f) continue;
-                k.Tree(new Vector3(x, 0.4f, z), 9f, (i & 1) == 0 ? Leaf : Leaf2, i);
+                float a = i * Mathf.PI * 2f / 72f; float x = Mathf.Cos(a) * 158f, z = Mathf.Sin(a) * 119f;
+                if (Mathf.Abs(x) < 26f && z < 0f) continue;
+                k.Tree(new Vector3(x, 0.4f, z), 8.5f, i % 3 == 0 ? sakura : (i & 1) == 0 ? Leaf : Leaf2, i);
+                if (i % 2 == 1)
+                {
+                    float xl = Mathf.Cos(a) * 150f, zl = Mathf.Sin(a) * 112f;
+                    k.Beam(new Vector3(xl, 0.4f, zl), new Vector3(xl, 4.2f, zl), 0.12f, 0.12f, LM.C("#3a3d42"), LM.Steel);
+                    k.Box(new Vector3(xl, 4.35f, zl), new Vector3(0.6f, 0.4f, 0.6f), 0f, Warm, LM.Light, 1f, Warm, LM.Light);
+                }
             }
             k.Planted = false;
         }

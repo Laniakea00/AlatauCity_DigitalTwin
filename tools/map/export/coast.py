@@ -26,7 +26,8 @@ REPO = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
 SPEC = sys.argv[1] if len(sys.argv) > 1 else os.path.join(REPO, "tools", "map", "spec", "green.json")
 OUT = sys.argv[2] if len(sys.argv) > 2 else os.path.join(REPO, "UnityProject", "Assets", "Resources", "Landmarks", "coast.json")
 
-SHORE_ZONES = ("wf_n_", "wf_c_")      # the shore parks of the spec that get beaches
+SHORE_ZONES = ("wf_n_", "wf_c_", "wf_e_")   # the shore parks that get beaches (wf_e_: the east shore, owner 05.11.2026: «Green — зона, где
+#                                                реально будут много туристов … добавь туда пляж»)
 BEACH_W = 42.0                        # m of sand from the water's edge
 WALK_OFF, WALK_W = 50.0, 9.0          # promenade: its centre line off the water, its width
 MIN_SHORE = 160.0                     # shore pieces shorter than this get no beach

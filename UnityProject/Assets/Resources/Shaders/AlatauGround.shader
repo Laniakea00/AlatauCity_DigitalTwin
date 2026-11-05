@@ -28,7 +28,7 @@ Shader "AlatauCity/Ground"
         #include "Assets/Shaders/AlatauFilm.cginc"
         sampler2D _MainTex, _NatTex, _DevTex; half _Ambient; fixed4 _Earth;
         float _AlatauYear, _AlatauYearF, _AlatauGrow, _AlatauDevK, _AlatauMode, _AlatauBlockOn;
-        sampler2D _AlatauBlockTex, _CityTex, _DistTex; float _CityOn; fixed4 _AlatauEdgeCol; float _AlatauCamDist, _AlatauFocusD;
+        sampler2D _AlatauBlockTex, _CityTex, _DistTex; float _CityOn; fixed4 _AlatauEdgeCol; float _AlatauCamDist, _AlatauFocusD, _AlatauDistOv;
         float4 _DistTex_TexelSize; float _AlatauHiOn; float4 _AlatauHiWave, _AlatauHiCol; float4 _AlatauIcZones[32]; float _AlatauIcCount;
         // district id from map_districts.png (point sampled): 30 Gate, 90 Golden, 150 Growing, 210 Green, 0 outside
         float DistAt(float2 uv) { float v = tex2Dlod(_DistTex, float4(uv, 0, 0)).r * 255.0; return v < 15.0 ? -1.0 : floor((v - 30.0) / 60.0 + 0.5); }
@@ -540,6 +540,36 @@ Shader "AlatauCity/Ground"
                 float lineK = _AlatauFilm > 0.5 ? 0.35 * saturate((_AlatauCamDist - 9000.0) / 12000.0) : 1.0;
                 c = lerp(c, gold, bline * 0.55 * lineK) + rim * 0.035 * lineK;
                 em += gold * bline * 0.65 * lineK;
+                // the whole city seen from afar (Layers/DistrictMap.cs sets _AlatauDistOv 0..1 by camera distance): every district is
+                // tinted in its own colour and the borders between them are drawn as a line in each side's colour. Same bilinear share
+                // as the focus border below, taken for the district of this point; no early return in the branch (WebGL lesson 28.10).
+                if (_AlatauFocusD < -0.5 && _AlatauDistOv > 0.01)
+                {
+                    float own = DistAt(uv);
+                    // the share is read on a grid of st texels (st ≈ 4 screen pixels), so the soft band along a border is a few pixels
+                    // wide at any distance; the sharp line sits in its middle
+                    float st = max(1.0, floor(max(dTx.x, dTx.y) * 4.0));
+                    float2 tsz = _DistTex_TexelSize.xy * st;
+                    float2 ost = uv / tsz - 0.5, oi0 = floor(ost), ofr = ost - oi0;
+                    float2 oc0 = (oi0 + 0.5) * tsz;
+                    float g00 = abs(DistAt(oc0) - own) < 0.5 ? 1.0 : 0.0;
+                    float g10 = abs(DistAt(oc0 + float2(tsz.x, 0)) - own) < 0.5 ? 1.0 : 0.0;
+                    float g01 = abs(DistAt(oc0 + float2(0, tsz.y)) - own) < 0.5 ? 1.0 : 0.0;
+                    float g11 = abs(DistAt(oc0 + tsz) - own) < 0.5 ? 1.0 : 0.0;
+                    float osh = lerp(lerp(g00, g10, ofr.x), lerp(g01, g11, ofr.x), ofr.y);
+                    float2 odsh = float2(lerp(g10 - g00, g11 - g01, ofr.y), lerp(g01 - g00, g11 - g10, ofr.x));
+                    float olw = max((abs(odsh.x) * dTx.x + abs(odsh.y) * dTx.y) / st * 1.6, 0.05);
+                    float ob = (1.0 - smoothstep(0.0, olw, abs(osh - 0.5))) * step(-0.5, own);
+                    // the soft band on the inner side of each border, so the outline reads at a glance
+                    float band = saturate(1.0 - osh) * 2.0 * step(-0.5, own) * step(osh, 0.999);
+                    fixed3 ocol = own < 0.5 ? fixed3(0.18, 0.39, 0.69) : own < 1.5 ? fixed3(0.85, 0.65, 0.13) : own < 2.5 ? fixed3(0.95, 0.45, 0.21) : fixed3(0.20, 0.62, 0.36);
+                    float inD = step(-0.5, own) * inside;
+                    float ov = _AlatauDistOv;
+                    c = lerp(c, ocol, inD * 0.42 * ov);
+                    em = lerp(em, ocol * 0.22, inD * 0.40 * ov);
+                    c = lerp(c, ocol * 1.15, saturate(ob + band * 0.35) * inside * ov);
+                    em += ocol * (ob * 0.75 + band * 0.12) * inside * ov;
+                }
                 // one district in focus (district picker, presentation): the others step back, its border glows in its colour
                 if (_AlatauFocusD > -0.5)
                 {

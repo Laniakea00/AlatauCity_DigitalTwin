@@ -201,9 +201,11 @@ POWER_PZ = unary_union(_PZ) if _PZ else Polygon()
 KAIST_XZ, KAIST_YAW, KAIST_W, KAIST_D = (-150.0, -11100.0), -4.5, 420.0, 360.0
 KAIST_PAD = shapely.affinity.translate(shapely.affinity.rotate(box(-KAIST_W / 2, -KAIST_D / 2, KAIST_W / 2, KAIST_D / 2), -KAIST_YAW,
                                                                origin=(0, 0)), *KAIST_XZ)
-# K-Park of Unity (LandmarkData kpark: its model is 360 × 280 m): zone Z-P3 is 260 × 420 m with arterials through it, so the park went
-# over the streets; 300 m west, between the frame streets, turned 90° with the quarters (local streets go round it, as KAIST)
-KPARK_XZ, KPARK_YAW, KPARK_W, KPARK_D = (-465.0, -8276.0), 0.0, 360.0, 280.0
+# K-Park of Unity (LandmarkData kpark: its model is 360 × 280 m). Owner 05.11.2026 («стоит на воде … поменяй его локацию на более
+# подходящую»): the pad at (−465, −8276) lay 18 % on the Terenkara and its 35 m water belt; moved to dry land in the city park
+# «Төменгі Тереңқара» (zones Z-P4_p2 / Z-P1_p9), 1.5 km west of the Golden centre: no water within 40 m, no arterial or district
+# street through it, no existing house (searched over a 100 m grid within 3 km of C1); local streets go round it, as KAIST
+KPARK_XZ, KPARK_YAW, KPARK_W, KPARK_D = (-2200.0, -9400.0), 0.0, 360.0, 280.0
 KPARK_PAD = shapely.affinity.translate(shapely.affinity.rotate(box(-KPARK_W / 2, -KPARK_D / 2, KPARK_W / 2, KPARK_D / 2), -KPARK_YAW,
                                                                origin=(0, 0)), *KPARK_XZ)
 
@@ -981,9 +983,9 @@ put("medcluster_golden", "keep", regpt("medcluster_golden"), regpt("medcluster_g
 put("korean_clinics", "by_rule", None, (-1050.0, -10150.0), "Z-M1", 15000.0, "clinic", Y4(2031, "social"),
     MODEL + ": в медкластере (места в источнике нет)")
 obj("k_park", "move", regpt("k_park"), list(KPARK_XZ), "district_only",
-    "точка двойника — модель, но место хорошее: у станции ЛРТ и Теренкары, вокруг вырастает главный центр; модель Unity kpark "
-    "360 × 280 м не помещается в зону Z-P3 (260 × 420 м, через неё идут магистрали) — участок под модель в 300 м западнее, "
-    "между улицами каркаса (местные улицы его обходят); зона Z-P3 остаётся парком", basis="по источнику", kind="landmark",
+    "решение владельца 05.11.2026: прежний участок у Теренкары на 18 % лежал на реке и её водоохранной полосе — K-Park перенесён "
+    "на сухую землю в городской парк «Төменгі Тереңқара», в 1,5 км к западу от центра Golden; модель Unity kpark 360 × 280 м "
+    "целиком, местные улицы его обходят; зона Z-P3 остаётся парком", basis="по источнику", kind="landmark",
     footprint=KPARK_PAD, years=Y4(2027), yaw=KPARK_YAW)
 obj("k_park_parts", "move", regpt("k_park"), list(KPARK_XZ), "district_only", "внутри K-Park (его модель)", basis="по источнику")
 put("sport_centre_hippodrome", "by_rule", None, (-750.0, -13700.0), "Z-S1", 400000.0, "sport", Y4(2046, "social"),
