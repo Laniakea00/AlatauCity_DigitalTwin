@@ -7,7 +7,7 @@ namespace AlatauCity.DigitalTwin.UI
     /// <summary>Card of the presentation step «Прогноз: энергия 2034»: the year, a load gauge of ПС 220 кВ «Golden», peak demand vs capacity,
     /// then one answer line per beat of the story (evening → growth → outage → the twin's answer → lights back) with one muted line under it.
     /// During the outage the 2028–2036 chart gives its place to the consequence (residents, schools, hospitals in the dark); with the
-    /// answer the chart comes back and shows the fix (the capacity step moves to 2033).</summary>
+    /// answer the chart comes back and shows the fix (the capacity step moves to TourEnergy.YFixFrom).</summary>
     public class EnergyPanel : VisualElement
     {
         readonly TourEnergy e;
@@ -67,7 +67,7 @@ namespace AlatauCity.DigitalTwin.UI
                     case 0: Say("Вечер. Свет горит у всех", "Энергия идёт от подстанции 220 кВ по районам Golden", Muted); break;
                     case 1: Say("Город растёт — растёт и спрос", "Новые дома, школы и клиники включают свет вечером", Muted); break;
                     case 2: Say(string.Format("Пик {0}: мощности не хватает", TourEnergy.YBad), "Подстанция перегружена — защита отключила часть района", TourEnergy.Red); break;
-                    case 3: Say("QTwin увидел это за 8 лет — в 2026 году", "Решение: 2‑я очередь подстанции в 2033, а не в 2036", TourEnergy.Amber); break;
+                    case 3: Say("QTwin увидел это за 8 лет — в 2026 году", string.Format("Решение: 2‑я очередь подстанции в {0}, а не в {1}", TourEnergy.YFixFrom, e.PlannedStage2), TourEnergy.Amber); break;
                     default: Say("Свет снова у всех", "2‑я очередь подстанции введена на 3 года раньше", TourEnergy.Green); break;
                 }
             }

@@ -10,12 +10,12 @@ namespace AlatauCity.DigitalTwin
     /// 2) the city grows 2028 → 2034, the evening peak rises towards the substation's capacity (the lines warm to amber);
     /// 3) 2034: the peak is above the capacity — one decisive outage: the lights go out over the part of Golden it feeds, the lines turn red
     ///    and stall; 4) the consequence in plain words (residents, schools, hospitals in the dark, counted from the buildings);
-    /// 5) the twin's answer: QTwin saw it 8 years ahead, in 2026 — the 2nd stage of the substation is built in 2033 instead of 2036;
+    /// 5) the twin's answer: QTwin saw it 8 years ahead, in 2026 — the 2nd stage of the substation is built in YFixFrom instead of the plan's year (data: 2035);
     /// 6) the lights come back, the energy runs blue again. No flicker: every change is one smooth transition.
     /// Numbers come from the twin data (hv_golden capacity / demand, base scenario).</summary>
     public class TourEnergy
     {
-        public const int Y0 = 2028, YBad = 2034, YFixFrom = 2033;
+        public const int Y0 = 2028, YBad = 2034, YFixFrom = 2032;   // the plan of the data: 2nd stage of ПС «Golden» in 2035 (3 years late)
         /// <summary>Story beats (step seconds): growth starts, growth ends (2034), the outage, its consequence, the twin's answer, the fix.</summary>
         public const float TGrowA = 3.5f, TGrowB = 13f, TOut = 13.6f, TCons = 15.2f, TAnswer = 20.5f, TFix = 22.8f;
         /// <summary>Phase of the story: 0 evening, 1 growth, 2 outage, 3 the twin's answer (still dark), 4 fixed (lights back).</summary>
@@ -37,13 +37,22 @@ namespace AlatauCity.DigitalTwin
         public float T => t;
         public bool Fixed => t >= TFix;
         public float YearF => Mathf.Lerp(Y0, YBad, Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(TGrowA, TGrowB, t)));
-        public float Cap(int y) => hv == null ? 125f : Fixed && y >= YFixFrom ? Mathf.Max(hv.CapAt(sc, y), hv.CapAt(sc, YFixFrom + 3)) : hv.CapAt(sc, y);
+        /// <summary>The year the plan of the data builds the substation's second stage (the one the twin moves up to YFixFrom).</summary>
+        public int PlannedStage2 => hv != null && hv.Stages != null && hv.Stages.Length > sc && hv.Stages[sc].Length > 1 ? hv.Stages[sc][1] : YFixFrom + 3;
+        /// <summary>The capacity in a year; once the twin's answer is taken, the second stage stands from YFixFrom instead of PlannedStage2.</summary>
+        public float Cap(int y) => hv == null ? 125f : Fixed && y >= YFixFrom && y < PlannedStage2 ? hv.CapAt(sc, y) + hv.Unit : hv.CapAt(sc, y);
         public float Demand(int y) => hv == null ? 0f : hv.DemandAt(sc, y);
 
         public TourEnergy()
         {
             sc = (int)TwinState.Scenario;
             hv = TwinData.Facilities.FirstOrDefault(f => f.Id == "hv_golden");
+            // the story says the evening peak outgrows the substation in YBad: the data must say the same (gen_twin HV_UNIT, DESIGNED_DELAYS)
+            if (hv != null)
+            {
+                int first = -1; for (int y = Y0; y <= 2050 && first < 0; y++) if (hv.DemandAt(sc, y) > hv.CapAt(sc, y)) first = y;
+                if (first != YBad) Debug.LogWarning($"[Alatau] energy story: the data put the first shortage of ПС «Golden» in {first}, the story in {YBad}");
+            }
             subs.AddRange(TwinData.Facilities.Where(f => f.Res == "power" && f.District == 1));
             site = SitePos;
             // the camera comes to the substation from outside the district: the yard in front, the district it feeds behind it

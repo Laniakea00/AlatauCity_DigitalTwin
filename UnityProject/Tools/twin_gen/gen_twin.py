@@ -154,7 +154,10 @@ def build_facilities(geo, B, cells, roads_xy):
         m = dist_of == d; P = pts[m]; W = w2050["power"][m]
         x, z = (P * W[:, None]).sum(0) / max(W.sum(), 1e-9)
         _, ri = roads_xy.query([x + 900, z]); x, z = roads_xy.data[ri]
-        add(f"hv_{names_ps[d].lower()}", f"ПС 220/110 кВ «{names_ps[d]}»", "substation_hv", "power_hv", x + 80, z - 80, N.UNIT["power_hv"], True,
+        # Golden: smaller stages (2×40 MVA transformers, 80 MW firm each), so its evening peak outgrows the first stage in 2034, the year
+        # of the presentation's energy story (TourEnergy.YBad; owner 10.11.2026: «хочу чтобы дефицит был в 2034 г.»)
+        unit_hv = HV_UNIT.get(d, N.UNIT["power_hv"])
+        add(f"hv_{names_ps[d].lower()}", f"ПС 220/110 кВ «{names_ps[d]}»", "substation_hv", "power_hv", x + 80, z - 80, unit_hv, True,
             "питающий центр района; связь с сетью 220 кВ KEGOC — модель")
     # AGRS: south edge of the city next to the Almaty–Konaev highway (gas comes from the Almaty side)
     gate = [b for b in B if b["d"] == 0]
@@ -186,7 +189,8 @@ def assign_service(F, cells):
 
 
 # designed delays of the base plan: (resource, district or None, window of base years, delay) — the twin must reveal them
-DESIGNED_DELAYS = [("power_hv", 1, (2030, 2036), 3), ("heat", 2, (2034, 2040), 3), ("sewer", None, (2035, 2042), 3)]
+HV_UNIT = {1: 80.0}   # district → MW firm per stage of its 220/110 kV substation where it differs from norms.UNIT (Golden, see build_facilities)
+DESIGNED_DELAYS = [("power_hv", 1, (2030, 2034), 3), ("heat", 2, (2034, 2040), 3), ("sewer", None, (2035, 2042), 3)]
 POOLED = ("water", "gas")
 
 
