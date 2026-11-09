@@ -203,7 +203,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
         static readonly Color32 Fairway = LM.C("#9fd05a"), Fairway2 = LM.C("#b2dc6e"), Turf = LM.C("#557f38"), GreenC = LM.C("#4fd04a"), Fringe = LM.C("#86c95a"),
             Rough = LM.C("#6a9343"), Court = LM.C("#2f6f9e"), CourtG = LM.C("#3f8a4c"), Clay = LM.C("#c0603a"), Line = LM.C("#f4f4f0"), Rubber = LM.C("#c4473a"),
             Conc = LM.C("#bdb8ae"), Asph = LM.C("#4a4b4d"), Track = LM.C("#b84a35"), Dirt = LM.C("#a8774f"), Fence = LM.C("#2b4a3a"), Water = LM.C("#3d7fa8"),
-            Pool = LM.C("#4fc3e0"), Bike = LM.C("#b46a55"), Cart = LM.C("#d9d2bf"), PlotLawn = LM.C("#78a556"), Seat = LM.C("#2f5f8e"), Seat2 = LM.C("#c9483a"),
+            Asphalt = LM.C("#37383a"), Kerb = LM.C("#c7c3b8"), Pool = LM.C("#4fc3e0"), Bike = LM.C("#b46a55"), Cart = LM.C("#d9d2bf"), PlotLawn = LM.C("#78a556"), Seat = LM.C("#2f5f8e"), Seat2 = LM.C("#c9483a"),
             Pine = LM.C("#2f5a35"), Leaf2C = LM.C("#5f8a3c"), RoofRed = LM.C("#9a3b2c"), Steel = LM.C("#c9ccd0");
 
         /// <summary>A flat surface draped on the terrain: a grid of cells ≤ 12 m, local +z along w, +x along d, lift metres over the ground.</summary>
@@ -322,8 +322,8 @@ namespace AlatauCity.DigitalTwin.Landmarks
             if (c.paths != null)
                 foreach (var p in c.paths)
                 {
-                    var col = p.k == "bike" ? Bike : p.k == "cart" ? Cart : Pave;
-                    Ribbon(K(p.y), p.p, p.w * 0.5f, p.k == "cart" ? 0.11f : 0.15f, col, LM.Paving);
+                    var col = p.k == "bike" ? Bike : p.k == "cart" ? Cart : p.k == "track" ? Asphalt : p.k == "kerb" ? Kerb : Pave;
+                    Ribbon(K(p.y), p.p, p.w * 0.5f, p.k == "cart" ? 0.11f : p.k == "kerb" ? 0.13f : 0.15f, col, LM.Paving);
                 }
             if (c.items != null)
                 foreach (var it in c.items)
@@ -392,6 +392,14 @@ namespace AlatauCity.DigitalTwin.Landmarks
                                 Pitch(0f, 0f, pw, pl);
                                 foreach (float sg in new[] { -1f, 1f }) Stand(k, W(sg * (pw * 0.5f + 8f), 0f, 0f), it.yaw + (sg > 0 ? 90f : -90f), pl * 0.55f, 6f, 3f, Seat, false);
                                 for (int q = 0; q < 4; q++) { float sx = q % 2 == 0 ? -1 : 1, sz = q < 2 ? -1 : 1; var m0 = W(sx * (pw * 0.5f + 3f), sz * (pl * 0.5f + 3f), 0f); k.Beam(m0, m0 + Vector3.up * 18f, 0.3f, 0.3f, Pole, LM.Steel); }
+                                break;
+                            }
+                        case "grandstand": Stand(k, W(0f, 0f, 0f), it.yaw, it.w, it.d, 20f, Seat, true); break;
+                        case "pits":
+                            {
+                                // the pit building along the straight, the race control tower at its end
+                                k.Box(W(0f, 0f, 5f), new Vector3(it.w, 10f, it.d), it.yaw, White, LM.Solid, 1f, White, LM.Roof);
+                                k.Box(W(it.w * 0.5f - 18f, 0f, 16f), new Vector3(30f, 32f, 30f), it.yaw, Seat, LM.Glass, 3.6f, White, LM.Roof);
                                 break;
                             }
                         case "stadium":

@@ -63,6 +63,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 case "hospital": Hospital(k); break;
                 case "kpark": KPark(k); break;
                 case "marina": Marina(k); break;
+                case "ring_resort": RingResort(k); break;
                 case "airport": Airport(k); break;
                 default: k.Box(new Vector3(0, 10, 0), new Vector3(40, 20, 40), 0, White, LM.Solid, 3.5f, Roof, LM.Roof); break;
             }
@@ -1206,6 +1207,68 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 ParkTree(k, px, qz, 8f + 5f * Hash(qz, px), h);
             }
             k.Part = 0; k.NoWin();
+        }
+
+        // ------------------------------------------------------------------ the round resort of the master plan drawing (decree 727, east shore of Green)
+        /// <summary>A short arc of a ring as a footprint; a is measured from north (+z) clockwise, in degrees.</summary>
+        static List<Vector2> ArcFp(float r0, float r1, float a0, float a1, int n = 4)
+        {
+            var l = new List<Vector2>();
+            for (int i = 0; i <= n; i++) { float a = Mathf.Lerp(a0, a1, i / (float)n) * Mathf.Deg2Rad; l.Add(new Vector2(r1 * Mathf.Sin(a), r1 * Mathf.Cos(a))); }
+            for (int i = n; i >= 0; i--) { float a = Mathf.Lerp(a0, a1, i / (float)n) * Mathf.Deg2Rad; l.Add(new Vector2(r0 * Mathf.Sin(a), r0 * Mathf.Cos(a))); }
+            return l;
+        }
+
+        /// <summary>Rings of hotels round a lagoon with the casino on its island: rings open to the water on the north, the buildings stepping down outward.</summary>
+        static void RingResort(LandmarkKit k)
+        {
+            Color32 lawn = LM.C("#7fa35c"), lagoon = LM.C("#3fa7c9"), deck = LM.C("#d8d2c4"), sand = LM.C("#e3d6bf");
+            k.Cylinder(new Vector3(0f, -0.2f, 0f), 890f, 0.3f, 72, lawn, LM.Plant, 3f, lawn, LM.Plant);
+            k.Cylinder(new Vector3(0f, 0.1f, 0f), 400f, 0.2f, 64, sand, LM.Solid, 3f, sand, LM.Paving);
+            k.Cylinder(new Vector3(0f, 0.2f, 0f), 380f, 0.15f, 64, lagoon, LM.Water, 3f, lagoon, LM.Water);
+            // the casino island
+            k.Cylinder(new Vector3(0f, 0.3f, 0f), 135f, 1.2f, 48, deck, LM.Solid, 3f, deck, LM.Paving);
+            k.Cylinder(new Vector3(0f, 1.5f, 0f), 62f, 30f, 40, GlassTeal, LM.Glass, 4.2f, White, LM.Roof);
+            k.Cylinder(new Vector3(0f, 31.5f, 0f), 44f, 12f, 32, GlassBlue, LM.Glass, 4.2f, White, LM.Roof, 5f);
+            for (int i = 0; i < 4; i++)
+            {
+                float y = i * 90f + 45f; var r = Quaternion.Euler(0f, y, 0f);
+                k.Box(r * new Vector3(0f, 2f, 255f), new Vector3(9f, 1f, 250f), y, deck, LM.Solid, 1f, deck, LM.Paving);   // bridges over the lagoon
+            }
+            // the rings: (inner radius, depth, height, how many arcs round the land side)
+            float[,] rings = { { 430f, 34f, 42f, 18f }, { 520f, 26f, 30f, 22f }, { 610f, 22f, 20f, 26f }, { 700f, 18f, 13f, 30f }, { 790f, 16f, 9f, 34f } };
+            const float open = 40f;                       // half the opening to the water, degrees, on the north
+            for (int q = 0; q < rings.GetLength(0); q++)
+            {
+                float r0 = rings[q, 0], dr = rings[q, 1], h = rings[q, 2]; int n = (int)rings[q, 3];
+                float span = (360f - 2f * open) / n;
+                for (int i = 0; i < n; i++)
+                {
+                    float a0 = open + i * span + span * 0.08f, a1 = open + (i + 1) * span - span * 0.08f;
+                    float hh = h * (i % 3 == 1 ? 1.15f : 1f);
+                    k.Prism(ArcFp(r0, r0 + dr, a0, a1), 0.2f, hh, q < 2 ? GlassTeal : GlassWarm, LM.Glass, 3.6f, White, LM.Roof);
+                    k.Prism(ArcFp(r0 - 1f, r0 + dr + 1f, a0, a1), hh, hh + 1.2f, White, LM.Solid, 1f, White, LM.Roof);
+                }
+                // the promenade inside the ring
+                for (int i = 0; i < n * 2; i++)
+                {
+                    float a0 = open + i * span * 0.5f, a1 = a0 + span * 0.5f;
+                    k.Prism(ArcFp(r0 - 16f, r0 - 4f, a0, a1, 2), 0.05f, 0.25f, deck, LM.Solid, 1f, deck, LM.Paving);
+                }
+            }
+            // the canal from the lagoon to the reservoir, the piers along it
+            k.Box(new Vector3(0f, 0.25f, 640f), new Vector3(170f, 0.15f, 500f), 0f, lagoon, LM.Water, 1f, lagoon, LM.Water);
+            foreach (float sg in new[] { -1f, 1f })
+                for (int p = 0; p < 6; p++)
+                    k.Box(new Vector3(sg * 66f, 0.9f, 460f + p * 70f), new Vector3(52f, 0.6f, 3f), 0f, Stone, LM.Solid, 1f, deck, LM.Paving);
+            // trees between the rings
+            var rnd = new System.Random(2041);
+            for (int i = 0; i < 520; i++)
+            {
+                float a = (open + (float)rnd.NextDouble() * (360f - 2f * open)) * Mathf.Deg2Rad, rr = 405f + (float)rnd.NextDouble() * 470f, frac = Mathf.Repeat(rr - 400f, 90f);
+                if (frac < 45f) continue;
+                k.Tree(new Vector3(rr * Mathf.Sin(a), 0.1f, rr * Mathf.Cos(a)), 7f + (float)rnd.NextDouble() * 4f, lawn, i * 0.37f);
+            }
         }
 
         // ------------------------------------------------------------------ marina and waterfront club on Kapshagay (Green District concept)

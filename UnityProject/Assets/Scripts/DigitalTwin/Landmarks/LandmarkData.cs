@@ -301,11 +301,12 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 // магистраль, ≥ 300 m off the 500 kV lines, 5.6 km nearer the city than the site of 31.10 (−16000, 1500; one runway
                 // 4 000 m on 095°). Yaw 280: local −z (the nose, the landside gate at (−450, −1900)) toward 100°; the gate road of the
                 // map (s_air_access) comes from the Дорога плато, the LRT terminus and the rail station «Алатау» are across the trunk.
+                // Moved 09.11.2026 to the master plan drawing (decree 727): centre (−7650, 8900), runways north – south, yaw 0, the nose south. Was (−10350, 4000), yaw 280.
                 // A construction site like the other landmarks: works from 2041 to 2045 (city.json airport_new: built 2041–2045, open
                 // 2045); the planes fly from 2045. Was (−15955.8, 1867.55), yaw 95, one runway (31.10.2026); before that (−5900, 8300), yaw 30.
-                StartYear = 2041, EndYear = 2045, YearOfficial = false, X = -10350f, Z = 4000f, Yaw = 280f, PadW = 1600f, PadD = 3800f, Height = 98f, Radius = 1900f, ViewYaw = 300f, ViewPitch = 30f,
-                Source = "решение владельца 02.11.2026 (схема Growing-запад); генплан — 15 млн пасс./год, после 2040, у западной границы", SourceDate = "02.11.2026"
-            }.F("ВПП", "две: 3 400 и 2 650 м, курс 100°/280°").F("Терминал", "в форме самолёта между ВПП, нос — зал прилёта и вылета к городу").F("Стоянки", "32 телетрапа + 6 перронных, грузовой терминал").F("Подъезд", "от Аэропортовой магистрали по Дороге плато; ЛРТ и аэроэкспресс — у въезда").F("Пассажиры", "15 млн в год (генплан)").F("Сроки", "после 2040 (генплан); в двойнике — стройка 2041–2045, открытие в 2045"));
+                StartYear = 2041, EndYear = 2045, YearOfficial = false, X = -7650f, Z = 8900f, Yaw = 0f, PadW = 1600f, PadD = 3800f, Height = 98f, Radius = 1900f, ViewYaw = 300f, ViewPitch = 30f,
+                Source = "чертёж генплана № 727; 15 млн пасс./год, после 2040, у западной границы", SourceDate = "09.09.2025"
+            }.F("ВПП", "две: 3 400 и 2 650 м, север – юг").F("Терминал", "в форме самолёта между ВПП, нос — зал прилёта и вылета к городу").F("Стоянки", "32 телетрапа + 6 перронных, грузовой терминал").F("Подъезд", "с юга от Аэропортовой магистрали; ЛРТ и аэроэкспресс — у въезда").F("Пассажиры", "15 млн в год (генплан)").F("Сроки", "после 2040 (генплан); в двойнике — стройка 2041–2045, открытие в 2045"));
 
             // ---------------- Green: tourism and recreation on Kapshagay
             L.Add(new Landmark
@@ -313,9 +314,18 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 Id = "marina", Name = "Марина Капшагай", Short = "Марина", Company = "ACA · инвесторы не объявлены",
                 Purpose = "Яхтенная марина и набережная туристического района", Model = "marina",
                 District = 3, Status = LStatus.Concept, StatusNote = "концепция Green District, сроков нет",
-                StartYear = 2033, EndYear = 2037, YearOfficial = false, X = 4825f, Z = 25272f, Yaw = 30f, PadW = 200f, PadD = 140f, Height = 14f, Radius = 180f, ViewYaw = 160f, ViewPitch = 22f,
+                StartYear = 2033, EndYear = 2037, YearOfficial = false, X = 4825f, Z = 25272f, Yaw = 315f, PadW = 200f, PadD = 140f, Height = 14f, Radius = 180f, ViewYaw = 160f, ViewPitch = 22f,
                 Source = "Kazinform, Astana Times", SourceDate = "29.09.2025 / 04.09.2026"
             }.F("Состав", "марина, клуб, набережная").F("Сроки", "не объявлены (в демо — 2037)"));
+            // the round complex on the east shore, as drawn on the master plan (decree 727); map zone z_ring
+            L.Add(new Landmark
+            {
+                Id = "ring_resort", Name = "Круглый курорт Green", Short = "Круглый курорт", Company = "инвесторы не объявлены",
+                Purpose = "Курортный комплекс на восточном берегу: кольца отелей вокруг лагуны, казино на острове", Model = "ring_resort",
+                District = 3, Status = LStatus.Concept, StatusNote = "контур по чертежу генплана, состав — модель qTwin",
+                StartYear = 2036, EndYear = 2042, YearOfficial = false, X = 14800f, Z = 20150f, Yaw = 0f, PadW = 1800f, PadD = 1800f, Height = 48f, Radius = 950f, ViewYaw = 200f, ViewPitch = 32f,
+                Source = "чертёж генплана № 727", SourceDate = "09.09.2025"
+            }.F("Состав", "казино, отели, лагуна, причалы").F("Сроки", "в демо — 2036–2042"));
             return L;
         }
 

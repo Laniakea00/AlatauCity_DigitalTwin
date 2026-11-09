@@ -51,15 +51,16 @@ J062 = (N.JOINT["J062"]["x"], N.JOINT["J062"]["z"])
 TL = N.TL
 P_M = C.on_line(N.TRUNK, x=-1150.0)
 S_M = TL.project(Point(P_M))
-# the line stops in the median 280 m west of the Дорога плато junction, across the trunk from the airport's landside gate
-# (owner 02.11.2026: the airport north of the trunk; the trunk goes on west to the western industry without the LRT)
-S_END = TL.project(Point(N.AIR_JN)) + 280.0
+# the line leaves the trunk at the airport's gate road and runs up its median to the terminal (master plan drawing, owner
+# 09.11.2026: the airport north of the trunk; the trunk goes on west to the western industry without the LRT)
+S_END = TL.project(Point(N.AIR_JN)) - 180.0
 # into the median along the trunk's own direction: the last 120 m before P_M lie on the trunk's tangent at P_M, so the
 # curve meets the median without a kink (rule 25: curve radius)
 _tm = np.array(TL.interpolate(S_M + 2.0).coords[0]) - np.array(TL.interpolate(S_M - 2.0).coords[0])
 _tm /= np.linalg.norm(_tm)
 Q_M = tuple(np.array(P_M) - _tm * 120.0)
-LRT_PTS = C.fillet([J062, (-650.0, 2275.0), Q_M, P_M], 300) + [p for p in list(substring(TL, S_M + 1.0, S_END).coords)]
+LRT_PTS = C.fillet([J062, (-650.0, 2275.0), Q_M, P_M], 300) + [p for p in list(substring(TL, S_M + 1.0, S_END).coords)] \
+    + C.fillet([tuple(TL.interpolate(S_END).coords[0]), N.AIR_JN, (N.AIR_GATE[0], N.AIR_GATE[1] - 150.0)], 150)[1:]
 q = [LRT_PTS[0]]
 for p in LRT_PTS[1:]:
     if math.dist(p, q[-1]) > 0.5:
@@ -456,9 +457,9 @@ for z in Z.ZPLAN:
 ZB["air_airside"].update({"poly": AIR, "name_ru": "Аэропорт «Алатау»: лётное поле, терминал, перрон",
                           # the airport's own jobs on its lot (LandmarkCapacity airport: 4 500, the twin's estimate)
                           "rules": {"lot_split": "none", "homes_per_ha": 0, "jobs_per_ha": round(4500.0 / (AIR.area / 1e4), 2)},
-                          "why": "решение владельца 02.11.2026: аэропорт на месте промзоны плато (обмен с ней), в 5,6 км ближе к "
-                                 "городу, чем место 31.10; две ВПП 3 400 и 2 650 м курсом 100°/280°, между ними терминал в "
-                                 "форме самолёта носом к городу; территория 3,8 × 1,6 км — участок модели airport"})
+                          "why": "чертёж генплана № 727 (решение владельца 09.11.2026): лётное поле на западе города, полосы "
+                                 "север – юг, терминал с юга; модель airport: две ВПП 3 400 и 2 650 м, между ними терминал; "
+                                 "территория 3,8 × 1,6 км"})
 ZB["air_terminal"].update({"use": "industry", "name_ru": "Западная промзона (бывшая аэросити схемы)",
                            "rules": copy.deepcopy(_IND["rules"]), "density": copy.deepcopy(_IND["density"]),
                            "years": list(_IND["years"]),
@@ -925,14 +926,13 @@ def reg_pt(rid):
 MOVED = []      # (registry id, было, стало, почему) for the report
 AC = N.AIR_C
 obj("airport_alatau", "move", reg_pt("airport_alatau"), [round(AC[0], 1), round(AC[1], 1)], "district_only",
-    "решение владельца 02.11.2026 (обмен с промзоной плато): центр участка (−10350, 4000), в 5,6 км ближе к городу, чем "
-    "место 31.10 (−16000, 1500), на западе города (генплан: «вдоль западной границы», 15 млн пасс./год, после 2040). Концепция "
-    "двойника: две ВПП 3 400 и 2 650 м курсом 100°/280°, между ними терминал в форме самолёта носом к городу (модель airport, "
-    "3,8 × 1,6 км); ≥ 300 м от ЛЭП 500 кВ, севернее Аэропортовой магистрали; въезд — от Дороги плато, ЛРТ и вокзал «Алатау» "
-    "напротив въезда", kind="landmark", footprint=AIR, yaw=N.AIR_YAW, years=Y4(2041), basis="по источнику",
+    "чертёж генплана № 727, решение владельца 09.11.2026: центр участка (−7650, 8900), полосы север – юг, терминал с юга "
+    "(генплан: западная граница города, 15 млн пасс./год, после 2040). Модель двойника: две ВПП 3 400 и 2 650 м, между ними "
+    "терминал в форме самолёта (3,8 × 1,6 км); въезд, ЛРТ и вокзал «Алатау» с юга, от Аэропортовой магистрали; "
+    "место снято с чертежа, точность ±1 км", kind="landmark", footprint=AIR, yaw=N.AIR_YAW, years=Y4(2041), basis="по источнику",
     from_twin=[-5900, 8300])
-MOVED.append(("airport_alatau", "(−16488, 561) реестр; решение 31.10 (−16000, 1500), ВПП 095°", "(−10350, 4000), ВПП 100°/280°",
-              "решение владельца 02.11.2026: ближе к городу, обмен с промзоной плато; модель airport — две ВПП и терминал-самолёт"))
+MOVED.append(("airport_alatau", "(−10350, 4000), ВПП 100°/280° (02.11.2026)", "(−7650, 8900), ВПП север – юг",
+              "чертёж генплана № 727, решение владельца 09.11.2026"))
 # rail station «Алатау»: at the end of the spur, next to the terminal and the LRT terminus
 ST_RAIL = Point(N.SPUR[-1])
 _u = np.array(N.SPUR[-1]) - np.array(N.SPUR[-4])
@@ -943,9 +943,9 @@ RS_FP = Polygon([tuple(_c - _u * 300 - _v * 60), tuple(_c + _u * 300 - _v * 60),
                  tuple(_c - _u * 300 + _v * 60)]).difference(_red_all).difference(AIR.buffer(2.0)).buffer(0)
 RS_FP = max(getattr(RS_FP, "geoms", [RS_FP]), key=lambda g: g.area).simplify(0.5)
 obj("airport_rail_station", "move", reg_pt("airport_rail_station"), P1(RS_FP.centroid.coords[0]), "district_only",
-    MODEL + ": вокзал напротив въезда в аэропорт, в одном узле с конечной ЛРТ «Аэропорт «Алатау»»: конец ветки ≈ 4 км от "
-            "обходной ж/д у ПС «Алма» (полоса util_rail_spur, южнее магистрали, без пересечения с ней); поезда на Алматы-2 и "
-            "Конаев по обходу",
+    MODEL + ": вокзал у терминала, в одном узле с конечной ЛРТ «Аэропорт «Алатау»» (генплан: вокзал в непосредственной "
+            "близости от аэропорта): ветка от обходной ж/д у ПС «Алма» (полоса util_rail_spur, магистраль проходит над ней "
+            "путепроводом); поезда на Алматы-2 и Конаев по обходу",
     kind="transit", footprint=RS_FP, yaw=round(math.degrees(math.atan2(_u[0], _u[1])), 1), years=Y4(2041),
     line=[P1(p) for p in N.SPUR[::max(1, len(N.SPUR) // 30)]] + [P1(N.SPUR[-1])])
 MOVED.append(("airport_rail_station", "(−16488, 561) реестр (точка аэропорта)", f"({RS_FP.centroid.x:.0f}, {RS_FP.centroid.y:.0f})",

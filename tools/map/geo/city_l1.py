@@ -39,9 +39,9 @@ ICONIC_NEW = (-3500.0, -19500.0)
 # owner 02.11.2026: swapped with the plateau industry, 5.6 km nearer the city (was (−16000, 1500), one runway 4 000 m on
 # 095°); the twin's concept — the main runway of two (LandmarkModels.Airport RwyL*: plot (−10350, 4000), yaw 280), the second
 # 2 650 m runs 1 280 m north of it, its threshold staggered 750 m
-AIRPORT_NEW = {"id": "alatau_new", "centre": (-10510.3, 3378.4), "bearing_deg": 100.0, "length_m": 3400.0, "width_m": 60.0,
+AIRPORT_NEW = {"id": "alatau_new", "centre": (-8290.0, 8949.0), "bearing_deg": 0.0, "length_m": 3400.0, "width_m": 60.0,
                "pax_m_per_year": 15, "build_years": [2041, 2045],
-               "second": {"centre": (-10657.4, 4704.1), "length_m": 2650.0}}
+               "second": {"centre": (-7010.0, 9325.0), "length_m": 2650.0}}
 Y0, Y1, AFTER = 2025, 2050, 2099
 
 

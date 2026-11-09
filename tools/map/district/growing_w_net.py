@@ -116,7 +116,8 @@ RAIL_ALL = [g for g, p in C.layer_in("rail", POLY.buffer(100))]          # every
 SPUR_FORK = RAIL.interpolate(RAIL.project(Point(-5800.0, -450.0)))
 # the spur ends at the station «Алатау» south of the trunk, across it from the airport's landside gate (owner 02.11.2026);
 # it went on west to the airfield of 31.10 (−15300, 2560) before
-SPUR = fillet([(SPUR_FORK.x, SPUR_FORK.y), (-6900.0, 120.0), (-8200.0, 900.0), (-8550.0, 1700.0), (-8600.0, 2480.0)], 900)
+SPUR = fillet([(SPUR_FORK.x, SPUR_FORK.y), (-6900.0, 120.0), (-8200.0, 900.0), (-8550.0, 1700.0), (-8600.0, 2480.0),
+               (-8650.0, 4500.0), (-8650.0, 6500.0)], 900)
 RAIL_HALF = 25.0                                   # m: rail corridor half width kept free of streets along it (model)
 RAIL_BAR = unary_union([RAIL.buffer(RAIL_HALF), LineString(SPUR).buffer(RAIL_HALF)])
 
@@ -294,10 +295,12 @@ def cut_at(line, pts_):
 # landside) toward the city (LandmarkModels.Airport, plot 3 800 m along the runways × 1 600 m, Unity yaw 280). North of the
 # Аэропортовая магистраль, ≥ 300 m off the 500 kV lines, clear of the lakes park; the centre is LandmarkData airport X, Z
 J143 = (JOINT["J143"]["x"], JOINT["J143"]["z"])
-AIR_C = np.array([-10350.0, 4000.0])
-AIR_YAW = 280.0                                    # Unity yaw: local −z (the nose, the landside) toward 100°
-_U = np.array([math.sin(math.radians(100.0)), math.cos(math.radians(100.0))])   # along the runways, toward the city
-_V = np.array([math.sin(math.radians(10.0)), math.cos(math.radians(10.0))])     # across the runways, to the north
+# Master plan drawing (decree 727, 2025; owner 09.11.2026 «двигай в соответствии с генпланом»): two runways north – south at
+# x ≈ −8300 and −6900, the terminal and its road at their south end
+AIR_C = np.array([-7650.0, 8900.0])
+AIR_YAW = 0.0                                      # Unity yaw: local −z (the nose, the landside) toward 180°, south
+_U = np.array([0.0, -1.0])                         # along the runways, toward the terminal's nose
+_V = np.array([1.0, 0.0])                          # across the runways, to the east
 AIR_HALF_L, AIR_HALF_W = 1900.0, 800.0
 
 
@@ -400,34 +403,29 @@ RINGS.append(("n_ring_hub", RING_HUB))
 # --- Дорога плато (scheme art_plateau): from the trunk north over the plateau to the А-3 km 55,9 trumpet (W terminal of the
 # OSM links dfc7b64c / 3e1f1193 / 87899a36)
 KM559 = (250.2, 13683.2)                           # the terminal node of the OSM ramps dfc7b64c / 3e1f1193 / 87899a36
-# (it starts 700 m east of the scheme's point since 02.11.2026: past the airport's east edge, the airport's gate road off it)
-_pl = LineString(fillet([C.on_line(TRUNK, x=-8300.0), (-8150.0, 5200.0), (-8300.0, 7700.0), (-7600.0, 10200.0),
-                         (-7100.0, 12600.0), (-6200.0, 13700.0), (-3500.0, 13800.0), (-1200.0, 13780.0), (-300.0, 13720.0),
+# (east of the airfield of the master plan drawing since 09.11.2026)
+_pl = LineString(fillet([C.on_line(TRUNK, x=-6050.0), (-6050.0, 5200.0), (-6200.0, 8000.0), (-6300.0, 11000.0),
+                         (-6000.0, 12600.0), (-5400.0, 13700.0), (-3500.0, 13800.0), (-1200.0, 13780.0), (-300.0, 13720.0),
                          KM559], 900))
 # the trumpet's stem: the divided street ends at a two-lane ring 90 m west of the ramps' terminal node; one carriageway
 # (district_transport, as the one-lane ramps) runs from the ring to the terminal
 RING_KM559 = tuple(_pl.interpolate(_pl.length - 90.0).coords[0])
 PLAT = list(substring(_pl, 0.0, _pl.length - 90.0).coords)
-# its first 460 m, from the trunk to the airport's gate road, open with the airport (2041); the rest with the scheme (2046)
-AIR_JN = C.on_line(PLAT, z=AIR_GATE[1])
-PLAT_AIR, PLAT = cut_at(PLAT, [AIR_JN])
-street("s_plateau_air", "arterial_regulated", PLAT_AIR, "Дорога плато (север – юг)", 2041, axis="art_plateau",
-       struct=structs(PLAT_AIR),
-       why=MODEL + ": начало схемы art_plateau от Аэропортовой магистрали до въезда в аэропорт — открывается с аэропортом")
 street("s_plateau", "arterial_regulated", PLAT, "Дорога плато (север – юг)", 2046, axis="art_plateau", struct=structs(PLAT),
-       why="схема art_plateau (2040–50): от въезда в аэропорт у Аэропортовой магистрали на север по плато и на восток к "
+       why="схема art_plateau (2040–50): от Аэропортовой магистрали на север по плато восточнее лётного поля и на восток к "
            "кольцу у развязки А-3 км 55,9")
-# the airport's gate road: from the Дорога плато west to the landside gate of the model (its internal roads go on to the
-# roundabout, the boulevard and the forecourt at the terminal's nose)
+# the airport's gate road: from the trunk north to the landside gate of the model, as on the master plan drawing (its
+# internal roads go on to the roundabout, the boulevard and the forecourt at the terminal's nose)
+AIR_JN = C.on_line(TRUNK, x=AIR_GATE[0])
 AIR_ACCESS = [AIR_JN, AIR_GATE]
 street("s_air_access", "arterial_regulated", AIR_ACCESS, "Въезд в аэропорт «Алатау»", 2041, struct=structs(AIR_ACCESS),
-       why=MODEL + ": от Дороги плато до въезда на территорию аэропорта (02.11.2026: аэропорт севернее магистрали, "
-                   "носом-терминалом к городу); дальше — внутренние дороги модели airport")
+       why="чертёж генплана (№ 727): дорога к терминалу с юга, от Аэропортовой магистрали; дальше — внутренние дороги "
+           "модели airport")
 for _k, _p in enumerate(cw_ends(AIR_ACCESS, "arterial_regulated", None), 1):
     node(f"n_air_gate{_k}", _p[0], _p[1], "joint", ["s_air_access"], landmark="airport_alatau",
          why_ru="въезд на территорию аэропорта (внутренние проезды — модель airport, Unity); узел на каждой проезжей части")
-SCHEME_CHANGES.append(("art_plateau", "начало на магистрали в 700 м восточнее схемы (x −8300): аэропорт (02.11.2026) занял "
-                                      "плато западнее; первые 460 м до въезда в аэропорт — с 2041"))
+SCHEME_CHANGES.append(("art_plateau", "начало на магистрали у x −6050, дорога идёт восточнее лётного поля чертежа генплана "
+                                      "(решение владельца 09.11.2026)"))
 street("s_plateau_stem", "district_transport", [RING_KM559, KM559], "Дорога плато (въезд на развязку км 55,9)", 2046,
        axis="art_plateau",
        why=MODEL + ": от кольца до концевого узла существующих съездов развязки А-3 км 55,9 (OSM, однополосные): улица с "
