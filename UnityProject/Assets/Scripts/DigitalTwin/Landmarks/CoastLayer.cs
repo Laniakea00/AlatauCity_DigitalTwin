@@ -25,6 +25,44 @@ namespace AlatauCity.DigitalTwin.Landmarks
 
         Material mat; readonly List<(GameObject go, int y)> parts = new List<(GameObject, int)>(); int lastYear = -999; bool built;
 
+        // ---- the trees of the beaches, the promenade and the recreation sites: drawn by FilmTrees like every tree of the city (instanced,
+        // fine crowns near the camera, light ones further, none beyond 6 km, shadows within 2.6 km), not merged into the meshes of the
+        // layer, where some 14 000 crowns were drawn in full from any distance (owner 10.11.2026: speed without losing quality)
+        const float TreeCell = 600f;
+        readonly Dictionary<long, (List<Matrix4x4> m, List<float> y, List<Vector4> t, int sp, Vector3 c)> treeCells = new Dictionary<long, (List<Matrix4x4>, List<float>, List<Vector4>, int, Vector3)>();
+        readonly List<(int s, Matrix4x4[] m, MaterialPropertyBlock p, Bounds b)> treeBatches = new List<(int, Matrix4x4[], MaterialPropertyBlock, Bounds)>();
+        readonly Plane[] treePlanes = new Plane[6];
+        static float[] treeTop;
+
+        /// <summary>A tree as LandmarkKit.Tree would put it (the same species, size, turn, jitter and tint from the seed), into the instanced cells.</summary>
+        void AddTree(Vector3 p, float h, float seed, int year)
+        {
+            float r = Mathf.Abs(Mathf.Sin(seed * 91.7f + 3.1f) * 43758.5453f) % 1f, r2 = Mathf.Abs(Mathf.Sin(seed * 47.3f + 1.7f) * 24634.6345f) % 1f;
+            int sp = r < 0.80f ? 0 : r < 0.97f ? 1 : 2;
+            if (treeTop == null) { treeTop = new float[3]; for (int i = 0; i < 3; i++) treeTop[i] = Mathf.Max(FilmTrees.SpeciesMesh(i).bounds.max.y, 1f); }
+            float sc = h * (sp == 1 ? 1.2f : 1f) / treeTop[sp], yaw = seed * 137f * Mathf.Rad2Deg;
+            float tv = 0.80f + 0.30f * r2, tw = (r * 7.31f) % 1f;
+            var hue = tw < 0.34f ? new Vector3(0.78f, 0.92f, 0.84f) : tw < 0.62f ? new Vector3(0.95f, 0.93f, 0.74f) : tw < 0.84f ? new Vector3(0.82f, 0.90f, 0.88f) : new Vector3(0.88f, 0.97f, 0.80f);
+            p += LandmarkKit.TreeJitter(seed);
+            long key = ((long)Mathf.FloorToInt(p.x / TreeCell) << 32) ^ (long)(uint)Mathf.FloorToInt(p.z / TreeCell) ^ ((long)sp << 60);
+            if (!treeCells.TryGetValue(key, out var cell)) treeCells[key] = cell = (new List<Matrix4x4>(), new List<float>(), new List<Vector4>(), sp, p);
+            cell.m.Add(Matrix4x4.TRS(p, Quaternion.Euler(0f, -yaw, 0f), new Vector3(sc, sc * (0.92f + 0.16f * r2), sc)));
+            cell.y.Add(year); cell.t.Add(new Vector4(hue.x * tv, hue.y * tv, hue.z * tv, 1f));
+        }
+
+        void TreeBatches()
+        {
+            foreach (var cell in treeCells.Values)
+                for (int o = 0; o < cell.m.Count; o += 1023)
+                {
+                    int n = Mathf.Min(1023, cell.m.Count - o); var m = cell.m.GetRange(o, n).ToArray(); var pb = new MaterialPropertyBlock();
+                    pb.SetFloatArray("_TreeYear", cell.y.GetRange(o, n)); pb.SetVectorArray("_TreeTint", cell.t.GetRange(o, n));
+                    var b = new Bounds(m[0].GetColumn(3), Vector3.one * 16f); foreach (var q in m) b.Encapsulate(new Bounds((Vector3)q.GetColumn(3) + Vector3.up * 6f, Vector3.one * 16f));
+                    treeBatches.Add((cell.sp, m, pb, b));
+                }
+            treeCells.Clear();
+        }
+
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         static void Boot() { if (Instance == null) new GameObject("Beaches of Green (coast)").AddComponent<CoastLayer>(); }
         void Awake() { Instance = this; }
@@ -80,7 +118,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
             Add(sand, "Beaches · sand", y0); Add(umb, "Beaches · umbrellas and loungers", y0);
 
             // ---- the promenade: paving on the terrain, lamps every 32 m, benches and a row of trees on the land side every 14 m
-            var walk = new LandmarkKit(); var trees = new LandmarkKit();
+            var walk = new LandmarkKit();
             if (c.walks != null)
                 foreach (var w in c.walks)
                 {
@@ -107,14 +145,14 @@ namespace AlatauCity.DigitalTwin.Landmarks
                             foreach (float sg in new[] { -1f, 1f })
                             {
                                 var q = a + d * (nextTree - acc) + s * (sg * (hw + 3.5f));
-                                trees.Tree(new Vector3(q.x, H(q.x, q.y), q.y), 7f + R() * 3f, Leaf, q.x * 0.01f + q.y * 0.013f); nTree++;
+                                AddTree(new Vector3(q.x, H(q.x, q.y), q.y), 7f + R() * 3f, q.x * 0.01f + q.y * 0.013f, y0); nTree++;
                             }
                             nextTree += 14f;
                         }
                         acc += L;
                     }
                 }
-            Add(walk, "Beaches · promenade", y0); Add(trees, "Beaches · promenade trees", y0);
+            Add(walk, "Beaches · promenade", y0);
 
             // ---- pavilions: a timber deck, a white box with a glass front to the water, a flat roof and an awning; tables on the deck
             var bld = new LandmarkKit();
@@ -191,6 +229,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 Add(fk, "Beaches · Ferris wheel and water park", y0);
             }
             BuildRecreation();
+            TreeBatches();                                    // the beach and the recreation trees, even when recreation.json is missing
             Debug.Log($"[Alatau] beaches of Green: {c.beaches?.Length ?? 0} beaches, {nUmb} umbrellas, {c.pavilions?.Length ?? 0} pavilions, {c.towers?.Length ?? 0} lifeguard towers, {c.piers?.Length ?? 0} piers ({nBoat} boats), {c.courts?.Length ?? 0} volleyball courts, {nTree} promenade trees");
         }
 
@@ -303,9 +342,8 @@ namespace AlatauCity.DigitalTwin.Landmarks
             if (c == null) return;
             var rnd = new System.Random(2036); float R() => (float)rnd.NextDouble();
             float H(float x, float z) => CityGround.HeightAt(x, z);
-            var byYear = new Dictionary<int, LandmarkKit>(); var treesK = new Dictionary<int, LandmarkKit>();
+            var byYear = new Dictionary<int, LandmarkKit>();
             LandmarkKit K(int y) { if (!byYear.TryGetValue(y, out var k)) byYear[y] = k = new LandmarkKit(); return k; }
-            LandmarkKit T(int y) { if (!treesK.TryGetValue(y, out var k)) treesK[y] = k = new LandmarkKit(); return k; }
             int y0 = 2035, nCourts = 0, nItems = 0;
             // golf: the turf over the course, mowing stripes on the fairways, the greens with their fringe and flags, the bunkers
             if (c.turf != null) foreach (var t in c.turf) { Tris(K(t.y), t.t, 0.05f, Turf, LM.Plant); y0 = t.y; }
@@ -477,7 +515,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
                                     k.Box(b0 + Vector3.up * 8f, new Vector3(3f, 0.25f, 3f), it.yaw, Deck, LM.Solid, 1f, Deck, LM.Solid);
                                     if (i < 3) { var b1 = W((i - 0.5f) * 18f, (j - 1f) * 22f, 0f); k.Beam(b0 + Vector3.up * 9f, b1 + Vector3.up * 9f, 0.08f, 0.08f, Inflate2, LM.Solid); }
                                 }
-                            for (int q = 0; q < 14; q++) T(it.y).Tree(W((R() - 0.5f) * it.d * 0.9f, (R() - 0.5f) * it.w * 0.9f, 0f), 9f + R() * 4f, Leaf, q + it.x);
+                            for (int q = 0; q < 14; q++) AddTree(W((R() - 0.5f) * it.d * 0.9f, (R() - 0.5f) * it.w * 0.9f, 0f), 9f + R() * 4f, q + it.x, it.y);
                             break;
                         case "playground":
                             Pad(k, W(0f, 0f, 0f), it.yaw, it.w * 0.5f, it.d * 0.6f, 0.15f, Rubber, LM.Solid);
@@ -590,11 +628,10 @@ namespace AlatauCity.DigitalTwin.Landmarks
                     }
                 }
             if (c.trees != null)
-                for (int i = 0; i + 1 < c.trees.Length; i += 2) T(y0).Tree(new Vector3(c.trees[i], H(c.trees[i], c.trees[i + 1]), c.trees[i + 1]), 7f + R() * 4f, (i / 2) % 3 == 0 ? Leaf2C : Leaf, c.trees[i] * 0.013f + c.trees[i + 1] * 0.007f);
+                for (int i = 0; i + 1 < c.trees.Length; i += 2) AddTree(new Vector3(c.trees[i], H(c.trees[i], c.trees[i + 1]), c.trees[i + 1]), 7f + R() * 4f, c.trees[i] * 0.013f + c.trees[i + 1] * 0.007f, y0);
             if (c.pines != null)
-                for (int i = 0; i + 1 < c.pines.Length; i += 2) T(y0).Tree(new Vector3(c.pines[i], H(c.pines[i], c.pines[i + 1]), c.pines[i + 1]), 10f + R() * 5f, Pine, c.pines[i] * 0.011f + c.pines[i + 1] * 0.009f);
+                for (int i = 0; i + 1 < c.pines.Length; i += 2) AddTree(new Vector3(c.pines[i], H(c.pines[i], c.pines[i + 1]), c.pines[i + 1]), 10f + R() * 5f, c.pines[i] * 0.011f + c.pines[i + 1] * 0.009f, y0);
             foreach (var kv in byYear) Add(kv.Value, "Active recreation · " + kv.Key, kv.Key);
-            foreach (var kv in treesK) Add(kv.Value, "Active recreation · trees " + kv.Key, kv.Key);
             Debug.Log($"[Alatau] active recreation: {c.greens?.Length ?? 0} greens, {c.fairways?.Length ?? 0} fairway stripes, {nItems} items, {nCourts} courts, {(c.trees?.Length ?? 0) / 2} trees, {(c.pines?.Length ?? 0) / 2} pines");
         }
 
@@ -645,8 +682,20 @@ namespace AlatauCity.DigitalTwin.Landmarks
         void Update()
         {
             if (!built) return;
+            DrawTrees();
             int y = TwinState.Year; if (y == lastYear) return; lastYear = y;
             foreach (var (go, yr) in parts) go.SetActive(y < 1 || y >= yr);
+        }
+
+        void DrawTrees()
+        {
+            var ft = FilmTrees.Instance; var cam = Camera.main; if (ft == null || cam == null || treeBatches.Count == 0) return;
+            GeometryUtility.CalculateFrustumPlanes(cam, treePlanes); var cp = cam.transform.position;
+            foreach (var b in treeBatches)
+            {
+                float d = Mathf.Sqrt(b.b.SqrDistance(cp)); if (d > 6000f || !GeometryUtility.TestPlanesAABB(treePlanes, b.b)) continue;
+                if (!ft.DrawBatch(b.s, b.m, b.m.Length, b.p, d < 1500f, d < 2600f)) break;
+            }
         }
     }
 }
