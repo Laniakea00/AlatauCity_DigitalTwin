@@ -317,7 +317,7 @@ namespace AlatauCity.DigitalTwin
             steps.Add(new Step { Seg = 7, Zone = -1, Year = 2050, Dur = 24, Gfa = true, Enter = Overview, Title = () => "Alatau City 2050 · qTwin",
                 Story = () =>
                 {
-                    var s = new Story { Eyebrow = "Alatau City · 2050", Head = "Город, который проверяют до того, как он стоит денег", Note = "Модель qTwin по генплану (ПП РК № 388) · не официальные данные" };
+                    var s = new Story { Eyebrow = "Alatau City · 2050", Head = "Город, который проверяют до того, как он стоит денег", Note = "Модель qTwin по генплану (ПП РК № 388 в редакции № 727) · не официальные данные" };
                     s.K(Kk(Res(2050)), "жителей", CRes).K(Kk(CityStats.Workplaces(-1, 2050)), "рабочих мест", CJobs).K(Loc.N0(CityStats.Standing(-1, 2050)), "зданий", CInfo);
                     var e = CityEconomy.Of(2050);
                     s.R("ВРП 2050", CityEconomy.Usd(e.GrpTotal) + " · $" + Loc.N0(e.GrpPerCapitaUsd) + " на жителя", COk);
