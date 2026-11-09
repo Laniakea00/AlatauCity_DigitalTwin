@@ -97,7 +97,11 @@ LOG.append({"what": "ЛРТ: длина и станции по схеме (до 
 # ===================================================================================================== 2. local streets
 STATION_PTS = [ST_XY[k] for k, _ in ST_PLAN]
 t = time.time()
-made = N.generate_local(stations=STATION_PTS, barriers=OWN_ROW, lrt_line=L_LRT)
+import round_quarter as RQ  # noqa: E402
+# the round quarter of the master plan drawing: ring and radial streets, the resort zone's ordinary buildings in its blocks
+RING_N = RQ.add(N, "s_ring", Z.GP.RING_C, (200.0, 430.0, 660.0, 890.0), 8, 2036, "Круглый квартал", Z.GP.WHY + ": круглый квартал на берегу",
+                avoid=N.WATER_POLY)
+made = N.generate_local(stations=STATION_PTS, barriers=OWN_ROW.union(RQ.circle(Z.GP.RING_C, 890.0)), lrt_line=L_LRT)
 tick("generate_local", t)
 LOG.append({"what": "местные улицы сгенерированы", "n": made, "s": TIMES["generate_local"]})
 
@@ -556,12 +560,15 @@ for k, P in enumerate(N.UNSERVED):
                              "до участка не дойти улицей"))
 # the marina's own plot: the Unity model's pad (LandmarkData marina: 200 × 140 m, yaw 30 at (4825, 25272), 2033–2037) on the
 # shore of the quiet bay — one zone of its own, so the registry lot takes the whole pad (it stood in the water with no plot)
-MARINA_XZ, MARINA_YAW, MARINA_W, MARINA_D = (4825.0, 25272.0), 30.0, 200.0, 140.0
+MARINA_XZ, MARINA_YAW, MARINA_W, MARINA_D = (5030.0, 25490.0), 30.0, 200.0, 140.0   # the piers (+x) ESE over the bay: all four on water
 MARINA_PAD = shapely.affinity.translate(shapely.affinity.rotate(box(-MARINA_W / 2, -MARINA_D / 2, MARINA_W / 2, MARINA_D / 2),
                                                                 -MARINA_YAW, origin=(0, 0)), *MARINA_XZ)
 zone_out({"id": "z_marina", "use": "waterfront", "src": "v0", "years": [2033, 2037], "name_ru": "Марина Капшагай (пристань и клуб)",
           "why": "участок под модель Unity marina 200 × 140 м (LandmarkData, разворот 30°): марина, клуб и набережная — у воды по "
                  "flood.floodplain_allowed (причалы без капитальных зданий)"}, MARINA_PAD, {"lot_split": "none"})
+# the square in the middle of the round quarter
+zone_out({"id": "z_ring_sq", "use": "park", "src": "genplan", "years": [2036, 2042], "name_ru": "Площадь круглого квартала",
+          "why": Z.GP.WHY}, Point(Z.GP.RING_C).buffer(200.0, quad_segs=24), {"lot_split": "none"})
 Z.SCHEME_CHANGES.append(("z_marina", f"участок марины ({MARINA_PAD.area / 1e4:.1f} га) вынут из зоны wf_n_1: модель Unity 200 × 140 м целиком"))
 for z in Z.ZPLAN:
     zone_out(z, z["poly"], z["rules"])
@@ -603,7 +610,7 @@ def net_ha(z):
     return Polygon(z["polygon"]).buffer(0).intersection(NET_LAND).area / 1e4
 
 
-POP_PLAN, JOBS_PLAN = 320000, 304901
+POP_PLAN, JOBS_PLAN = 320000, 173500   # генплан № 727, гл. 5
 RES_PER_HOME = 2.5
 HOMES_T = int(round(POP_PLAN / RES_PER_HOME, -1))
 JOBS_T = int(round(JOBS_PLAN, -2))
@@ -709,6 +716,16 @@ h_var = _sum("homes_per_ha", lambda z: _counted(z) and _hv(z))
 j_fix = _sum("jobs_per_ha", lambda z: _counted(z) and not _jv(z))
 j_var = _sum("jobs_per_ha", lambda z: _counted(z) and _jv(z))
 FH = (HOMES_T * SHORT_K - h_fix) / h_var
+# the master plan's 173.5 thousand jobs are far under the old 305: when the fixed zones alone would pass them, these come down too
+# (the leisure jobs of the resort zones stay), the offices keep at least a quarter of the scheme's density
+_jr = sum(NETHA[z["id"]] * (z["rules"].get("jobs_per_ha") or 0) for z in ZONES if z["use"] == "resort")
+if (JOBS_T * SHORT_K - j_fix) / j_var < 0.25:
+    _kj = (JOBS_T * SHORT_K - _jr - 0.25 * j_var) / max(j_fix - _jr, 1.0)
+    for z in ZONES:
+        if _counted(z) and not _jv(z) and z["use"] != "resort" and z["rules"].get("jobs_per_ha"):
+            z["rules"]["jobs_per_ha"] = round(z["rules"]["jobs_per_ha"] * _kj, 1)
+    j_fix = _sum("jobs_per_ha", lambda z: _counted(z) and not _jv(z))
+    LOG.append({"what": "цель мест по генплану ниже суммы зон: места в прочих зонах снижены", "k": round(_kj, 3)})
 FJ = (JOBS_T * SHORT_K - j_fix) / j_var
 for z in ZONES:
     if z["use"] in SKIP:

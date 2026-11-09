@@ -14,7 +14,7 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from shapely.geometry import Polygon  # noqa: E402
+from shapely.geometry import Point, Polygon  # noqa: E402
 from shapely.ops import unary_union  # noqa: E402
 
 import growing_e_common as C  # noqa: E402
@@ -78,6 +78,12 @@ def v0_poly(z):
     return p.buffer(0).intersection(DIST).buffer(0)
 
 
+CORE_CIRCLE = Point(-100.0, -2050.0).buffer(720.0, quad_segs=24)
+CORE_PARK = Point(1450.0, -2900.0).buffer(500.0, quad_segs=24)
+CORE_SQUARE = Point(-100.0, -2050.0).buffer(180.0, quad_segs=24)
+CORE_C, CORE_RADII = (-100.0, -2050.0), (180.0, 360.0, 540.0, 720.0)
+
+
 def plan():
     """[{id, use, name_ru, poly, years, rules, why, density, src}] covering the district without overlaps (polygons may
     still have holes and several parts here: growing_e_build.zone_out makes them flat rings)."""
@@ -96,6 +102,23 @@ def plan():
         taken = taken.union(p)
     import owner_reloc as OR  # noqa: E402
     OR.apply("growing_e", out, use_rules, SCHEME_CHANGES)                        # owner 05.11.2026: industry to the edges
+    # the round centre and the round park of the master plan drawing (decree 727, owner 09.11.2026: «сначала повтори генплан»):
+    # the circle east of the А-3: ring and radial streets (round_quarter, growing_e_build), ordinary mixed-use blocks between them
+    _mix = next(z["density"] for z in out if z["use"] == "mixed_centre")
+    for zid, geom, name, use in (("z_core", CORE_CIRCLE, "Круглый общественный центр (чертёж генплана)", "mixed_centre"),
+                                 ("z_core_sq", CORE_SQUARE, "Площадь круглого центра (чертёж генплана)", "park"),
+                                 ("z_core_park", CORE_PARK, "Круглый парк у центра (чертёж генплана)", "park")):
+        hard = unary_union([z["poly"] for z in out if z["use"] in ("village_existing", "utility")])
+        g = geom.difference(hard).buffer(0)
+        for z in out:
+            if z["use"] not in ("village_existing", "utility") and z["poly"].intersects(g):
+                z["poly"] = z["poly"].difference(g).buffer(0)
+        out[:] = [z for z in out if z["poly"].area >= 200.0]
+        _d = dict(_mix) if use == "mixed_centre" else {}
+        out.append({"id": zid, "use": use, "name_ru": name, "poly": g, "years": [2034, 2040], "rules": use_rules(zid, use, _d),
+                    "why": "чертёж генплана № 727, решение владельца 09.11.2026", "density": _d, "src": "genplan",
+                    "population_existing": None})
+        SCHEME_CHANGES.append((zid, f"{g.area / 1e4:.0f} га по чертежу генплана № 727 вместо жилья зоны H"))
     return out
 
 

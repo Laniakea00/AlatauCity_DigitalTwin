@@ -39,8 +39,9 @@ OUT = sys.argv[2] if len(sys.argv) > 2 else os.path.join(REPO, "UnityProject", "
 DISTRICTS = ("gate", "golden", "green", "growing_w", "growing_e")
 MIN_HA = 20.0
 SKIP_ZONES = ("track",)                      # the existing autodrome stays as it is
-NO_GOLF = ("golf_",)                         # owner 05.11.2026: the East Golf Club rows are removed
-GOLF_SITE = ("green", "f1")                  # owner 05.11.2026: the big golf course and the sports quarter
+NO_GOLF = ("golf_2", "golf_club")           # owner 05.11.2026: the East Golf Club rows are removed
+GOLF_SITE = ("green", "golf_1")              # owner 09.11.2026: off the circuit oval, smaller
+F1_SITE = ("green", "f1")                    # master plan: «гоночная трасса Формулы-1», the big oval of the drawing
 GOLF_PLAYED = None                           # fairways, greens, tees and lakes of the last course (golf_course sets it)
 
 rng = np.random.default_rng(2035)
@@ -178,7 +179,6 @@ def golf_course(poly, y, street):
     """18 holes in two loops of nine over poly; returns the number of holes and the union of the course's features."""
     c, ang, L, W = frame(poly)
     inner = poly.buffer(-30.0)
-    doc["turf"].append({"t": tri(poly.buffer(-6.0), 20.0), "y": y})
     # the clubhouse corner: the course side nearest the street
     if street is not None:
         sx, sz = to_local(c, ang, street.x, street.y)
@@ -516,6 +516,105 @@ def theme_park(poly, y, land=None):
     return n
 
 
+# The circuit, metres from the middle of the oval, x east, z north, run anticlockwise (an original layout, модель qTwin). By the FIA
+# Grade 1 figures as the press gives them: 3.5-7 km, straights up to 2 km, track from 12 m (15 m on the grid), the pit lane beside the
+# start straight: a 1.1 km start straight along the south, a second straight, a hairpin, esses, a long sweeper, a chicane.
+F1_PTS = [(600, -520, 80), (600, -280, 50), (360, -240, 40), (340, -60, 40), (1100, 0, 70), (1120, 230, 60), (560, 250, 80), (330, 520, 110),
+          (60, 560, 90), (-140, 360, 70), (-420, 400, 100), (-620, 660, 90), (-960, 640, 120), (-1020, 300, 90), (-560, 240, 60),
+          (-520, -40, 60), (-1060, -120, 100), (-1060, -520, 90)]    # (x, z, radius of the corner): straights joined by arcs
+F1_SCALE = 0.70                                  # about 5.7 km of track
+F1_CORNER_R = 130.0                              # m: tighter than this is a corner, with kerbs and a run-off on its outside
+
+
+def f1_line(cx, cz):
+    P = [(cx + x * F1_SCALE, cz + z * F1_SCALE, r * F1_SCALE) for x, z, r in F1_PTS]
+    n = len(P)
+    line = []
+    for i in range(n):
+        a, v, c = np.array(P[i - 1][:2]), np.array(P[i][:2]), np.array(P[(i + 1) % n][:2])
+        r = P[i][2]
+        u0, u1 = (a - v) / np.linalg.norm(a - v), (c - v) / np.linalg.norm(c - v)
+        half = 0.5 * math.acos(max(-1.0, min(1.0, float(u0 @ u1))))
+        t = min(r / math.tan(half), 0.45 * np.linalg.norm(a - v), 0.45 * np.linalg.norm(c - v))
+        r = t * math.tan(half)
+        bis = (u0 + u1) / np.linalg.norm(u0 + u1)
+        o = v + bis * (r / math.sin(half))
+        p0, p1 = v + u0 * t, v + u1 * t
+        a0, a1 = math.atan2(*(p0 - o)[::-1]), math.atan2(*(p1 - o)[::-1])
+        da = (a1 - a0 + math.pi) % (2 * math.pi) - math.pi
+        for k in range(13):
+            s = a0 + da * k / 12.0
+            line.append((o[0] + r * math.cos(s), o[1] + r * math.sin(s)))
+    line.append(line[0])
+    return LineString(line)
+
+
+def f1_corners(g, step=10.0):
+    """[(side, [i..])] of the corners along g resampled every step metres; side +1: a left turn, its outside is on the right."""
+    m = int(g.length / step)
+    Q = np.array([(g.interpolate(i * g.length / m).x, g.interpolate(i * g.length / m).y) for i in range(m)])
+    d = np.roll(Q, -1, axis=0) - Q
+    h = np.arctan2(d[:, 1], d[:, 0])
+    dh = (np.roll(h, -1) - h + np.pi) % (2 * np.pi) - np.pi
+    win = 5
+    k = np.convolve(np.r_[dh[-win:], dh, dh[:win]], np.ones(2 * win + 1) / (2 * win + 1), "same")[win:-win] / (g.length / m)
+    inside = np.abs(k) > 1.0 / F1_CORNER_R
+    runs, i = [], 0
+    while i < m:
+        if inside[i]:
+            s = i
+            while i < m and inside[i]:
+                i += 1
+            if i - s >= 3:
+                runs.append((1 if k[s:i].mean() > 0 else -1, list(range(s, i))))
+        else:
+            i += 1
+    N_ = np.c_[-d[:, 1], d[:, 0]] / np.maximum(np.linalg.norm(d, axis=1, keepdims=True), 1e-6)   # to the left of the run
+    return Q, N_, runs
+
+
+def f1_circuit(poly, y, near_street=None):
+    """The circuit with no ground of its own (owner 09.11.2026): asphalt on the relief, kerbs at the corners, gravel run-offs on their
+    outside, the pit lane, the pit building and the paddock south of the start straight, stands facing the track. Returns its length."""
+    cx, cz = poly.centroid.x, poly.centroid.y
+    g = f1_line(cx, cz)
+    assert g.is_simple, "the circuit crosses itself"
+    Q, Nn, runs = f1_corners(g)
+    W = lambda x, z: (cx + x * F1_SCALE, cz + z * F1_SCALE)   # noqa: E731
+    for side, idx in runs:                                    # the run-off first, under the rest
+        off = Q[idx] - Nn[idx] * side * 30.0
+        line_out(LineString(off), 42.0, y, "runoff")
+    line_out(g, 15.0, y, "track")
+    for side, idx in runs:                                    # red and white kerbs on both edges of a corner
+        for sgn in (1, -1):
+            for a, i0 in enumerate(idx[:-1]):
+                p = Q[[i0, i0 + 1]] + Nn[[i0, i0 + 1]] * sgn * 8.7
+                doc["paths"].append({"p": [round(float(v), 1) for v in p.ravel()], "w": 2.4, "y": y, "k": "kerb_r" if a % 2 else "kerb"})
+    # the start line across the grid
+    s = W(-180.0, -520.0)
+    doc["paths"].append({"p": [round(s[0], 1), round(s[1] - 7.5, 1), round(s[0], 1), round(s[1] + 7.5, 1)], "w": 2.0, "y": y, "k": "kerb"})
+    # the pit lane beside the start straight, off it after the last corner and back before turn 1; the pit building behind it
+    pit = [W(-960.0, -526.0), W(-800.0, -578.0), W(-650.0, -582.0), W(400.0, -582.0), W(480.0, -568.0), W(540.0, -524.0)]
+    line_out(LineString(pit), 12.0, y, "pit")
+    item("pits", *W(-180.0, -620.0), 0.0, 620.0, 30.0, y)   # these yaws are Unity's: local x along the building, the seats rise toward local +z
+    for k in range(6):                                        # the paddock behind the pits
+        item("parking", *W(-480.0 + k * 125.0, -700.0), uyaw(0.0), 80.0, 40.0, y)
+    # stands facing the track: the main one opposite the pits, then at turn 1, the hairpin, the esses and the last sweeper
+    item("grandstand", *W(-180.0, -458.0), 0.0, 700.0, 42.0, y)
+    item("grandstand", *W(690.0, -400.0), 90.0, 220.0, 36.0, y)
+    item("grandstand", *W(1200.0, 120.0), 90.0, 260.0, 36.0, y)
+    item("grandstand", *W(190.0, 640.0), 0.0, 260.0, 36.0, y)
+    item("grandstand", *W(-1150.0, -320.0), 270.0, 240.0, 36.0, y)
+    for k in range(5):                                        # the visitors' car parks and the road in
+        item("parking", *W(-500.0 + k * 260.0, -820.0), uyaw(0.0), 170.0, 70.0, y)
+    gate = Point(W(-180.0, -880.0))
+    st = near_street(gate) if near_street else None
+    if st is not None:
+        line_out(LineString([W(-180.0, -730.0), (gate.x, gate.y), (st.x, st.y)]), 10.0, y)
+    grove(poly.buffer(-40.0).difference(g.buffer(120.0)).difference(box(cx - 900, cz - 900, cx + 700, cz - 430)), int(poly.area / 1e4 * 0.5))
+    return g.length
+
+
 def lots_of(d):
     lp = os.path.join(OUTR, d, "lots.json"); bp = os.path.join(OUTR, d, "blocks.json"); bb = os.path.join(OUTR, d, "buildings.json")
     if not os.path.exists(lp):
@@ -539,7 +638,8 @@ for d in DISTRICTS:
             continue
         if l["use"] != "sport" or z.startswith(SKIP_ZONES) or z.startswith(NO_GOLF):
             continue
-        groups.setdefault(z, []).append(l)
+        base = z.rsplit("_p", 1)[0]
+        groups.setdefault(base if (d, base) in (F1_SITE, GOLF_SITE) else z, []).append(l)   # zone_out cuts a big oval into strips: one site
     streets = []
     np_ = os.path.join(OUTR, d, "network.json")
     if os.path.exists(np_):
@@ -558,12 +658,21 @@ for d in DISTRICTS:
 
     for z, ls in groups.items():
         poly = unary_union([Polygon(l["polygon"]).buffer(0.5) for l in ls]).buffer(-0.5)
-        parts = [q for q in polys(poly) if q.area > MIN_HA * 1e4]
+        one_site = (d, z) in (F1_SITE, GOLF_SITE)
+        if one_site:
+            poly = poly.buffer(22.0).buffer(-22.0)       # over the strips' borders and the lanes between them
+        parts = sorted((q for q in polys(poly) if q.area > MIN_HA * 1e4), key=lambda q: -q.area)
         y = year_of(ls)
-        for q in parts:
+        for i_part, q in enumerate(parts):
             q = q.simplify(2.0)
             st = near_street(q)
-            if (d, z) == GOLF_SITE:
+            if one_site and i_part > 0:                  # the circuit and the course only on the biggest piece
+                n = sports_quarter(q, y, st, plots=[p for p in SPORT_PLOTS if p[0] != "hippodrome"])
+                what = f"sports quarter, {n} plots"
+            elif (d, z) == F1_SITE:
+                length = f1_circuit(q, y, near_street)
+                what = f"racing circuit {length / 1000:.1f} km with stands and pits"
+            elif (d, z) == GOLF_SITE:
                 nh, nb, ns, ga = golf_resort(q, y, st)
                 what = f"golf & sports park: golf {nh} holes ({ga / 1e4:.0f} ha), {nb} big venues and {ns} sports plots scattered round it"
             else:

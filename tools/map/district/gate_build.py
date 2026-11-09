@@ -554,7 +554,7 @@ def net_ha(z):
 
 
 KEEP_HOMES, KEEP_JOBS = 3697, 7180     # keep k_gate_district (the trial run: lots of source keep), modelled as is
-POP_PLAN, JOBS_PLAN = 223000, 99338
+POP_PLAN, JOBS_PLAN = 223000, 181500   # генплан № 727, гл. 5
 RES_PER_HOME = 2.5                       # rule 24: residents = GFA / 30, homes = GFA / 75 (home_m2)
 HOMES_T = int(round((POP_PLAN - KEEP_HOMES * RES_PER_HOME) / RES_PER_HOME, -1))
 JOBS_T = int(round(JOBS_PLAN - KEEP_JOBS, -2))

@@ -203,7 +203,7 @@ namespace AlatauCity.DigitalTwin.Landmarks
         static readonly Color32 Fairway = LM.C("#9fd05a"), Fairway2 = LM.C("#b2dc6e"), Turf = LM.C("#557f38"), GreenC = LM.C("#4fd04a"), Fringe = LM.C("#86c95a"),
             Rough = LM.C("#6a9343"), Court = LM.C("#2f6f9e"), CourtG = LM.C("#3f8a4c"), Clay = LM.C("#c0603a"), Line = LM.C("#f4f4f0"), Rubber = LM.C("#c4473a"),
             Conc = LM.C("#bdb8ae"), Asph = LM.C("#4a4b4d"), Track = LM.C("#b84a35"), Dirt = LM.C("#a8774f"), Fence = LM.C("#2b4a3a"), Water = LM.C("#3d7fa8"),
-            Asphalt = LM.C("#37383a"), Kerb = LM.C("#c7c3b8"), Pool = LM.C("#4fc3e0"), Bike = LM.C("#b46a55"), Cart = LM.C("#d9d2bf"), PlotLawn = LM.C("#78a556"), Seat = LM.C("#2f5f8e"), Seat2 = LM.C("#c9483a"),
+            Asphalt = LM.C("#37383a"), Kerb = LM.C("#ecebe6"), KerbR = LM.C("#c8342b"), Runoff = LM.C("#c9b48c"), Pool = LM.C("#4fc3e0"), Bike = LM.C("#b46a55"), Cart = LM.C("#d9d2bf"), PlotLawn = LM.C("#78a556"), Seat = LM.C("#2f5f8e"), Seat2 = LM.C("#c9483a"),
             Pine = LM.C("#2f5a35"), Leaf2C = LM.C("#5f8a3c"), RoofRed = LM.C("#9a3b2c"), Steel = LM.C("#c9ccd0");
 
         /// <summary>A flat surface draped on the terrain: a grid of cells ≤ 12 m, local +z along w, +x along d, lift metres over the ground.</summary>
@@ -322,8 +322,8 @@ namespace AlatauCity.DigitalTwin.Landmarks
             if (c.paths != null)
                 foreach (var p in c.paths)
                 {
-                    var col = p.k == "bike" ? Bike : p.k == "cart" ? Cart : p.k == "track" ? Asphalt : p.k == "kerb" ? Kerb : Pave;
-                    Ribbon(K(p.y), p.p, p.w * 0.5f, p.k == "cart" ? 0.11f : p.k == "kerb" ? 0.13f : 0.15f, col, LM.Paving);
+                    var col = p.k == "bike" ? Bike : p.k == "cart" ? Cart : p.k == "track" ? Asphalt : p.k == "kerb_r" ? KerbR : p.k == "kerb" ? Kerb : p.k == "runoff" ? Runoff : p.k == "pit" ? Asphalt : Pave;
+                    Ribbon(K(p.y), p.p, p.w * 0.5f, p.k == "cart" ? 0.11f : p.k == "runoff" ? 0.09f : p.k == "kerb" || p.k == "kerb_r" ? 0.17f : 0.15f, col, LM.Paving);
                 }
             if (c.items != null)
                 foreach (var it in c.items)

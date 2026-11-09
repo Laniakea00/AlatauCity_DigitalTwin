@@ -813,7 +813,7 @@ def net_ha(z):
     return Polygon(z["polygon"]).buffer(0).intersection(NET_LAND).area / 1e4
 
 
-POP_PLAN, JOBS_PLAN = 675000, 237191
+POP_PLAN, JOBS_PLAN = 675000, 337400   # генплан № 727, гл. 5
 RES_PER_HOME = 2.5                       # rule 24: residents = GFA / 30, homes = GFA / 75 (home_m2)
 HOMES_T = int(round(POP_PLAN / RES_PER_HOME, -1))
 JOBS_T = JOBS_PLAN

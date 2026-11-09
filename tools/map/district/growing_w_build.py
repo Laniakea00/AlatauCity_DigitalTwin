@@ -814,7 +814,8 @@ def net_ha(z):
     return Polygon(z["polygon"]).buffer(0).intersection(NET_LAND).area / 1e4
 
 
-POP_PLAN, JOBS_PLAN = int(V0["targets"]["population_2050"]), int(V0["targets"]["jobs_2050"])
+JOBS_GP = 103100   # генплан № 727: Growing 309,2 тыс., доля половины как в схеме
+POP_PLAN, JOBS_PLAN = int(V0["targets"]["population_2050"]), JOBS_GP
 RES_PER_HOME = 2.5
 # calibration of the zone density against what the land tools build on the net land (first full run, w52): homes and jobs
 # of gen_buildings ÷ density × net ha of this builder

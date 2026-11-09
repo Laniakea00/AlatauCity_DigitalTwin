@@ -18,6 +18,7 @@ from shapely.geometry import Polygon  # noqa: E402
 from shapely.ops import unary_union  # noqa: E402
 
 import green_common as C  # noqa: E402
+import genplan_green as GP  # noqa: E402
 
 V0 = C.V0
 GREEN = C.GREEN
@@ -55,7 +56,7 @@ RESORT_CUTS = [
     ("expo_hotels", "expo_1", [(3150.0, 22300.0), (3800.0, 22300.0), (3800.0, 23500.0), (3150.0, 23500.0)],
      "Отели и туристический центр у Выставки", [3, 9], "campus", [150, 250], 0.9,
      "отели и апарт-отели выставочного квартала и туристического центра Iconic Building-2, у станции «Выставка» и пристани у Конаева"),
-    ("golf_club", "golf_1", [(15150.0, 16950.0), (15480.0, 16950.0), (15480.0, 17260.0), (15150.0, 17260.0)],
+    ("golf_club", "golf_1", [(15560.0, 17100.0), (15890.0, 17100.0), (15890.0, 17410.0), (15560.0, 17410.0)],
      "Клуб и гольф-отель Восточного гольф-клуба", [2, 4], "campus", [150, 250], 0.5,
      "клубный дом и гольф-отель у Восточной береговой (клуб выше 485 м, схема)"),
 ]
@@ -127,6 +128,7 @@ def plan():
             z = dict(z, use="resort", name_ru=nm, why=MODEL_WHY + why + "; схема: " + z.get("why", ""),
                      density={"_floors": fl, "_split": sp, "_block": bl, "_far_dry": far_d, "_was_use": z["use"]})
         zones.append((z, p))
+    zones = GP.apply(zones)
     # the shore band of resort land (flood.resort_from_waterline_m) joins the coast park: no resort building nearer the water
     shore = None
     if any(z["use"] == "resort" for z, _ in zones):

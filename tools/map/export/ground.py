@@ -538,8 +538,9 @@ def lot_type(L, built):
     # a large sports lot with nothing on it (a golf course, the autodrome's land): textured grass with trees, not a 300 ha
     # football pitch (type 12 is drawn as turf to the lot's edge); the sports grounds of the quarters stay 12
     if t == 12 and L["id"] not in built and float(L.get("area_m2") or 0.0) > 2e4:
-        # (golf courses and sports parks: RecreationLayer draws their fairways, courts and fields on it)
-        t = 6
+        # (golf courses, the circuit and sports parks: RecreationLayer draws them on the plain ground, no green plate of their own,
+        # owner 09.11.2026)
+        t = LOT_TYPE["reserve"]
     return t
 
 
@@ -634,6 +635,9 @@ def ground_pieces(Ds, area, roads, gys, log, parks=None, yards=None):
                 t = GREEN_TYPE.get(G["kind"], 6)
             if lot and lot_type(lot, built) == t:
                 cnt["green same as its lot (left out)"] += 1; continue
+            if G["kind"] == "sport" and lot.get("use") == "sport" and lot_type(lot, built) == LOT_TYPE["reserve"]:
+                # the turf of a big empty sports lot (the circuit, the golf course): no green plate under them, owner 09.11.2026
+                cnt["sport turf of an empty sports lot (left out)"] += 1; continue
             g = poly_of(G["polygon"], G.get("holes"))
             add(t, g, lot_angle(g), hash8(G["id"]), ybyte(yof((G.get("years") or [None])[0], G.get("lot"))), "green " + G["kind"])
         for K in F.get("parking") or []:

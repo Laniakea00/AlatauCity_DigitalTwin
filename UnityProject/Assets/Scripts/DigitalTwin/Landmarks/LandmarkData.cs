@@ -314,18 +314,9 @@ namespace AlatauCity.DigitalTwin.Landmarks
                 Id = "marina", Name = "Марина Капшагай", Short = "Марина", Company = "ACA · инвесторы не объявлены",
                 Purpose = "Яхтенная марина и набережная туристического района", Model = "marina",
                 District = 3, Status = LStatus.Concept, StatusNote = "концепция Green District, сроков нет",
-                StartYear = 2033, EndYear = 2037, YearOfficial = false, X = 4825f, Z = 25272f, Yaw = 315f, PadW = 200f, PadD = 140f, Height = 14f, Radius = 180f, ViewYaw = 160f, ViewPitch = 22f,
+                StartYear = 2033, EndYear = 2037, YearOfficial = false, X = 5030f, Z = 25490f, Yaw = 30f, PadW = 200f, PadD = 140f, Height = 14f, Radius = 180f, ViewYaw = 160f, ViewPitch = 22f,
                 Source = "Kazinform, Astana Times", SourceDate = "29.09.2025 / 04.09.2026"
             }.F("Состав", "марина, клуб, набережная").F("Сроки", "не объявлены (в демо — 2037)"));
-            // the round complex on the east shore, as drawn on the master plan (decree 727); map zone z_ring
-            L.Add(new Landmark
-            {
-                Id = "ring_resort", Name = "Круглый курорт Green", Short = "Круглый курорт", Company = "инвесторы не объявлены",
-                Purpose = "Курортный комплекс на восточном берегу: кольца отелей вокруг лагуны, казино на острове", Model = "ring_resort",
-                District = 3, Status = LStatus.Concept, StatusNote = "контур по чертежу генплана, состав — модель qTwin",
-                StartYear = 2036, EndYear = 2042, YearOfficial = false, X = 14800f, Z = 20150f, Yaw = 0f, PadW = 1800f, PadD = 1800f, Height = 48f, Radius = 950f, ViewYaw = 200f, ViewPitch = 32f,
-                Source = "чертёж генплана № 727", SourceDate = "09.09.2025"
-            }.F("Состав", "казино, отели, лагуна, причалы").F("Сроки", "в демо — 2036–2042"));
             return L;
         }
 

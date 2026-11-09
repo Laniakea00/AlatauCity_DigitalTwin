@@ -336,6 +336,22 @@ SCHEME_CHANGES.append(("s_heat", "улица к тепловой станции 
                                  "тупиковая районная улица и конец магистрали без перекрёстка запрещены правилом 5"))
 # --- Бульвар к озеру (boulevard): from the end of Озёрный проспект across the IRCC cape to the tower at its tip
 BLV = fillet([(3950.0, 21600.0), (4600.0, 21480.0), (5120.0, 21390.0)], 300)
+# the city on the north shore (master plan drawing, owner 09.11.2026): one avenue from the centre to the marina, then along the
+# shore of the bay and back to the end of the Boulevard, so neither end is a dead end; a cross avenue links its two sides
+CITY_LOOP = fillet([(3950.0, 22250.0), (4250.0, 23300.0), (4500.0, 24400.0), (4780.0, 25080.0), (5400.0, 24550.0), (5720.0, 24050.0),
+                    (5750.0, 23700.0), (6200.0, 23100.0), (6900.0, 22400.0), (6100.0, 22200.0), BLV[-1]], 300)
+
+
+def _on_loop(x, z):
+    q = LineString(CITY_LOOP).interpolate(LineString(CITY_LOOP).project(Point(x, z)))
+    return (q.x, q.y)
+
+
+CITY_X_AV = fillet([_on_loop(4340.0, 23700.0), (5300.0, 23350.0), _on_loop(6100.0, 22230.0)], 300)
+street("s_city_n", "arterial_regulated", CITY_LOOP, "Проспект Марины", 2034, axis="city_n", struct=water_bridges(CITY_LOOP),
+       why="чертёж генплана № 727: город до самой воды, проспект от центра к марине и вдоль берега залива")
+street("s_city_x", "arterial_regulated", CITY_X_AV, "Поперечный проспект", 2040, axis="city_x", struct=water_bridges(CITY_X_AV),
+       why="чертёж генплана № 727: связка кварталов северного берега")
 street("s_blv_lake", "boulevard", BLV, "Бульвар к озеру", 2034, axis="blv_lake", struct=water_bridges(BLV),
        why="схема blv_lake (2033–2037): от Озёрного проспекта через курорт IRCC к 30-этажной доминанте на мысу")
 # --- Арнаутская-Запад (scheme arnaut_w) and the crossing of А-3 north of the km 61 trumpet. The scheme's axis started at
@@ -378,8 +394,9 @@ EAST_LINK = fillet([X_YUZH, (3900.0, 15980.0), (4400.0, 15960.0), (5300.0, 16000
 street("s_east_link", "arterial_regulated", EAST_LINK, "Мост на Восточный берег", 2036, axis="east_link",
        struct=water_bridges(EAST_LINK),
        why="схема east_link (2035–2038): от Проспекта Green мостами через Каскелен и залив к Жетыгенской дороге")
-BEREG = fillet([P_ZH, (11000.0, 17500.0), (12600.0, 17300.0), (15000.0, 17000.0), (17300.0, 16700.0),
-                (J145["x"], J145["z"])], 500)
+# round the circuit's oval of the master plan drawing, between it and the resort, then between it and the golf course
+BEREG = fillet([P_ZH, (10200.0, 18300.0), (11600.0, 19000.0), (14200.0, 18950.0), (15150.0, 18300.0), (15250.0, 16200.0),
+                (17300.0, 15900.0), (J145["x"], J145["z"])], 400)
 street("s_bereg_e", "arterial_regulated", BEREG, "Восточная береговая", 2037, axis="bereg_e", struct=water_bridges(BEREG),
        why="схема bereg_e (2035–2040): от Жетыгенской дороги вдоль восточного берега к стыку J145 (город за границей Green)")
 node("J145", J145["x"], J145["z"], "joint", ["s_bereg_e"], joint_id="J145", to="outside")

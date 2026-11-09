@@ -649,7 +649,7 @@ STATIONS_AT = []                 # [(x, z)] LRT stations: no local street crosse
 STATION_GAP = 75.0
 UNSERVED = []                    # [Polygon] island quarters no street can reach: the builder turns them into reserve
 LRT_RAMPS = []                   # [Polygon] where the LRT climbs or descends: no local street crosses
-BARRIERS = []                    # [geometry] land no local street crosses (LRT own right of way, rail)
+BARRIERS = [Z.CORE_CIRCLE, Z.CORE_PARK]   # [geometry] land no local street crosses (LRT own right of way, rail, the round centre)
 
 
 def generate_local(stations=(), barriers=None, lrt_line=None):

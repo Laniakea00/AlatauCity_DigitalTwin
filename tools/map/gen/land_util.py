@@ -1250,10 +1250,11 @@ TWIN_DATUM_M = 2.0      # real mark (GLO-30) = twin terrain height + 2 m at the 
 
 
 def flood_poly(work, norms):
-    """Land below the Kapchagay design level + freeboard (flood.kapchagay_levels_m npu_design_max + flood.freeboard_m).
+    """Land below the Kapchagay working level + freeboard (flood.kapchagay_levels_m working_max + flood.freeboard_m): the master
+    plan drawing (decree 727) builds down to the shore at the 479 m level, owner 09.11.2026; before that npu_design_max 485.
     The levels are real marks, the terrain is the twin's (real − TWIN_DATUM_M): the twin's land is compared with the real
     level less the datum (real 485.5 m = twin 483.5 m). Returns (polygon, the real level)."""
-    lvl = norms.num("flood.kapchagay_levels_m", "npu_design_max") + norms.num("flood.freeboard_m")
+    lvl = norms.num("flood.kapchagay_levels_m", "working_max") + norms.num("flood.freeboard_m")
     lvl_twin = lvl - TWIN_DATUM_M
     T = terrain()
     x0, z0, x1, z1 = work.bounds

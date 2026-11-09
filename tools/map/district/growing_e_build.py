@@ -208,7 +208,12 @@ ZONE_LOT = {"gtes_doosan": "z_gtes"}
 ZB["z_mars"].update({"name_ru": "Индустриальный парк у 40-го км А-3 (участок Mars Petcare схемы)",
                      "rules": dict(ZB["z_mars"]["rules"], jobs_per_ha=35), "density": dict(ZB["z_mars"]["density"], jobs_per_ha=35),
                      "why": ZB["z_mars"]["why"] + "; " + MARS_WHY + " — участок отдан лёгким производствам, как OIZ TULIP"})
-N.BARRIERS[:] = [OWN_ROW] + [p.buffer(N.D_IN) for p in PAD_FP.values()] + [ZB[zid]["poly"] for zid in ZONE_LOT.values()]
+N.BARRIERS[:] = ([OWN_ROW] + [p.buffer(N.D_IN) for p in PAD_FP.values()] + [ZB[zid]["poly"] for zid in ZONE_LOT.values()]
+                  + [Z.CORE_CIRCLE, Z.CORE_PARK])
+import round_quarter as RQ  # noqa: E402
+_hard = unary_union([z["poly"] for z in Z.ZPLAN if z["use"] in ("village_existing", "utility")])
+# the round centre of the master plan drawing: ring and radial streets, ordinary mixed-use blocks between them
+CORE_N = RQ.add(N, "s_core", Z.CORE_C, Z.CORE_RADII, 8, 2034, "Круглый центр", "чертёж генплана № 727, решение владельца 09.11.2026", avoid=_hard)
 
 # ===================================================================================================== 3. local streets
 t = time.time()
@@ -1285,7 +1290,8 @@ def net_ha(z):
     return Polygon(z["polygon"]).buffer(0).intersection(NET_LAND).area / 1e4
 
 
-POP_PLAN, JOBS_PLAN = int(V0["targets"]["population_2050"]), int(V0["targets"]["jobs_2050"])
+JOBS_GP = 206100   # генплан № 727: Growing 309,2 тыс., доля половины как в схеме
+POP_PLAN, JOBS_PLAN = int(V0["targets"]["population_2050"]), JOBS_GP
 RES_PER_HOME = 2.5
 HOMES_T = int(round(POP_PLAN / RES_PER_HOME, -1))
 JOBS_T = int(round(JOBS_PLAN, -2))
