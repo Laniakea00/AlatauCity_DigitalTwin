@@ -281,24 +281,13 @@ namespace AlatauCity.DigitalTwin
             AddNoPlant();
             LateCorridors();
             // house plots: every generated house gets a hedge round a plot a little larger than itself, with a gap for the gate,
-            // and a tree or two in the garden. The house rectangles are read from the building meshes (the lowest corners of each house).
-            int plots = 0; var uv2 = new List<Vector2>(); var corner = new Dictionary<int, List<Vector3>>();
-            foreach (var ch in FindObjectsByType<BuildingChunk>(FindObjectsSortMode.None))
+            // and a tree or two in the garden. The house rectangles (the four ground corners of each house) come from ChunkBake, worked
+            // out from the building meshes when the scene is built.
+            int plots = 0;
             {
-                if (!ch.name.Contains("houses")) continue;
-                var bm = ch.GetComponent<MeshFilter>().sharedMesh; if (bm == null || !bm.isReadable) continue;
-                var bv = bm.vertices; uv2.Clear(); bm.GetUVs(1, uv2); var buv = bm.uv; corner.Clear();
-                var low = new Dictionary<int, float>();
-                for (int i = 0; i < bv.Length; i++) { if (buv[i].y < -0.5f) continue; int b = Mathf.RoundToInt(uv2[i].y) - 1; if (!low.TryGetValue(b, out float y) || bv[i].y < y) low[b] = bv[i].y; }
-                for (int i = 0; i < bv.Length; i++)
+                foreach (var hc in ChunkBake.Houses)
                 {
-                    if (buv[i].y < -0.5f) continue; int b = Mathf.RoundToInt(uv2[i].y) - 1; if (bv[i].y > low[b] + 0.15f) continue;
-                    if (!corner.TryGetValue(b, out var l)) corner[b] = l = new List<Vector3>();
-                    bool seen = false; foreach (var q in l) if ((q - bv[i]).sqrMagnitude < 0.01f) { seen = true; break; }
-                    if (!seen) l.Add(bv[i]);
-                }
-                foreach (var kv in corner)
-                {
+                    var kv = new KeyValuePair<int, List<Vector3>>(hc.bid, new List<Vector3>(hc.c));
                     var c4 = kv.Value; if (c4.Count != 4) continue;
                     Vector3 cen = (c4[0] + c4[1] + c4[2] + c4[3]) * 0.25f, U = Vector3.right; float best = 0;
                     for (int i = 1; i < 4; i++) { var d = c4[i] - c4[0]; d.y = 0; float l = d.magnitude; if (l > best && l < 0.9f * MaxDist(c4)) { best = l; U = d / l; } }

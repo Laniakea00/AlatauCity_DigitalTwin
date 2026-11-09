@@ -66,7 +66,9 @@ namespace AlatauCity.EditorTools
                 ReadLayer(Data + "layer_infrastructure.bytes", pal, imat, root.transform, "Transport, rivers, districts", false, false, 0.1f);
                 ReadLayer(Data + "layer_labels.bytes", pal, lmat, root.transform, "Labels", false, false, 0.15f);
                 roofInfo = AlatauRoofs.LoadCsv(Data + "buildings.csv");
+                BakeBegin();
                 ReadLayer(Data + "layer_buildings.bytes", pal, bmat, root.transform, "Buildings", true, true, 0.2f);
+                BakeWrite();
 
                 // ---------- light & atmosphere ----------
                 var sun = new GameObject("Sun").AddComponent<Light>(); sun.type = LightType.Directional; sun.intensity = 0.85f; sun.color = new Color(1f, 0.97f, 0.92f);
@@ -306,9 +308,28 @@ namespace AlatauCity.EditorTools
                         pn[j] = pn[j + 1] = pn[j + 2] = n; pc[j] = pc[j + 1] = pc[j + 2] = cc; pi[j] = pi[j + 1] = pi[j + 2] = inf; pw[j] = pw[j + 1] = pw[j + 2] = part;
                         tri[j] = j; tri[j + 1] = j + 1; tri[j + 2] = j + 2;
                     }
-                    var mesh = new Mesh { name = Safe(name), indexFormat = IndexFormat.UInt32 };
-                    mesh.vertices = pv; mesh.normals = pn; mesh.colors32 = pc; mesh.SetUVs(0, pw); mesh.SetUVs(1, pi); mesh.triangles = tri; mesh.RecalculateBounds();
-                    AssetDatabase.CreateAsset(mesh, Gen + groupName.Split(',')[0].Replace(" ", "") + "_" + Safe(name) + ".asset");
+                    Mesh mesh, colMesh = null;
+                    if (colliders)
+                    {
+                        // buildings: a compact vertex (normal and colour in 4 bytes each, 36 bytes instead of 44), not readable after the
+                        // upload (the city keeps no copy of it in memory: what it needs from it is baked into ChunkBake); the collider is a
+                        // positions-only mesh with the same triangle order (RaycastHit.triangleIndex → ChunkBake runs)
+                        mesh = CompactMesh(Safe(name), pv, pn, pc, pw, pi);
+                        colMesh = ColliderMesh(Safe(name) + " collider", pv);
+                        Bake(groupName.Split(',')[0].Replace(" ", "") + "_" + Safe(name), name.Contains("houses"), pv, pw, pi);   // the asset's file name: CreateAsset gives it to the mesh
+                    }
+                    else
+                    {
+                        mesh = new Mesh { name = Safe(name), indexFormat = IndexFormat.UInt32 };
+                        mesh.vertices = pv; mesh.normals = pn; mesh.colors32 = pc; mesh.SetUVs(0, pw); mesh.SetUVs(1, pi); mesh.triangles = tri; mesh.RecalculateBounds();
+                    }
+                    string assetPath = Gen + groupName.Split(',')[0].Replace(" ", "") + "_" + Safe(name) + ".asset";
+                    AssetDatabase.CreateAsset(mesh, assetPath);
+                    if (colMesh != null)
+                    {
+                        AssetDatabase.AddObjectToAsset(colMesh, assetPath);
+                        var so = new SerializedObject(mesh); so.FindProperty("m_IsReadable").boolValue = false; so.ApplyModifiedPropertiesWithoutUndo();
+                    }
                     // group buildings by year band, like the Blender collections
                     Transform g = group;
                     if (colliders)
@@ -319,10 +340,103 @@ namespace AlatauCity.EditorTools
                     var go = new GameObject(name); go.transform.SetParent(g);
                     go.AddComponent<MeshFilter>().sharedMesh = mesh; var mr = go.AddComponent<MeshRenderer>(); mr.sharedMaterial = name.Contains("District boundary") && curtain != null ? curtain : mat;
                     mr.shadowCastingMode = castShadows ? ShadowCastingMode.On : ShadowCastingMode.Off; mr.receiveShadows = true;
-                    if (colliders) { go.AddComponent<MeshCollider>().sharedMesh = mesh; go.AddComponent<BuildingChunk>(); }
+                    if (colliders) { go.AddComponent<MeshCollider>().sharedMesh = colMesh; go.AddComponent<BuildingChunk>(); }
                 }
             }
         }
+        // ---------------------------------------------------------------- compact building meshes and the chunk bake
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+        struct CompactVertex { public Vector3 p; public sbyte nx, ny, nz, nw; public Color32 c; public Vector2 uv0, uv1; }
+
+        static Mesh CompactMesh(string name, Vector3[] pv, Vector3[] pn, Color32[] pc, Vector2[] pw, Vector2[] pi)
+        {
+            int n = pv.Length; var vx = new CompactVertex[n]; var idx = new int[n];
+            static sbyte Sn(float v) => (sbyte)Mathf.Clamp(Mathf.RoundToInt(v * 127f), -127, 127);
+            for (int i = 0; i < n; i++) { vx[i] = new CompactVertex { p = pv[i], nx = Sn(pn[i].x), ny = Sn(pn[i].y), nz = Sn(pn[i].z), nw = 0, c = pc[i], uv0 = pw[i], uv1 = pi[i] }; idx[i] = i; }
+            var m = new Mesh { name = name };
+            m.SetVertexBufferParams(n,
+                new VertexAttributeDescriptor(VertexAttribute.Position, VertexAttributeFormat.Float32, 3),
+                new VertexAttributeDescriptor(VertexAttribute.Normal, VertexAttributeFormat.SNorm8, 4),
+                new VertexAttributeDescriptor(VertexAttribute.Color, VertexAttributeFormat.UNorm8, 4),
+                new VertexAttributeDescriptor(VertexAttribute.TexCoord0, VertexAttributeFormat.Float32, 2),
+                new VertexAttributeDescriptor(VertexAttribute.TexCoord1, VertexAttributeFormat.Float32, 2));
+            m.SetVertexBufferData(vx, 0, 0, n);
+            m.SetIndexBufferParams(n, IndexFormat.UInt32); m.SetIndexBufferData(idx, 0, 0, n);
+            m.subMeshCount = 1; m.SetSubMesh(0, new SubMeshDescriptor(0, n));
+            m.RecalculateBounds();
+            return m;
+        }
+
+        /// <summary>Positions only, welded (a corner shared by several flat triangles is one vertex), triangles in the render mesh's order.</summary>
+        static Mesh ColliderMesh(string name, Vector3[] pv)
+        {
+            var at = new Dictionary<Vector3, int>(pv.Length / 3); var v = new List<Vector3>(pv.Length / 3); var t = new int[pv.Length];
+            for (int i = 0; i < pv.Length; i++) { if (!at.TryGetValue(pv[i], out int k)) { k = v.Count; v.Add(pv[i]); at[pv[i]] = k; } t[i] = k; }
+            var m = new Mesh { name = name, indexFormat = v.Count > 65000 ? IndexFormat.UInt32 : IndexFormat.UInt16 };
+            m.SetVertices(v); m.SetTriangles(t, 0); m.RecalculateBounds();
+            return m;
+        }
+
+        static List<(string name, List<(int start, int bid, float year)> runs)> bakeRuns;
+        static float[] bakeC, bakeS;
+        static List<(int bid, Vector3[] c)> bakeHouses;
+        static void BakeBegin() { bakeRuns = new List<(string, List<(int, int, float)>)>(); bakeC = new float[BidTable.N]; bakeS = new float[BidTable.N]; bakeHouses = new List<(int, Vector3[])>(); }
+
+        /// <summary>What the city used to read from a chunk mesh at run time (BuildingChunk, FilmTrees): the runs of triangles of one
+        /// building, the wall directions of each building, the ground corners of the generated houses.</summary>
+        static void Bake(string mesh, bool houses, Vector3[] pv, Vector2[] pw, Vector2[] pi)
+        {
+            int nt = pv.Length / 3; var runs = new List<(int, int, float)>();
+            int lastBid = int.MinValue; float lastYear = float.NaN;
+            for (int t = 0; t < nt; t++)
+            {
+                int j = t * 3; int bid = Mathf.RoundToInt(pi[j].y) - 1; float yr = pi[j].x;
+                if (bid != lastBid || yr != lastYear) { runs.Add((t, bid, yr)); lastBid = bid; lastYear = yr; }
+                // walls only: the main wall direction modulo 90° (four times the angle on the circle), as BuildingChunk did at run time
+                Vector3 a = pv[j], b = pv[j + 1], c = pv[j + 2]; var n = Vector3.Cross(b - a, c - a); float len = n.magnitude;
+                if (len < 1e-4f || Mathf.Abs(n.y) > 0.2f * len || bid < 0 || bid >= BidTable.N) continue;
+                float ang = Mathf.Atan2(n.z, n.x) * 4f; bakeC[bid] += Mathf.Cos(ang) * len; bakeS[bid] += Mathf.Sin(ang) * len;
+            }
+            bakeRuns.Add((mesh, runs));
+            if (!houses) return;
+            // the house rectangles: the lowest corners of each house (not what stands on its roof), as FilmTrees did at run time
+            var low = new Dictionary<int, float>(); var corner = new Dictionary<int, List<Vector3>>();
+            for (int i = 0; i < pv.Length; i++) { if (pw[i].y < -0.5f) continue; int b = Mathf.RoundToInt(pi[i].y) - 1; if (!low.TryGetValue(b, out float y) || pv[i].y < y) low[b] = pv[i].y; }
+            for (int i = 0; i < pv.Length; i++)
+            {
+                if (pw[i].y < -0.5f) continue; int b = Mathf.RoundToInt(pi[i].y) - 1; if (pv[i].y > low[b] + 0.15f) continue;
+                if (!corner.TryGetValue(b, out var l)) corner[b] = l = new List<Vector3>();
+                bool seen = false; foreach (var q in l) if ((q - pv[i]).sqrMagnitude < 0.01f) { seen = true; break; }
+                if (!seen) l.Add(pv[i]);
+            }
+            foreach (var kv in corner) if (kv.Value.Count == 4) bakeHouses.Add((kv.Key, kv.Value.ToArray()));
+        }
+
+        static void BakeWrite()
+        {
+            const string dir = "Assets/Resources/CityBake";
+            Directory.CreateDirectory(dir);
+            using (var w = new BinaryWriter(File.Create(dir + "/chunks.bytes")))
+            {
+                w.Write(0x31424341); w.Write(bakeRuns.Count);
+                foreach (var (name, runs) in bakeRuns) { w.Write(name); w.Write(runs.Count); foreach (var (st, bid, yr) in runs) { w.Write(st); w.Write(bid); w.Write(yr); } }
+                var r = new byte[BidTable.N]; var a = new byte[BidTable.N];
+                for (int i = 0; i < BidTable.N; i++)
+                {
+                    float C = bakeC[i], S = bakeS[i];
+                    if (C * C + S * S < 1e-6f) { r[i] = 128; a[i] = 0; continue; }
+                    float q = Mathf.Atan2(S, C) * 0.25f / (Mathf.PI * 0.5f) + 0.5f;      // (-45° .. 45°] → 0 .. 1
+                    r[i] = (byte)Mathf.Clamp(Mathf.RoundToInt(q * 255f), 0, 255); a[i] = 255;
+                }
+                w.Write(BidTable.N); w.Write(r); w.Write(a);
+                w.Write(bakeHouses.Count);
+                foreach (var (bid, c) in bakeHouses) { w.Write(bid); foreach (var v in c) { w.Write(v.x); w.Write(v.y); w.Write(v.z); } }
+            }
+            AssetDatabase.ImportAsset(dir + "/chunks.bytes");
+            Debug.Log($"[Alatau] chunk bake: {bakeRuns.Count} chunks, {bakeHouses.Count} house plots → {dir}/chunks.bytes");
+            bakeRuns = null; bakeC = bakeS = null; bakeHouses = null;
+        }
+
         static string Safe(string s) { var sb = new StringBuilder(); foreach (var ch in s) sb.Append(char.IsLetterOrDigit(ch) || ch == '_' || ch == '-' ? ch : '_'); return sb.ToString(); }
     }
 }
