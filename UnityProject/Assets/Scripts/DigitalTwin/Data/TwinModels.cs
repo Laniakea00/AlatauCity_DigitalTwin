@@ -7,7 +7,7 @@ namespace AlatauCity.DigitalTwin.Data
     {
         public const string Loads = "model_loads", Social = "model_social", Traffic = "model_traffic", Quake = "model_quake",
             Flood = "model_flood", Build = "model_build", Money = "model_money", Bim = "model_bim", Ops = "model_ops",
-            SmartCity = "model_smartcity";
+            SmartCity = "model_smartcity", Ai = "model_ai";
 
         static bool done;
         public static void Init()
@@ -44,6 +44,9 @@ namespace AlatauCity.DigitalTwin.Data
             Sources.RegisterModel(SmartCity, "Smart City: камеры и обращения",
                 "Число камер, их назначение, доступность, обращения в iKomek 109 и сроки решения — правдоподобная синтетика, растёт с населением города. " +
                 "Видео с камер — иллюстрация, не реальная трансляция.");
+            Sources.RegisterModel(Ai, "Ответы ИИ-ассистента",
+                "Ответы подготовлены заранее: ассистент выбирает сценарий по ключевым словам вопроса, а все числа считает из моделей двойника " +
+                "(сценарий застройки, нагрузки, трафик, риски). Языковая модель не подключена.");
         }
     }
 }

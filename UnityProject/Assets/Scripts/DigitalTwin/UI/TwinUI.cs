@@ -41,7 +41,7 @@ namespace AlatauCity.DigitalTwin.UI
         }
 
         static readonly Dictionary<string, string> ModuleIcon = new Dictionary<string, string>
-        { ["overview"] = "layout_grid", ["objects"] = "map_pin", ["construction"] = "hard_hat", ["prediction"] = "chart_line", ["infra"] = "network", ["situation"] = "radar", ["smartcity"] = "video", ["economy"] = "activity", ["monitoring"] = "scan_eye" };
+        { ["overview"] = "layout_grid", ["objects"] = "map_pin", ["construction"] = "hard_hat", ["prediction"] = "chart_line", ["infra"] = "network", ["situation"] = "radar", ["smartcity"] = "video", ["economy"] = "activity", ["monitoring"] = "scan_eye" , ["ai"] = "sparkles" };
 
         /// <summary>A white line icon from Resources/UI/Icons (Lucide), tinted by USS.</summary>
         public static VisualElement Icon(string name, float size = 18f)
@@ -68,6 +68,7 @@ namespace AlatauCity.DigitalTwin.UI
             modules.Add(new SituationModule());
             modules.Add(new SmartCityModule());
             modules.Add(new EconomyModule());
+            modules.Add(new AiModule());
         }
         void OnEnable()
         {
@@ -161,6 +162,7 @@ namespace AlatauCity.DigitalTwin.UI
             scenarioBtn.AddManipulator(new Clickable(() => TogglePopup(popup, scenarioBtn))); h.Add(scenarioBtn);
             yearLabel = new Label(); yearLabel.AddToClassList("year-big"); h.Add(yearLabel);
             var sep3 = new VisualElement { pickingMode = PickingMode.Ignore }; sep3.AddToClassList("hsep"); h.Add(sep3);
+            h.Add(HeadIcon("sparkles", Loc.T("tab_ai"), () => TwinState.SetModule("ai")));
             h.Add(HeadIcon("file_text", "Источники и допущения", () => Sources.Open(null)));
             VisualElement bell = null; bell = HeadIcon("bell", "Уведомления · Smart City, iKomek 109", () => Notifier.Instance?.TogglePanel(bell));
             bellBadge = new Label("") { pickingMode = PickingMode.Ignore }; bellBadge.AddToClassList("hbadge"); bell.Add(bellBadge); h.Add(bell);
