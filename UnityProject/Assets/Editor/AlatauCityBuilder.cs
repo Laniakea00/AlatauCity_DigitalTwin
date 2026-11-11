@@ -212,41 +212,62 @@ namespace AlatauCity.EditorTools
         }
         static X[] Cat<X>(X[] a, X[] b) { var r = new X[a.Length + b.Length]; a.CopyTo(r, 0); b.CopyTo(r, a.Length); return r; }
 
-        /// <summary>Square tiles (m) the building chunks are cut into: a chunk of the data is one year of the whole city, so one mesh
-        /// spanned 37 × 55 km, could never be culled, and every pass of every frame (depth, each shadow cascade, the view) drew all of
-        /// it (the stage-7 map: 150 M triangles a frame). Each building goes whole into the tile of its own centre.</summary>
+        /// <summary>Square tiles (m) the buildings are cut into: one mesh per tile with every year and kind of building in it (the
+        /// shader hides what is not built yet, so a mesh per year bought nothing: 1432 chunks, each drawn in every pass, some 3 000 draw
+        /// calls a frame on the wide views). Each building goes whole into the tile of its own centre; a chunk of the data spanning the
+        /// whole city (37 × 55 km) could never be culled. A tile denser than MaxTileTris is cut in quarters (the collider of a mesh
+        /// over 2 M triangles may miss hits, and the roof details add some 2.3 triangles to each one of the data).</summary>
         const float BuildingTile = 3000f;
+        const int MaxTileTris = 400000;
         static List<AqlObj> Tiles(List<AqlObj> objs, float tile)
         {
-            var res = new List<AqlObj>();
+            var byTile = new Dictionary<Vector2Int, List<(AqlObj x, int t, Vector2 c)>>();
             foreach (var x in objs)
             {
-                int nt = x.Bid.Length; if (nt == 0) { res.Add(x); continue; }
+                int nt = x.Bid.Length; if (nt == 0) continue;
                 var sum = new Dictionary<int, Vector3>(); var n = new Dictionary<int, int>();
                 for (int t = 0; t < nt; t++)
                 {
                     var c = (x.V[x.T[t * 3]] + x.V[x.T[t * 3 + 1]] + x.V[x.T[t * 3 + 2]]) / 3f;
                     sum[x.Bid[t]] = sum.TryGetValue(x.Bid[t], out var s) ? s + c : c; n[x.Bid[t]] = n.TryGetValue(x.Bid[t], out int k) ? k + 1 : 1;
                 }
-                var key = new Dictionary<int, Vector2Int>();
-                foreach (var kv in sum) { var c = kv.Value / n[kv.Key]; key[kv.Key] = new Vector2Int(Mathf.FloorToInt(c.x / tile), Mathf.FloorToInt(c.z / tile)); }
-                var byTile = new Dictionary<Vector2Int, List<int>>();
-                for (int t = 0; t < nt; t++) { var k = key[x.Bid[t]]; if (!byTile.TryGetValue(k, out var l)) byTile[k] = l = new List<int>(); l.Add(t); }
-                if (byTile.Count == 1) { res.Add(x); continue; }
-                foreach (var kv in byTile)
+                var cen = new Dictionary<int, Vector2>();
+                foreach (var kv in sum) { var c = kv.Value / n[kv.Key]; cen[kv.Key] = new Vector2(c.x, c.z); }
+                for (int t = 0; t < nt; t++)
                 {
-                    var tris = kv.Value; var remap = new Dictionary<int, int>(); var V = new List<Vector3>();
-                    var T = new int[tris.Count * 3]; var col = new byte[tris.Count]; var yr = new ushort[tris.Count]; var bid = new int[tris.Count];
-                    for (int i = 0; i < tris.Count; i++)
-                    {
-                        int t = tris[i];
-                        for (int j = 0; j < 3; j++) { int v = x.T[t * 3 + j]; if (!remap.TryGetValue(v, out int r)) { r = V.Count; remap[v] = r; V.Add(x.V[v]); } T[i * 3 + j] = r; }
-                        col[i] = x.Col[t]; yr[i] = x.Yr[t]; bid[i] = x.Bid[t];
-                    }
-                    res.Add(new AqlObj { Name = $"{x.Name} t{kv.Key.x}_{kv.Key.y}", V = V.ToArray(), T = T, Col = col, Yr = yr, Bid = bid });
+                    var c = cen[x.Bid[t]]; var k = new Vector2Int(Mathf.FloorToInt(c.x / tile), Mathf.FloorToInt(c.y / tile));
+                    if (!byTile.TryGetValue(k, out var l)) byTile[k] = l = new List<(AqlObj, int, Vector2)>(); l.Add((x, t, c));
                 }
             }
+            var res = new List<AqlObj>();
+            foreach (var kv in byTile) Split(kv.Value, kv.Key.x * tile, kv.Key.y * tile, tile, $"Buildings t{kv.Key.x}_{kv.Key.y}", res);
+            res.Sort((a, b) => string.CompareOrdinal(a.Name, b.Name));
+            Debug.Log($"[Alatau] buildings: {objs.Count} chunks of the data → {res.Count} tiles of {tile:0} m and less");
             return res;
+        }
+
+        static void Split(List<(AqlObj x, int t, Vector2 c)> tris, float x0, float z0, float size, string name, List<AqlObj> res)
+        {
+            if (tris.Count > MaxTileTris && size > 400f)
+            {
+                float h = size * 0.5f; var q = new List<(AqlObj, int, Vector2)>[4];
+                for (int i = 0; i < 4; i++) q[i] = new List<(AqlObj, int, Vector2)>();
+                foreach (var e in tris) q[(e.c.x >= x0 + h ? 1 : 0) + (e.c.y >= z0 + h ? 2 : 0)].Add(e);
+                for (int i = 0; i < 4; i++) if (q[i].Count > 0) Split(q[i], x0 + (i & 1) * h, z0 + (i >> 1) * h, h, name + "_" + i, res);
+                return;
+            }
+            {
+                // a building's triangles stay together and in their order (the bake keeps one run per building and year)
+                var remap = new Dictionary<(AqlObj, int), int>(); var V = new List<Vector3>();
+                var T = new int[tris.Count * 3]; var col = new byte[tris.Count]; var yr = new ushort[tris.Count]; var bid = new int[tris.Count];
+                for (int i = 0; i < tris.Count; i++)
+                {
+                    var (x, t, _) = tris[i];
+                    for (int j = 0; j < 3; j++) { int v = x.T[t * 3 + j]; if (!remap.TryGetValue((x, v), out int r)) { r = V.Count; remap[(x, v)] = r; V.Add(x.V[v]); } T[i * 3 + j] = r; }
+                    col[i] = x.Col[t]; yr[i] = x.Yr[t]; bid[i] = x.Bid[t];
+                }
+                res.Add(new AqlObj { Name = name, V = V.ToArray(), T = T, Col = col, Yr = yr, Bid = bid });
+            }
         }
 
         /// record: u16 nameLen, name utf8, u8 kind, i32 nv, i32 nt, f32 verts[nv*3], u32 tris[nt*3], u8 col[nt], u16 year[nt], i32 bid[nt]
@@ -254,7 +275,6 @@ namespace AlatauCity.EditorTools
         static void ReadLayer(string path, Color32[] pal, Material mat, Transform parent, string groupName, bool colliders, bool castShadows, float prog)
         {
             var group = new GameObject(groupName).transform; group.SetParent(parent);
-            var subGroups = new Dictionary<string, Transform>();
             var objs = ReadAql(path);
             if (colliders) objs = Tiles(objs, BuildingTile);
             {
@@ -330,14 +350,7 @@ namespace AlatauCity.EditorTools
                         AssetDatabase.AddObjectToAsset(colMesh, assetPath);
                         var so = new SerializedObject(mesh); so.FindProperty("m_IsReadable").boolValue = false; so.ApplyModifiedPropertiesWithoutUndo();
                     }
-                    // group buildings by year band, like the Blender collections
-                    Transform g = group;
-                    if (colliders)
-                    {
-                        string band = name.StartsWith("Existing") ? "Existing today (OpenStreetMap)" : int.TryParse(name.Split(' ')[0], out int y) ? (y <= 2030 ? "Built 2026-2030" : y <= 2040 ? "Built 2031-2040" : "Built 2041-2050") : "Other";
-                        if (!subGroups.TryGetValue(band, out g)) { g = new GameObject(band).transform; g.SetParent(group); subGroups[band] = g; }
-                    }
-                    var go = new GameObject(name); go.transform.SetParent(g);
+                    var go = new GameObject(name); go.transform.SetParent(group);
                     go.AddComponent<MeshFilter>().sharedMesh = mesh; var mr = go.AddComponent<MeshRenderer>(); mr.sharedMaterial = name.Contains("District boundary") && curtain != null ? curtain : mat;
                     if (mesh.subMeshCount == 2) mr.sharedMaterials = new[] { mat, mat };          // bodies, roof details (BuildingChunk)
                     mr.shadowCastingMode = castShadows ? ShadowCastingMode.On : ShadowCastingMode.Off; mr.receiveShadows = true;

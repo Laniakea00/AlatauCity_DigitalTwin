@@ -8,12 +8,12 @@ using AlatauCity.DigitalTwin.Landmarks;
 namespace AlatauCity.DigitalTwin
 {
     /// <summary>Geometry of the new map data that appears by year (parking lots, the ground of solar fields): one combined mesh per
-    /// 1 km chunk (AlatauCity/Landmark), its items in the order of their year in the current scenario. The mesh is drawn up to the
+    /// 3 km chunk (1 km chunks made some 750 draw calls a frame on the wide views, for small flat geometry) (AlatauCity/Landmark), its items in the order of their year in the current scenario. The mesh is drawn up to the
     /// last item open in the current year (the index count of its submesh), so a change of year costs nothing and a change of
     /// scenario rebuilds the chunks once.</summary>
     public class YearChunks
     {
-        const float Size = 1000f;
+        const float Size = 3000f;
         struct Item { public int Id; public int[] Y; }
         class Chunk { public GameObject Go; public MeshFilter F; public Mesh M; public int[] Year = new int[0]; public int[] Idx = new int[0]; public List<Item> Items = new List<Item>(); }
         readonly Dictionary<long, Chunk> chunks = new Dictionary<long, Chunk>();
@@ -71,7 +71,7 @@ namespace AlatauCity.DigitalTwin
 
     /// <summary>Parking of the new map data (Resources/Landmarks/parking.json, tools/map CONTRACT §6): surface lots (asphalt draped
     /// on the ground with bay markings), multi-storey garages (a storeyed box with open decks and a round ramp tower) and underground
-    /// garages (only their entrance pavilion), each from its year of the scenario. One combined mesh per 1 km chunk. Without the file
+    /// garages (only their entrance pavilion), each from its year of the scenario. One combined mesh per 3 km chunk. Without the file
     /// nothing is made.</summary>
     public class ParkingLayer : MonoBehaviour
     {
