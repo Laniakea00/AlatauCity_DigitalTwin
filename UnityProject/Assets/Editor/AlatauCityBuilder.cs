@@ -314,7 +314,7 @@ namespace AlatauCity.EditorTools
                         // buildings: a compact vertex (normal and colour in 4 bytes each, 36 bytes instead of 44), not readable after the
                         // upload (the city keeps no copy of it in memory: what it needs from it is baked into ChunkBake); the collider is a
                         // positions-only mesh with the same triangle order (RaycastHit.triangleIndex → ChunkBake runs)
-                        mesh = CompactMesh(Safe(name), pv, pn, pc, pw, pi);
+                        mesh = CompactMesh(Safe(name), pv, pn, pc, pw, pi, nt);
                         colMesh = ColliderMesh(Safe(name) + " collider", pv);
                         Bake(groupName.Split(',')[0].Replace(" ", "") + "_" + Safe(name), name.Contains("houses"), pv, pw, pi);   // the asset's file name: CreateAsset gives it to the mesh
                     }
@@ -339,6 +339,7 @@ namespace AlatauCity.EditorTools
                     }
                     var go = new GameObject(name); go.transform.SetParent(g);
                     go.AddComponent<MeshFilter>().sharedMesh = mesh; var mr = go.AddComponent<MeshRenderer>(); mr.sharedMaterial = name.Contains("District boundary") && curtain != null ? curtain : mat;
+                    if (mesh.subMeshCount == 2) mr.sharedMaterials = new[] { mat, mat };          // bodies, roof details (BuildingChunk)
                     mr.shadowCastingMode = castShadows ? ShadowCastingMode.On : ShadowCastingMode.Off; mr.receiveShadows = true;
                     if (colliders) { go.AddComponent<MeshCollider>().sharedMesh = colMesh; go.AddComponent<BuildingChunk>(); }
                 }
@@ -348,7 +349,9 @@ namespace AlatauCity.EditorTools
         [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
         struct CompactVertex { public Vector3 p; public sbyte nx, ny, nz, nw; public Color32 c; public Vector2 uv0, uv1; }
 
-        static Mesh CompactMesh(string name, Vector3[] pv, Vector3[] pn, Color32[] pc, Vector2[] pw, Vector2[] pi)
+        /// <summary>nt: the triangles of the buildings themselves; what AlatauRoofs adds after them (parapets, crowns, plant, tile roofs) is
+        /// a second submesh, which BuildingChunk stops drawing when the chunk is far (its details are under a pixel there).</summary>
+        static Mesh CompactMesh(string name, Vector3[] pv, Vector3[] pn, Color32[] pc, Vector2[] pw, Vector2[] pi, int nt)
         {
             int n = pv.Length; var vx = new CompactVertex[n]; var idx = new int[n];
             static sbyte Sn(float v) => (sbyte)Mathf.Clamp(Mathf.RoundToInt(v * 127f), -127, 127);
@@ -362,7 +365,9 @@ namespace AlatauCity.EditorTools
                 new VertexAttributeDescriptor(VertexAttribute.TexCoord1, VertexAttributeFormat.Float32, 2));
             m.SetVertexBufferData(vx, 0, 0, n);
             m.SetIndexBufferParams(n, IndexFormat.UInt32); m.SetIndexBufferData(idx, 0, 0, n);
-            m.subMeshCount = 1; m.SetSubMesh(0, new SubMeshDescriptor(0, n));
+            int nb = Mathf.Min(nt * 3, n); trisBody += nb / 3; trisRoof += (n - nb) / 3;
+            if (nb < n) { m.subMeshCount = 2; m.SetSubMesh(0, new SubMeshDescriptor(0, nb)); m.SetSubMesh(1, new SubMeshDescriptor(nb, n - nb)); }
+            else { m.subMeshCount = 1; m.SetSubMesh(0, new SubMeshDescriptor(0, n)); }
             m.RecalculateBounds();
             return m;
         }
@@ -377,6 +382,7 @@ namespace AlatauCity.EditorTools
             return m;
         }
 
+        static long trisBody, trisRoof;
         static List<(string name, List<(int start, int bid, float year)> runs)> bakeRuns;
         static float[] bakeC, bakeS;
         static List<(int bid, Vector3[] c)> bakeHouses;
@@ -433,7 +439,8 @@ namespace AlatauCity.EditorTools
                 foreach (var (bid, c) in bakeHouses) { w.Write(bid); foreach (var v in c) { w.Write(v.x); w.Write(v.y); w.Write(v.z); } }
             }
             AssetDatabase.ImportAsset(dir + "/chunks.bytes");
-            Debug.Log($"[Alatau] chunk bake: {bakeRuns.Count} chunks, {bakeHouses.Count} house plots → {dir}/chunks.bytes");
+            Debug.Log($"[Alatau] chunk bake: {bakeRuns.Count} chunks, {bakeHouses.Count} house plots → {dir}/chunks.bytes; triangles: buildings {trisBody:N0}, roof details {trisRoof:N0}");
+            trisBody = trisRoof = 0;
             bakeRuns = null; bakeC = bakeS = null; bakeHouses = null;
         }
 
